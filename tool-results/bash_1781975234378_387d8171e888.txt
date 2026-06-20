@@ -1,0 +1,594 @@
+[
+  {
+    "name": ".editorconfig",
+    "path": ".editorconfig",
+    "sha": "6bee980e47c339997f882ea90cf9f6df76042ca8",
+    "size": 168,
+    "url": "https://api.github.com/repos/Vette1123/movies-streaming-platform/contents/.editorconfig?ref=main",
+    "html_url": "https://github.com/Vette1123/movies-streaming-platform/blob/main/.editorconfig",
+    "git_url": "https://api.github.com/repos/Vette1123/movies-streaming-platform/git/blobs/6bee980e47c339997f882ea90cf9f6df76042ca8",
+    "download_url": "https://raw.githubusercontent.com/Vette1123/movies-streaming-platform/main/.editorconfig",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/Vette1123/movies-streaming-platform/contents/.editorconfig?ref=main",
+      "git": "https://api.github.com/repos/Vette1123/movies-streaming-platform/git/blobs/6bee980e47c339997f882ea90cf9f6df76042ca8",
+      "html": "https://github.com/Vette1123/movies-streaming-platform/blob/main/.editorconfig"
+    }
+  },
+  {
+    "name": ".env.sample",
+    "path": ".env.sample",
+    "sha": "50a5635ed0fdbf47fec74a21598e541bf73c2828",
+    "size": 295,
+    "url": "https://api.github.com/repos/Vette1123/movies-streaming-platform/contents/.env.sample?ref=main",
+    "html_url": "https://github.com/Vette1123/movies-streaming-platform/blob/main/.env.sample",
+    "git_url": "https://api.github.com/repos/Vette1123/movies-streaming-platform/git/blobs/50a5635ed0fdbf47fec74a21598e541bf73c2828",
+    "download_url": "https://raw.githubusercontent.com/Vette1123/movies-streaming-platform/main/.env.sample",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/Vette1123/movies-streaming-platform/contents/.env.sample?ref=main",
+      "git": "https://api.github.com/repos/Vette1123/movies-streaming-platform/git/blobs/50a5635ed0fdbf47fec74a21598e541bf73c2828",
+      "html": "https://github.com/Vette1123/movies-streaming-platform/blob/main/.env.sample"
+    }
+  },
+  {
+    "name": ".github",
+    "path": ".github",
+    "sha": "c7bf01b6e280a1cce1de3eda1e2cf55492472a78",
+    "size": 0,
+    "url": "https://api.github.com/repos/Vette1123/movies-streaming-platform/contents/.github?ref=main",
+    "html_url": "https://github.com/Vette1123/movies-streaming-platform/tree/main/.github",
+    "git_url": "https://api.github.com/repos/Vette1123/movies-streaming-platform/git/trees/c7bf01b6e280a1cce1de3eda1e2cf55492472a78",
+    "download_url": null,
+    "type": "dir",
+    "_links": {
+      "self": "https://api.github.com/repos/Vette1123/movies-streaming-platform/contents/.github?ref=main",
+      "git": "https://api.github.com/repos/Vette1123/movies-streaming-platform/git/trees/c7bf01b6e280a1cce1de3eda1e2cf55492472a78",
+      "html": "https://github.com/Vette1123/movies-streaming-platform/tree/main/.github"
+    }
+  },
+  {
+    "name": ".gitignore",
+    "path": ".gitignore",
+    "sha": "c4b7e2b36b13e0355ad1a20803bc3ede57546d25",
+    "size": 408,
+    "url": "https://api.github.com/repos/Vette1123/movies-streaming-platform/contents/.gitignore?ref=main",
+    "html_url": "https://github.com/Vette1123/movies-streaming-platform/blob/main/.gitignore",
+    "git_url": "https://api.github.com/repos/Vette1123/movies-streaming-platform/git/blobs/c4b7e2b36b13e0355ad1a20803bc3ede57546d25",
+    "download_url": "https://raw.githubusercontent.com/Vette1123/movies-streaming-platform/main/.gitignore",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/Vette1123/movies-streaming-platform/contents/.gitignore?ref=main",
+      "git": "https://api.github.com/repos/Vette1123/movies-streaming-platform/git/blobs/c4b7e2b36b13e0355ad1a20803bc3ede57546d25",
+      "html": "https://github.com/Vette1123/movies-streaming-platform/blob/main/.gitignore"
+    }
+  },
+  {
+    "name": ".idea",
+    "path": ".idea",
+    "sha": "0bf030816408f11b10362657b8ed741c9edd0e62",
+    "size": 0,
+    "url": "https://api.github.com/repos/Vette1123/movies-streaming-platform/contents/.idea?ref=main",
+    "html_url": "https://github.com/Vette1123/movies-streaming-platform/tree/main/.idea",
+    "git_url": "https://api.github.com/repos/Vette1123/movies-streaming-platform/git/trees/0bf030816408f11b10362657b8ed741c9edd0e62",
+    "download_url": null,
+    "type": "dir",
+    "_links": {
+      "self": "https://api.github.com/repos/Vette1123/movies-streaming-platform/contents/.idea?ref=main",
+      "git": "https://api.github.com/repos/Vette1123/movies-streaming-platform/git/trees/0bf030816408f11b10362657b8ed741c9edd0e62",
+      "html": "https://github.com/Vette1123/movies-streaming-platform/tree/main/.idea"
+    }
+  },
+  {
+    "name": ".npmrc",
+    "path": ".npmrc",
+    "sha": "b7425b9ee858205989c4bb03c6b447948e22c55f",
+    "size": 28,
+    "url": "https://api.github.com/repos/Vette1123/movies-streaming-platform/contents/.npmrc?ref=main",
+    "html_url": "https://github.com/Vette1123/movies-streaming-platform/blob/main/.npmrc",
+    "git_url": "https://api.github.com/repos/Vette1123/movies-streaming-platform/git/blobs/b7425b9ee858205989c4bb03c6b447948e22c55f",
+    "download_url": "https://raw.githubusercontent.com/Vette1123/movies-streaming-platform/main/.npmrc",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/Vette1123/movies-streaming-platform/contents/.npmrc?ref=main",
+      "git": "https://api.github.com/repos/Vette1123/movies-streaming-platform/git/blobs/b7425b9ee858205989c4bb03c6b447948e22c55f",
+      "html": "https://github.com/Vette1123/movies-streaming-platform/blob/main/.npmrc"
+    }
+  },
+  {
+    "name": ".prettierignore",
+    "path": ".prettierignore",
+    "sha": "2f730936cfe98cf99d984ee9d189037209bb99cf",
+    "size": 113,
+    "url": "https://api.github.com/repos/Vette1123/movies-streaming-platform/contents/.prettierignore?ref=main",
+    "html_url": "https://github.com/Vette1123/movies-streaming-platform/blob/main/.prettierignore",
+    "git_url": "https://api.github.com/repos/Vette1123/movies-streaming-platform/git/blobs/2f730936cfe98cf99d984ee9d189037209bb99cf",
+    "download_url": "https://raw.githubusercontent.com/Vette1123/movies-streaming-platform/main/.prettierignore",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/Vette1123/movies-streaming-platform/contents/.prettierignore?ref=main",
+      "git": "https://api.github.com/repos/Vette1123/movies-streaming-platform/git/blobs/2f730936cfe98cf99d984ee9d189037209bb99cf",
+      "html": "https://github.com/Vette1123/movies-streaming-platform/blob/main/.prettierignore"
+    }
+  },
+  {
+    "name": ".vscode",
+    "path": ".vscode",
+    "sha": "ba5f90c592f7adf9042a1d65d300f05a181f33b0",
+    "size": 0,
+    "url": "https://api.github.com/repos/Vette1123/movies-streaming-platform/contents/.vscode?ref=main",
+    "html_url": "https://github.com/Vette1123/movies-streaming-platform/tree/main/.vscode",
+    "git_url": "https://api.github.com/repos/Vette1123/movies-streaming-platform/git/trees/ba5f90c592f7adf9042a1d65d300f05a181f33b0",
+    "download_url": null,
+    "type": "dir",
+    "_links": {
+      "self": "https://api.github.com/repos/Vette1123/movies-streaming-platform/contents/.vscode?ref=main",
+      "git": "https://api.github.com/repos/Vette1123/movies-streaming-platform/git/trees/ba5f90c592f7adf9042a1d65d300f05a181f33b0",
+      "html": "https://github.com/Vette1123/movies-streaming-platform/tree/main/.vscode"
+    }
+  },
+  {
+    "name": "LICENSE.md",
+    "path": "LICENSE.md",
+    "sha": "8001dca4925400bd112994adaac06c4556ed8e87",
+    "size": 1081,
+    "url": "https://api.github.com/repos/Vette1123/movies-streaming-platform/contents/LICENSE.md?ref=main",
+    "html_url": "https://github.com/Vette1123/movies-streaming-platform/blob/main/LICENSE.md",
+    "git_url": "https://api.github.com/repos/Vette1123/movies-streaming-platform/git/blobs/8001dca4925400bd112994adaac06c4556ed8e87",
+    "download_url": "https://raw.githubusercontent.com/Vette1123/movies-streaming-platform/main/LICENSE.md",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/Vette1123/movies-streaming-platform/contents/LICENSE.md?ref=main",
+      "git": "https://api.github.com/repos/Vette1123/movies-streaming-platform/git/blobs/8001dca4925400bd112994adaac06c4556ed8e87",
+      "html": "https://github.com/Vette1123/movies-streaming-platform/blob/main/LICENSE.md"
+    }
+  },
+  {
+    "name": "README.md",
+    "path": "README.md",
+    "sha": "8cc1b9821689a7630a88e48f779894dcafa443d1",
+    "size": 5074,
+    "url": "https://api.github.com/repos/Vette1123/movies-streaming-platform/contents/README.md?ref=main",
+    "html_url": "https://github.com/Vette1123/movies-streaming-platform/blob/main/README.md",
+    "git_url": "https://api.github.com/repos/Vette1123/movies-streaming-platform/git/blobs/8cc1b9821689a7630a88e48f779894dcafa443d1",
+    "download_url": "https://raw.githubusercontent.com/Vette1123/movies-streaming-platform/main/README.md",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/Vette1123/movies-streaming-platform/contents/README.md?ref=main",
+      "git": "https://api.github.com/repos/Vette1123/movies-streaming-platform/git/blobs/8cc1b9821689a7630a88e48f779894dcafa443d1",
+      "html": "https://github.com/Vette1123/movies-streaming-platform/blob/main/README.md"
+    }
+  },
+  {
+    "name": "actions",
+    "path": "actions",
+    "sha": "62beacb4f91d54ba43214d74a0c0126604b38f7c",
+    "size": 0,
+    "url": "https://api.github.com/repos/Vette1123/movies-streaming-platform/contents/actions?ref=main",
+    "html_url": "https://github.com/Vette1123/movies-streaming-platform/tree/main/actions",
+    "git_url": "https://api.github.com/repos/Vette1123/movies-streaming-platform/git/trees/62beacb4f91d54ba43214d74a0c0126604b38f7c",
+    "download_url": null,
+    "type": "dir",
+    "_links": {
+      "self": "https://api.github.com/repos/Vette1123/movies-streaming-platform/contents/actions?ref=main",
+      "git": "https://api.github.com/repos/Vette1123/movies-streaming-platform/git/trees/62beacb4f91d54ba43214d74a0c0126604b38f7c",
+      "html": "https://github.com/Vette1123/movies-streaming-platform/tree/main/actions"
+    }
+  },
+  {
+    "name": "ads.txt",
+    "path": "ads.txt",
+    "sha": "60f6c71c10deb6387919688faa5ee9f11afa17b9",
+    "size": 58,
+    "url": "https://api.github.com/repos/Vette1123/movies-streaming-platform/contents/ads.txt?ref=main",
+    "html_url": "https://github.com/Vette1123/movies-streaming-platform/blob/main/ads.txt",
+    "git_url": "https://api.github.com/repos/Vette1123/movies-streaming-platform/git/blobs/60f6c71c10deb6387919688faa5ee9f11afa17b9",
+    "download_url": "https://raw.githubusercontent.com/Vette1123/movies-streaming-platform/main/ads.txt",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/Vette1123/movies-streaming-platform/contents/ads.txt?ref=main",
+      "git": "https://api.github.com/repos/Vette1123/movies-streaming-platform/git/blobs/60f6c71c10deb6387919688faa5ee9f11afa17b9",
+      "html": "https://github.com/Vette1123/movies-streaming-platform/blob/main/ads.txt"
+    }
+  },
+  {
+    "name": "app",
+    "path": "app",
+    "sha": "33b52abfdfdb00fdbf696fc5bf83a4a44149f690",
+    "size": 0,
+    "url": "https://api.github.com/repos/Vette1123/movies-streaming-platform/contents/app?ref=main",
+    "html_url": "https://github.com/Vette1123/movies-streaming-platform/tree/main/app",
+    "git_url": "https://api.github.com/repos/Vette1123/movies-streaming-platform/git/trees/33b52abfdfdb00fdbf696fc5bf83a4a44149f690",
+    "download_url": null,
+    "type": "dir",
+    "_links": {
+      "self": "https://api.github.com/repos/Vette1123/movies-streaming-platform/contents/app?ref=main",
+      "git": "https://api.github.com/repos/Vette1123/movies-streaming-platform/git/trees/33b52abfdfdb00fdbf696fc5bf83a4a44149f690",
+      "html": "https://github.com/Vette1123/movies-streaming-platform/tree/main/app"
+    }
+  },
+  {
+    "name": "commitlint.config.js",
+    "path": "commitlint.config.js",
+    "sha": "4fedde6daf0b816025b8d16a7b8af9e06b33bec5",
+    "size": 66,
+    "url": "https://api.github.com/repos/Vette1123/movies-streaming-platform/contents/commitlint.config.js?ref=main",
+    "html_url": "https://github.com/Vette1123/movies-streaming-platform/blob/main/commitlint.config.js",
+    "git_url": "https://api.github.com/repos/Vette1123/movies-streaming-platform/git/blobs/4fedde6daf0b816025b8d16a7b8af9e06b33bec5",
+    "download_url": "https://raw.githubusercontent.com/Vette1123/movies-streaming-platform/main/commitlint.config.js",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/Vette1123/movies-streaming-platform/contents/commitlint.config.js?ref=main",
+      "git": "https://api.github.com/repos/Vette1123/movies-streaming-platform/git/blobs/4fedde6daf0b816025b8d16a7b8af9e06b33bec5",
+      "html": "https://github.com/Vette1123/movies-streaming-platform/blob/main/commitlint.config.js"
+    }
+  },
+  {
+    "name": "components.json",
+    "path": "components.json",
+    "sha": "e2aaab4328d3c0f453842d62e74c3706e46137ef",
+    "size": 290,
+    "url": "https://api.github.com/repos/Vette1123/movies-streaming-platform/contents/components.json?ref=main",
+    "html_url": "https://github.com/Vette1123/movies-streaming-platform/blob/main/components.json",
+    "git_url": "https://api.github.com/repos/Vette1123/movies-streaming-platform/git/blobs/e2aaab4328d3c0f453842d62e74c3706e46137ef",
+    "download_url": "https://raw.githubusercontent.com/Vette1123/movies-streaming-platform/main/components.json",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/Vette1123/movies-streaming-platform/contents/components.json?ref=main",
+      "git": "https://api.github.com/repos/Vette1123/movies-streaming-platform/git/blobs/e2aaab4328d3c0f453842d62e74c3706e46137ef",
+      "html": "https://github.com/Vette1123/movies-streaming-platform/blob/main/components.json"
+    }
+  },
+  {
+    "name": "components",
+    "path": "components",
+    "sha": "c6457c90b10bc076167446c47f71733406711e9e",
+    "size": 0,
+    "url": "https://api.github.com/repos/Vette1123/movies-streaming-platform/contents/components?ref=main",
+    "html_url": "https://github.com/Vette1123/movies-streaming-platform/tree/main/components",
+    "git_url": "https://api.github.com/repos/Vette1123/movies-streaming-platform/git/trees/c6457c90b10bc076167446c47f71733406711e9e",
+    "download_url": null,
+    "type": "dir",
+    "_links": {
+      "self": "https://api.github.com/repos/Vette1123/movies-streaming-platform/contents/components?ref=main",
+      "git": "https://api.github.com/repos/Vette1123/movies-streaming-platform/git/trees/c6457c90b10bc076167446c47f71733406711e9e",
+      "html": "https://github.com/Vette1123/movies-streaming-platform/tree/main/components"
+    }
+  },
+  {
+    "name": "config",
+    "path": "config",
+    "sha": "4fd277f007db2413e502f4514225539877f98ddd",
+    "size": 0,
+    "url": "https://api.github.com/repos/Vette1123/movies-streaming-platform/contents/config?ref=main",
+    "html_url": "https://github.com/Vette1123/movies-streaming-platform/tree/main/config",
+    "git_url": "https://api.github.com/repos/Vette1123/movies-streaming-platform/git/trees/4fd277f007db2413e502f4514225539877f98ddd",
+    "download_url": null,
+    "type": "dir",
+    "_links": {
+      "self": "https://api.github.com/repos/Vette1123/movies-streaming-platform/contents/config?ref=main",
+      "git": "https://api.github.com/repos/Vette1123/movies-streaming-platform/git/trees/4fd277f007db2413e502f4514225539877f98ddd",
+      "html": "https://github.com/Vette1123/movies-streaming-platform/tree/main/config"
+    }
+  },
+  {
+    "name": "dtos",
+    "path": "dtos",
+    "sha": "0638eb0f711af69db34d17206d564b972fffdea5",
+    "size": 0,
+    "url": "https://api.github.com/repos/Vette1123/movies-streaming-platform/contents/dtos?ref=main",
+    "html_url": "https://github.com/Vette1123/movies-streaming-platform/tree/main/dtos",
+    "git_url": "https://api.github.com/repos/Vette1123/movies-streaming-platform/git/trees/0638eb0f711af69db34d17206d564b972fffdea5",
+    "download_url": null,
+    "type": "dir",
+    "_links": {
+      "self": "https://api.github.com/repos/Vette1123/movies-streaming-platform/contents/dtos?ref=main",
+      "git": "https://api.github.com/repos/Vette1123/movies-streaming-platform/git/trees/0638eb0f711af69db34d17206d564b972fffdea5",
+      "html": "https://github.com/Vette1123/movies-streaming-platform/tree/main/dtos"
+    }
+  },
+  {
+    "name": "eslint.config.mjs",
+    "path": "eslint.config.mjs",
+    "sha": "2641f1391aed9018b9a31e557da5e851484d9c07",
+    "size": 698,
+    "url": "https://api.github.com/repos/Vette1123/movies-streaming-platform/contents/eslint.config.mjs?ref=main",
+    "html_url": "https://github.com/Vette1123/movies-streaming-platform/blob/main/eslint.config.mjs",
+    "git_url": "https://api.github.com/repos/Vette1123/movies-streaming-platform/git/blobs/2641f1391aed9018b9a31e557da5e851484d9c07",
+    "download_url": "https://raw.githubusercontent.com/Vette1123/movies-streaming-platform/main/eslint.config.mjs",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/Vette1123/movies-streaming-platform/contents/eslint.config.mjs?ref=main",
+      "git": "https://api.github.com/repos/Vette1123/movies-streaming-platform/git/blobs/2641f1391aed9018b9a31e557da5e851484d9c07",
+      "html": "https://github.com/Vette1123/movies-streaming-platform/blob/main/eslint.config.mjs"
+    }
+  },
+  {
+    "name": "hooks",
+    "path": "hooks",
+    "sha": "610e0fb8e37b02fb57d0a122462ff33890faa171",
+    "size": 0,
+    "url": "https://api.github.com/repos/Vette1123/movies-streaming-platform/contents/hooks?ref=main",
+    "html_url": "https://github.com/Vette1123/movies-streaming-platform/tree/main/hooks",
+    "git_url": "https://api.github.com/repos/Vette1123/movies-streaming-platform/git/trees/610e0fb8e37b02fb57d0a122462ff33890faa171",
+    "download_url": null,
+    "type": "dir",
+    "_links": {
+      "self": "https://api.github.com/repos/Vette1123/movies-streaming-platform/contents/hooks?ref=main",
+      "git": "https://api.github.com/repos/Vette1123/movies-streaming-platform/git/trees/610e0fb8e37b02fb57d0a122462ff33890faa171",
+      "html": "https://github.com/Vette1123/movies-streaming-platform/tree/main/hooks"
+    }
+  },
+  {
+    "name": "lib",
+    "path": "lib",
+    "sha": "d691706a0e843ea91a55943bff98fc9ad0b60008",
+    "size": 0,
+    "url": "https://api.github.com/repos/Vette1123/movies-streaming-platform/contents/lib?ref=main",
+    "html_url": "https://github.com/Vette1123/movies-streaming-platform/tree/main/lib",
+    "git_url": "https://api.github.com/repos/Vette1123/movies-streaming-platform/git/trees/d691706a0e843ea91a55943bff98fc9ad0b60008",
+    "download_url": null,
+    "type": "dir",
+    "_links": {
+      "self": "https://api.github.com/repos/Vette1123/movies-streaming-platform/contents/lib?ref=main",
+      "git": "https://api.github.com/repos/Vette1123/movies-streaming-platform/git/trees/d691706a0e843ea91a55943bff98fc9ad0b60008",
+      "html": "https://github.com/Vette1123/movies-streaming-platform/tree/main/lib"
+    }
+  },
+  {
+    "name": "next.config.mjs",
+    "path": "next.config.mjs",
+    "sha": "b5bb038c9090a6a993a7c16812c1c93ff9ac1bcd",
+    "size": 1870,
+    "url": "https://api.github.com/repos/Vette1123/movies-streaming-platform/contents/next.config.mjs?ref=main",
+    "html_url": "https://github.com/Vette1123/movies-streaming-platform/blob/main/next.config.mjs",
+    "git_url": "https://api.github.com/repos/Vette1123/movies-streaming-platform/git/blobs/b5bb038c9090a6a993a7c16812c1c93ff9ac1bcd",
+    "download_url": "https://raw.githubusercontent.com/Vette1123/movies-streaming-platform/main/next.config.mjs",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/Vette1123/movies-streaming-platform/contents/next.config.mjs?ref=main",
+      "git": "https://api.github.com/repos/Vette1123/movies-streaming-platform/git/blobs/b5bb038c9090a6a993a7c16812c1c93ff9ac1bcd",
+      "html": "https://github.com/Vette1123/movies-streaming-platform/blob/main/next.config.mjs"
+    }
+  },
+  {
+    "name": "open-next.config.ts",
+    "path": "open-next.config.ts",
+    "sha": "2e2c55d7435b464766072643ce301b9f58fb64f3",
+    "size": 392,
+    "url": "https://api.github.com/repos/Vette1123/movies-streaming-platform/contents/open-next.config.ts?ref=main",
+    "html_url": "https://github.com/Vette1123/movies-streaming-platform/blob/main/open-next.config.ts",
+    "git_url": "https://api.github.com/repos/Vette1123/movies-streaming-platform/git/blobs/2e2c55d7435b464766072643ce301b9f58fb64f3",
+    "download_url": "https://raw.githubusercontent.com/Vette1123/movies-streaming-platform/main/open-next.config.ts",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/Vette1123/movies-streaming-platform/contents/open-next.config.ts?ref=main",
+      "git": "https://api.github.com/repos/Vette1123/movies-streaming-platform/git/blobs/2e2c55d7435b464766072643ce301b9f58fb64f3",
+      "html": "https://github.com/Vette1123/movies-streaming-platform/blob/main/open-next.config.ts"
+    }
+  },
+  {
+    "name": "package.json",
+    "path": "package.json",
+    "sha": "32710e54aeadeb830cb80aa5236d065411accc6a",
+    "size": 2736,
+    "url": "https://api.github.com/repos/Vette1123/movies-streaming-platform/contents/package.json?ref=main",
+    "html_url": "https://github.com/Vette1123/movies-streaming-platform/blob/main/package.json",
+    "git_url": "https://api.github.com/repos/Vette1123/movies-streaming-platform/git/blobs/32710e54aeadeb830cb80aa5236d065411accc6a",
+    "download_url": "https://raw.githubusercontent.com/Vette1123/movies-streaming-platform/main/package.json",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/Vette1123/movies-streaming-platform/contents/package.json?ref=main",
+      "git": "https://api.github.com/repos/Vette1123/movies-streaming-platform/git/blobs/32710e54aeadeb830cb80aa5236d065411accc6a",
+      "html": "https://github.com/Vette1123/movies-streaming-platform/blob/main/package.json"
+    }
+  },
+  {
+    "name": "pnpm-lock.yaml",
+    "path": "pnpm-lock.yaml",
+    "sha": "8397860cc061a8843929d52850e18b747510c574",
+    "size": 315392,
+    "url": "https://api.github.com/repos/Vette1123/movies-streaming-platform/contents/pnpm-lock.yaml?ref=main",
+    "html_url": "https://github.com/Vette1123/movies-streaming-platform/blob/main/pnpm-lock.yaml",
+    "git_url": "https://api.github.com/repos/Vette1123/movies-streaming-platform/git/blobs/8397860cc061a8843929d52850e18b747510c574",
+    "download_url": "https://raw.githubusercontent.com/Vette1123/movies-streaming-platform/main/pnpm-lock.yaml",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/Vette1123/movies-streaming-platform/contents/pnpm-lock.yaml?ref=main",
+      "git": "https://api.github.com/repos/Vette1123/movies-streaming-platform/git/blobs/8397860cc061a8843929d52850e18b747510c574",
+      "html": "https://github.com/Vette1123/movies-streaming-platform/blob/main/pnpm-lock.yaml"
+    }
+  },
+  {
+    "name": "pnpm-workspace.yaml",
+    "path": "pnpm-workspace.yaml",
+    "sha": "cc1ff990fe54bef8c5ced5cbf54fc18d7c298272",
+    "size": 66,
+    "url": "https://api.github.com/repos/Vette1123/movies-streaming-platform/contents/pnpm-workspace.yaml?ref=main",
+    "html_url": "https://github.com/Vette1123/movies-streaming-platform/blob/main/pnpm-workspace.yaml",
+    "git_url": "https://api.github.com/repos/Vette1123/movies-streaming-platform/git/blobs/cc1ff990fe54bef8c5ced5cbf54fc18d7c298272",
+    "download_url": "https://raw.githubusercontent.com/Vette1123/movies-streaming-platform/main/pnpm-workspace.yaml",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/Vette1123/movies-streaming-platform/contents/pnpm-workspace.yaml?ref=main",
+      "git": "https://api.github.com/repos/Vette1123/movies-streaming-platform/git/blobs/cc1ff990fe54bef8c5ced5cbf54fc18d7c298272",
+      "html": "https://github.com/Vette1123/movies-streaming-platform/blob/main/pnpm-workspace.yaml"
+    }
+  },
+  {
+    "name": "postcss.config.js",
+    "path": "postcss.config.js",
+    "sha": "52b9b4bafe3458b4995dd8eff4952a3a239825f1",
+    "size": 71,
+    "url": "https://api.github.com/repos/Vette1123/movies-streaming-platform/contents/postcss.config.js?ref=main",
+    "html_url": "https://github.com/Vette1123/movies-streaming-platform/blob/main/postcss.config.js",
+    "git_url": "https://api.github.com/repos/Vette1123/movies-streaming-platform/git/blobs/52b9b4bafe3458b4995dd8eff4952a3a239825f1",
+    "download_url": "https://raw.githubusercontent.com/Vette1123/movies-streaming-platform/main/postcss.config.js",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/Vette1123/movies-streaming-platform/contents/postcss.config.js?ref=main",
+      "git": "https://api.github.com/repos/Vette1123/movies-streaming-platform/git/blobs/52b9b4bafe3458b4995dd8eff4952a3a239825f1",
+      "html": "https://github.com/Vette1123/movies-streaming-platform/blob/main/postcss.config.js"
+    }
+  },
+  {
+    "name": "prettier.config.js",
+    "path": "prettier.config.js",
+    "sha": "bb690f361a515fe913eab69d71c314dc46c1c377",
+    "size": 820,
+    "url": "https://api.github.com/repos/Vette1123/movies-streaming-platform/contents/prettier.config.js?ref=main",
+    "html_url": "https://github.com/Vette1123/movies-streaming-platform/blob/main/prettier.config.js",
+    "git_url": "https://api.github.com/repos/Vette1123/movies-streaming-platform/git/blobs/bb690f361a515fe913eab69d71c314dc46c1c377",
+    "download_url": "https://raw.githubusercontent.com/Vette1123/movies-streaming-platform/main/prettier.config.js",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/Vette1123/movies-streaming-platform/contents/prettier.config.js?ref=main",
+      "git": "https://api.github.com/repos/Vette1123/movies-streaming-platform/git/blobs/bb690f361a515fe913eab69d71c314dc46c1c377",
+      "html": "https://github.com/Vette1123/movies-streaming-platform/blob/main/prettier.config.js"
+    }
+  },
+  {
+    "name": "providers",
+    "path": "providers",
+    "sha": "8426dff4a6df712721a9bd254fad55dc554036e8",
+    "size": 0,
+    "url": "https://api.github.com/repos/Vette1123/movies-streaming-platform/contents/providers?ref=main",
+    "html_url": "https://github.com/Vette1123/movies-streaming-platform/tree/main/providers",
+    "git_url": "https://api.github.com/repos/Vette1123/movies-streaming-platform/git/trees/8426dff4a6df712721a9bd254fad55dc554036e8",
+    "download_url": null,
+    "type": "dir",
+    "_links": {
+      "self": "https://api.github.com/repos/Vette1123/movies-streaming-platform/contents/providers?ref=main",
+      "git": "https://api.github.com/repos/Vette1123/movies-streaming-platform/git/trees/8426dff4a6df712721a9bd254fad55dc554036e8",
+      "html": "https://github.com/Vette1123/movies-streaming-platform/tree/main/providers"
+    }
+  },
+  {
+    "name": "public",
+    "path": "public",
+    "sha": "1ce5f74381d99ed248f6eb9c9ed3cc25342be2a5",
+    "size": 0,
+    "url": "https://api.github.com/repos/Vette1123/movies-streaming-platform/contents/public?ref=main",
+    "html_url": "https://github.com/Vette1123/movies-streaming-platform/tree/main/public",
+    "git_url": "https://api.github.com/repos/Vette1123/movies-streaming-platform/git/trees/1ce5f74381d99ed248f6eb9c9ed3cc25342be2a5",
+    "download_url": null,
+    "type": "dir",
+    "_links": {
+      "self": "https://api.github.com/repos/Vette1123/movies-streaming-platform/contents/public?ref=main",
+      "git": "https://api.github.com/repos/Vette1123/movies-streaming-platform/git/trees/1ce5f74381d99ed248f6eb9c9ed3cc25342be2a5",
+      "html": "https://github.com/Vette1123/movies-streaming-platform/tree/main/public"
+    }
+  },
+  {
+    "name": "renovate.json",
+    "path": "renovate.json",
+    "sha": "22a994324a0eaa41756cba09e125fdca2ed29fce",
+    "size": 106,
+    "url": "https://api.github.com/repos/Vette1123/movies-streaming-platform/contents/renovate.json?ref=main",
+    "html_url": "https://github.com/Vette1123/movies-streaming-platform/blob/main/renovate.json",
+    "git_url": "https://api.github.com/repos/Vette1123/movies-streaming-platform/git/blobs/22a994324a0eaa41756cba09e125fdca2ed29fce",
+    "download_url": "https://raw.githubusercontent.com/Vette1123/movies-streaming-platform/main/renovate.json",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/Vette1123/movies-streaming-platform/contents/renovate.json?ref=main",
+      "git": "https://api.github.com/repos/Vette1123/movies-streaming-platform/git/blobs/22a994324a0eaa41756cba09e125fdca2ed29fce",
+      "html": "https://github.com/Vette1123/movies-streaming-platform/blob/main/renovate.json"
+    }
+  },
+  {
+    "name": "scripts",
+    "path": "scripts",
+    "sha": "28b765ee8960061c45ddde5695212aac00b17e15",
+    "size": 0,
+    "url": "https://api.github.com/repos/Vette1123/movies-streaming-platform/contents/scripts?ref=main",
+    "html_url": "https://github.com/Vette1123/movies-streaming-platform/tree/main/scripts",
+    "git_url": "https://api.github.com/repos/Vette1123/movies-streaming-platform/git/trees/28b765ee8960061c45ddde5695212aac00b17e15",
+    "download_url": null,
+    "type": "dir",
+    "_links": {
+      "self": "https://api.github.com/repos/Vette1123/movies-streaming-platform/contents/scripts?ref=main",
+      "git": "https://api.github.com/repos/Vette1123/movies-streaming-platform/git/trees/28b765ee8960061c45ddde5695212aac00b17e15",
+      "html": "https://github.com/Vette1123/movies-streaming-platform/tree/main/scripts"
+    }
+  },
+  {
+    "name": "services",
+    "path": "services",
+    "sha": "9d5468c9053adfcf9dc92945a56f3381d688be24",
+    "size": 0,
+    "url": "https://api.github.com/repos/Vette1123/movies-streaming-platform/contents/services?ref=main",
+    "html_url": "https://github.com/Vette1123/movies-streaming-platform/tree/main/services",
+    "git_url": "https://api.github.com/repos/Vette1123/movies-streaming-platform/git/trees/9d5468c9053adfcf9dc92945a56f3381d688be24",
+    "download_url": null,
+    "type": "dir",
+    "_links": {
+      "self": "https://api.github.com/repos/Vette1123/movies-streaming-platform/contents/services?ref=main",
+      "git": "https://api.github.com/repos/Vette1123/movies-streaming-platform/git/trees/9d5468c9053adfcf9dc92945a56f3381d688be24",
+      "html": "https://github.com/Vette1123/movies-streaming-platform/tree/main/services"
+    }
+  },
+  {
+    "name": "styles",
+    "path": "styles",
+    "sha": "ee58f2867d4ac00bf61095bfd67823ce2612d82a",
+    "size": 0,
+    "url": "https://api.github.com/repos/Vette1123/movies-streaming-platform/contents/styles?ref=main",
+    "html_url": "https://github.com/Vette1123/movies-streaming-platform/tree/main/styles",
+    "git_url": "https://api.github.com/repos/Vette1123/movies-streaming-platform/git/trees/ee58f2867d4ac00bf61095bfd67823ce2612d82a",
+    "download_url": null,
+    "type": "dir",
+    "_links": {
+      "self": "https://api.github.com/repos/Vette1123/movies-streaming-platform/contents/styles?ref=main",
+      "git": "https://api.github.com/repos/Vette1123/movies-streaming-platform/git/trees/ee58f2867d4ac00bf61095bfd67823ce2612d82a",
+      "html": "https://github.com/Vette1123/movies-streaming-platform/tree/main/styles"
+    }
+  },
+  {
+    "name": "tsconfig.json",
+    "path": "tsconfig.json",
+    "sha": "b861767cf88327b79bbe8c51ef88660f30c688c7",
+    "size": 826,
+    "url": "https://api.github.com/repos/Vette1123/movies-streaming-platform/contents/tsconfig.json?ref=main",
+    "html_url": "https://github.com/Vette1123/movies-streaming-platform/blob/main/tsconfig.json",
+    "git_url": "https://api.github.com/repos/Vette1123/movies-streaming-platform/git/blobs/b861767cf88327b79bbe8c51ef88660f30c688c7",
+    "download_url": "https://raw.githubusercontent.com/Vette1123/movies-streaming-platform/main/tsconfig.json",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/Vette1123/movies-streaming-platform/contents/tsconfig.json?ref=main",
+      "git": "https://api.github.com/repos/Vette1123/movies-streaming-platform/git/blobs/b861767cf88327b79bbe8c51ef88660f30c688c7",
+      "html": "https://github.com/Vette1123/movies-streaming-platform/blob/main/tsconfig.json"
+    }
+  },
+  {
+    "name": "types",
+    "path": "types",
+    "sha": "69675aaf055c8541edf3c51bb8d5cfa0c96d535e",
+    "size": 0,
+    "url": "https://api.github.com/repos/Vette1123/movies-streaming-platform/contents/types?ref=main",
+    "html_url": "https://github.com/Vette1123/movies-streaming-platform/tree/main/types",
+    "git_url": "https://api.github.com/repos/Vette1123/movies-streaming-platform/git/trees/69675aaf055c8541edf3c51bb8d5cfa0c96d535e",
+    "download_url": null,
+    "type": "dir",
+    "_links": {
+      "self": "https://api.github.com/repos/Vette1123/movies-streaming-platform/contents/types?ref=main",
+      "git": "https://api.github.com/repos/Vette1123/movies-streaming-platform/git/trees/69675aaf055c8541edf3c51bb8d5cfa0c96d535e",
+      "html": "https://github.com/Vette1123/movies-streaming-platform/tree/main/types"
+    }
+  },
+  {
+    "name": "wrangler.jsonc",
+    "path": "wrangler.jsonc",
+    "sha": "f849bdc94b61b891c644f0a58908b0545a44653f",
+    "size": 1160,
+    "url": "https://api.github.com/repos/Vette1123/movies-streaming-platform/contents/wrangler.jsonc?ref=main",
+    "html_url": "https://github.com/Vette1123/movies-streaming-platform/blob/main/wrangler.jsonc",
+    "git_url": "https://api.github.com/repos/Vette1123/movies-streaming-platform/git/blobs/f849bdc94b61b891c644f0a58908b0545a44653f",
+    "download_url": "https://raw.githubusercontent.com/Vette1123/movies-streaming-platform/main/wrangler.jsonc",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/Vette1123/movies-streaming-platform/contents/wrangler.jsonc?ref=main",
+      "git": "https://api.github.com/repos/Vette1123/movies-streaming-platform/git/blobs/f849bdc94b61b891c644f0a58908b0545a44653f",
+      "html": "https://github.com/Vette1123/movies-streaming-platform/blob/main/wrangler.jsonc"
+    }
+  }
+]
