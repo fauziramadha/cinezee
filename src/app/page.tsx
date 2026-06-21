@@ -73,9 +73,9 @@ export default function Home() {
     <main className="min-h-screen bg-background">
       <Header />
 
-      {/* Hero */}
+      {/* Hero - lebih compact di mobile (60vh), tinggi normal di desktop */}
       {loading ? (
-        <div className="flex h-[70vh] min-h-[480px] items-center justify-center bg-muted/20 md:h-[85vh]">
+        <div className="flex h-[60vh] min-h-[400px] items-center justify-center bg-muted/20 md:h-[75vh]">
           <div className="flex flex-col items-center gap-3">
             <Loader2 className="h-10 w-10 animate-spin text-primary" />
             <p className="text-sm text-muted-foreground">
@@ -84,7 +84,7 @@ export default function Home() {
           </div>
         </div>
       ) : error ? (
-        <div className="flex h-[70vh] min-h-[480px] flex-col items-center justify-center gap-3 px-4 text-center md:h-[85vh]">
+        <div className="flex h-[60vh] min-h-[400px] flex-col items-center justify-center gap-3 px-4 text-center md:h-[75vh]">
           <p className="text-sm text-destructive">{error}</p>
           <button
             onClick={() => window.location.reload()}
@@ -97,8 +97,8 @@ export default function Home() {
         <HeroCarousel movies={trending} />
       )}
 
-      {/* Content rows */}
-      <div className="relative z-10 -mt-32 space-y-8 pb-16 md:-mt-40">
+      {/* Content rows - SMALL gap on mobile (no overlap), larger on desktop */}
+      <div className="relative z-10 space-y-6 pb-16 pt-4 sm:space-y-8 sm:pt-6 md:-mt-16 md:space-y-10 md:pt-0 lg:-mt-24">
         {/* Continue Watching (only shows if history exists) */}
         <WatchHistory />
 
