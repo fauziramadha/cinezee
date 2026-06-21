@@ -67,18 +67,18 @@ export function HeroCarousel({ movies }: HeroCarouselProps) {
   const handleInfo = (movie: Movie) => {
     const mediaType: "movie" | "tv" = movie.media_type || (movie.title ? "movie" : "tv");
     const title = movie.title || movie.name || "Untitled";
-    const selected: SelectedMedia = {
+    const selectedMedia: SelectedMedia = {
       id: movie.id,
       type: mediaType,
       title,
       posterPath: movie.poster_path,
       backdropPath: movie.backdrop_path,
     };
-    setSelectedMedia(selected);
+    setSelectedMedia(selectedMedia);
   };
 
   return (
-    <section className="relative h-[70vh] min-h-[480px] w-full overflow-hidden md:h-[85vh]">
+    <section className="relative h-[60vh] min-h-[400px] w-full overflow-hidden md:h-[75vh] lg:h-[80vh]">
       {/* Embla viewport */}
       <div ref={emblaRef} className="h-full overflow-hidden">
         <div className="flex h-full">
@@ -115,9 +115,9 @@ export function HeroCarousel({ movies }: HeroCarouselProps) {
 
                 {/* Content */}
                 <div className="relative z-10 flex h-full items-end md:items-center">
-                  <div className="w-full max-w-2xl px-4 pb-12 sm:px-6 md:pb-0 md:pl-8 lg:pl-12">
+                  <div className="w-full max-w-2xl px-4 pb-14 sm:px-6 md:pb-0 md:pl-8 lg:pl-12">
                     {/* Media type badge */}
-                    <div className="mb-3 flex items-center gap-2">
+                    <div className="mb-2 flex items-center gap-2 sm:mb-3">
                       <span className="rounded bg-primary/90 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-primary-foreground">
                         {mediaType === "tv" ? "TV Series" : "Movie"}
                       </span>
@@ -134,36 +134,36 @@ export function HeroCarousel({ movies }: HeroCarouselProps) {
                       )}
                     </div>
 
-                    {/* Title */}
+                    {/* Title - smaller on mobile */}
                     <h1
-                      className="slide-in text-3xl font-extrabold tracking-tight text-white drop-shadow-lg sm:text-4xl md:text-5xl lg:text-6xl"
+                      className="slide-in text-2xl font-extrabold tracking-tight text-white drop-shadow-lg sm:text-3xl md:text-5xl lg:text-6xl"
                       key={`title-${selected}`}
                     >
                       {title}
                     </h1>
 
-                    {/* Overview */}
-                    <p className="mt-3 line-clamp-3 max-w-xl text-sm text-white/80 drop-shadow sm:text-base md:line-clamp-4 md:text-lg">
+                    {/* Overview - 2 lines mobile, 4 lines desktop */}
+                    <p className="mt-2 line-clamp-2 max-w-xl text-xs text-white/80 drop-shadow sm:mt-3 sm:text-sm md:line-clamp-4 md:text-lg">
                       {movie.overview}
                     </p>
 
-                    {/* Buttons */}
-                    <div className="mt-6 flex flex-wrap gap-3">
+                    {/* Buttons - touch-friendly, smaller on mobile */}
+                    <div className="mt-3 flex flex-wrap gap-2 sm:mt-6 sm:gap-3">
                       <Button
                         size="lg"
                         onClick={() => handlePlay(movie)}
-                        className="h-11 gap-2 bg-primary px-6 text-sm font-semibold text-primary-foreground hover:bg-primary/90 sm:h-12 sm:px-8 sm:text-base"
+                        className="h-9 gap-2 bg-primary px-4 text-xs font-semibold text-primary-foreground hover:bg-primary/90 sm:h-12 sm:px-8 sm:text-base"
                       >
-                        <Play className="h-5 w-5 fill-current" />
+                        <Play className="h-4 w-4 fill-current sm:h-5 sm:w-5" />
                         Play Now
                       </Button>
                       <Button
                         size="lg"
                         variant="secondary"
                         onClick={() => handleInfo(movie)}
-                        className="h-11 gap-2 bg-white/15 px-6 text-sm font-semibold text-white backdrop-blur-md hover:bg-white/25 sm:h-12 sm:px-8 sm:text-base"
+                        className="h-9 gap-2 bg-white/15 px-4 text-xs font-semibold text-white backdrop-blur-md hover:bg-white/25 sm:h-12 sm:px-8 sm:text-base"
                       >
-                        <Info className="h-5 w-5" />
+                        <Info className="h-4 w-4 sm:h-5 sm:w-5" />
                         More Info
                       </Button>
                     </div>
@@ -175,7 +175,7 @@ export function HeroCarousel({ movies }: HeroCarouselProps) {
         </div>
       </div>
 
-      {/* Navigation arrows */}
+      {/* Navigation arrows - desktop only */}
       <button
         onClick={scrollPrev}
         className="absolute left-2 top-1/2 z-20 hidden h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-black/40 text-white backdrop-blur-sm transition-all hover:bg-primary md:flex"
@@ -191,8 +191,8 @@ export function HeroCarousel({ movies }: HeroCarouselProps) {
         <ChevronRight className="h-5 w-5" />
       </button>
 
-      {/* Dots indicator */}
-      <div className="absolute bottom-4 left-1/2 z-20 flex -translate-x-1/2 gap-1.5 md:bottom-6">
+      {/* Dots indicator - positioned above content row */}
+      <div className="absolute bottom-3 left-1/2 z-20 flex -translate-x-1/2 gap-1.5 sm:bottom-4 md:bottom-6">
         {heroMovies.map((_, idx) => (
           <button
             key={idx}
