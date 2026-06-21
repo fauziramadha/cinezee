@@ -1,0 +1,41 @@
+# Cloudflare Workers deployment config for CineStream
+# Deploy: npx wrangler deploy
+
+name = "cinestream"
+main = ".open-next/worker.js"
+compatibility_date = "2024-09-23"
+compatibility_flags = ["nodejs_compat"]
+
+# Static assets (frontend build output)
+[assets]
+directory = ".open-next/assets"
+binding = "ASSETS"
+
+# Environment variables (public — safe to expose to client)
+[vars]
+NEXT_PUBLIC_APP_NAME = "CineStream"
+
+# ⚠️ Secrets (DO NOT commit these — use `wrangler secret put` instead):
+# - TMDB_API_KEY: Your TMDB v3 API key from https://www.themoviedb.org/settings/api
+#   Run: npx wrangler secret put TMDB_API_KEY
+#
+# Without TMDB_API_KEY, the app uses built-in mock data so the UI is fully functional.
+# When you add a real key, the app automatically switches to live TMDB data.
+
+# Optional: KV namespace for caching (uncomment to enable)
+# [[kv_namespaces]]
+# binding = "CACHE"
+# id = "your-kv-namespace-id"
+
+# Optional: Custom domain
+# routes = [
+#   { pattern = "cinestream.yourdomain.com", custom_domain = true }
+# ]
+
+# Build settings
+[build]
+command = "npx @opennextjs/cloudflare build"
+
+# Observability
+[observability]
+enabled = true
