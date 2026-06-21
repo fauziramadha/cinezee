@@ -24,7 +24,6 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { useAppStore } from "@/lib/store";
 import { getImageUrl, type MovieDetail } from "@/lib/tmdb";
 import { MovieCard } from "./movie-card";
-import { cn } from "@/lib/utils";
 
 export function DetailModal() {
   const { selectedMedia, setSelectedMedia, openPlayer, addToHistory } = useAppStore();
@@ -35,7 +34,6 @@ export function DetailModal() {
   // Fetch detail when media is selected
   useEffect(() => {
     if (!selectedMedia) {
-      // Defer state resets to avoid synchronous setState in effect
       Promise.resolve().then(() => {
         setDetail(null);
         setError(null);
@@ -90,7 +88,8 @@ export function DetailModal() {
   const runtime = detail?.runtime || detail?.episode_run_time?.[0];
   const director = detail?.credits?.crew?.find((c) => c.job === "Director")?.name;
   const creator = detail?.created_by?.[0]?.name;
-  const cast = detail?.credits?.cast?.slice(0, 6) || [];
+  // Cast: 8 orang (bukan 6) supaya grid di desktop lebih penuh
+  const cast = detail?.credits?.cast?.slice(0, 8) || [];
   const trailer = detail?.videos?.results?.find(
     (v) => v.site === "YouTube" && v.type === "Trailer",
   );
@@ -103,7 +102,8 @@ export function DetailModal() {
         if (!open) setSelectedMedia(null);
       }}
     >
-      <DialogContent className="max-h-[95vh] max-w-4xl overflow-hidden p-0">
+      {/* Modal width: penuh di HP, 2xl di tablet, 4xl di desktop, 6xl di layar besar */}
+      <DialogContent className="max-h-[95vh] max-w-[95vw] overflow-hidden p-0 sm:max-w-2xl md:max-w-4xl lg:max-w-6xl">
         <DialogHeader className="sr-only">
           <DialogTitle>{title}</DialogTitle>
         </DialogHeader>
@@ -146,40 +146,39 @@ export function DetailModal() {
                     src={getImageUrl(detail.backdrop_path, "original")}
                     alt={title}
                     fill
-                    sizes="(max-width: 768px) 100vw, 768px"
+                    sizes="(max-width: 768px) 100vw, 1024px"
                     className="object-cover"
                     unoptimized
                     priority
                   />
                 )}
-                {/* Gradient overlay */}
                 <div className="absolute inset-0 bg-gradient-to-t from-card via-card/30 to-transparent" />
                 <div className="absolute inset-0 bg-gradient-to-r from-card/80 via-transparent to-transparent" />
 
-                {/* Title overlay */}
-                <div className="absolute bottom-0 left-0 right-0 p-6 sm:p-8">
+                {/* Title overlay - padding lebih kecil di HP */}
+                <div className="absolute bottom-0 left-0 right-0 p-4 sm:p-6 md:p-8">
                   <Badge className="mb-2 bg-primary text-primary-foreground">
                     {selectedMedia.type === "tv" ? "TV Series" : "Movie"}
                   </Badge>
-                  <h2 className="text-2xl font-extrabold tracking-tight text-white drop-shadow-lg sm:text-3xl md:text-4xl">
+                  <h2 className="text-xl font-extrabold tracking-tight text-white drop-shadow-lg sm:text-2xl md:text-4xl">
                     {title}
                   </h2>
                   {detail.tagline && (
-                    <p className="mt-1 text-sm italic text-white/80">
+                    <p className="mt-1 text-xs italic text-white/80 sm:text-sm">
                       &quot;{detail.tagline}&quot;
                     </p>
                   )}
                 </div>
               </div>
 
-              {/* Action bar */}
-              <div className="flex flex-wrap items-center gap-3 border-b border-border bg-card/50 px-6 py-4 sm:px-8">
+              {/* Action bar - padding lebih kecil di HP */}
+              <div className="flex flex-wrap items-center gap-2 border-b border-border bg-card/50 px-4 py-3 sm:gap-3 sm:px-6 sm:py-4 md:px-8">
                 <Button
                   size="lg"
                   onClick={handleOpen}
                   className="gap-2 bg-primary text-primary-foreground hover:bg-primary/90"
                 >
-                  <Play className="h-5 w-5 fill-current" />
+                  <Play className="h-4 w-4 fill-current sm:h-5 sm:w-5" />
                   Play Now
                 </Button>
                 {trailer && (
@@ -188,11 +187,7 @@ export function DetailModal() {
                     target="_blank"
                     rel="noopener noreferrer"
                   >
-                    <Button
-                      size="lg"
-                      variant="secondary"
-                      className="gap-2"
-                    >
+                    <Button size="lg" variant="secondary" className="gap-2">
                       <Play className="h-4 w-4" />
                       Trailer
                     </Button>
@@ -206,14 +201,14 @@ export function DetailModal() {
                 </Button>
               </div>
 
-              {/* Content grid */}
-              <div className="grid gap-6 p-6 sm:p-8 md:grid-cols-3">
+              {/* Content grid - 1 col mobile, 3 col desktop */}
+              <div className="grid gap-4 p-4 sm:gap-6 sm:p-6 md:grid-cols-3 md:p-8">
                 {/* Left column - main info */}
                 <div className="md:col-span-2">
-                  {/* Quick stats */}
-                  <div className="mb-4 flex flex-wrap items-center gap-3 text-sm">
+                  {/* Quick stats - font lebih kecil di HP */}
+                  <div className="mb-3 flex flex-wrap items-center gap-2 text-xs sm:mb-4 sm:gap-3 sm:text-sm">
                     <span className="flex items-center gap-1">
-                      <Star className="h-4 w-4 fill-yellow-400 text-yellow-400" />
+                      <Star className="h-3.5 w-3.5 fill-yellow-400 text-yellow-400 sm:h-4 sm:w-4" />
                       <span className="font-semibold">{rating}</span>
                       <span className="text-muted-foreground">
                         ({detail.vote_count?.toLocaleString()})
@@ -221,13 +216,13 @@ export function DetailModal() {
                     </span>
                     {year && (
                       <span className="flex items-center gap-1 text-muted-foreground">
-                        <Calendar className="h-4 w-4" />
+                        <Calendar className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                         {year}
                       </span>
                     )}
                     {runtime && (
                       <span className="flex items-center gap-1 text-muted-foreground">
-                        <Clock className="h-4 w-4" />
+                        <Clock className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                         {runtime}m
                       </span>
                     )}
@@ -240,13 +235,9 @@ export function DetailModal() {
 
                   {/* Genres */}
                   {detail.genres && detail.genres.length > 0 && (
-                    <div className="mb-4 flex flex-wrap gap-1.5">
+                    <div className="mb-3 flex flex-wrap gap-1.5 sm:mb-4">
                       {detail.genres.map((genre) => (
-                        <Badge
-                          key={genre.id}
-                          variant="outline"
-                          className="text-xs"
-                        >
+                        <Badge key={genre.id} variant="outline" className="text-xs">
                           {genre.name}
                         </Badge>
                       ))}
@@ -254,26 +245,26 @@ export function DetailModal() {
                   )}
 
                   {/* Overview */}
-                  <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+                  <h3 className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground sm:mb-2 sm:text-sm">
                     Overview
                   </h3>
-                  <p className="text-sm leading-relaxed text-foreground/90 sm:text-base">
+                  <p className="text-xs leading-relaxed text-foreground/90 sm:text-sm md:text-base">
                     {detail.overview || "No overview available."}
                   </p>
 
-                  {/* Cast */}
+                  {/* Cast - responsive: 2 col mobile, 3 col tablet, 4 col desktop */}
                   {cast.length > 0 && (
-                    <div className="mt-6">
-                      <h3 className="mb-3 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+                    <div className="mt-4 sm:mt-6">
+                      <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground sm:mb-3 sm:text-sm">
                         Top Cast
                       </h3>
-                      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-3 lg:grid-cols-4">
                         {cast.map((person) => (
                           <div
                             key={person.id}
                             className="flex items-center gap-2"
                           >
-                            <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-full bg-muted">
+                            <div className="relative h-10 w-10 shrink-0 overflow-hidden rounded-full bg-muted sm:h-12 sm:w-12">
                               {person.profile_path ? (
                                 <Image
                                   src={getImageUrl(person.profile_path, "w185")}
@@ -285,11 +276,11 @@ export function DetailModal() {
                                 />
                               ) : null}
                             </div>
-                            <div className="min-w-0">
-                              <p className="truncate text-xs font-medium">
+                            <div className="min-w-0 flex-1">
+                              <p className="truncate text-xs font-medium sm:text-sm">
                                 {person.name}
                               </p>
-                              <p className="truncate text-[10px] text-muted-foreground">
+                              <p className="truncate text-[10px] text-muted-foreground sm:text-xs">
                                 {person.character}
                               </p>
                             </div>
@@ -301,31 +292,31 @@ export function DetailModal() {
                 </div>
 
                 {/* Right column - sidebar info */}
-                <div className="space-y-4">
+                <div className="space-y-3 sm:space-y-4">
                   {(director || creator) && (
                     <div>
                       <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                         {selectedMedia.type === "tv" ? "Creator" : "Director"}
                       </h4>
-                      <p className="mt-0.5 text-sm">{director || creator}</p>
+                      <p className="mt-0.5 text-xs sm:text-sm">{director || creator}</p>
                     </div>
                   )}
 
                   {selectedMedia.type === "tv" && detail.number_of_seasons && (
-                    <>
+                    <div className="flex gap-4">
                       <div>
                         <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                           Seasons
                         </h4>
-                        <p className="mt-0.5 text-sm">{detail.number_of_seasons}</p>
+                        <p className="mt-0.5 text-xs sm:text-sm">{detail.number_of_seasons}</p>
                       </div>
                       <div>
                         <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                           Episodes
                         </h4>
-                        <p className="mt-0.5 text-sm">{detail.number_of_episodes}</p>
+                        <p className="mt-0.5 text-xs sm:text-sm">{detail.number_of_episodes}</p>
                       </div>
-                    </>
+                    </div>
                   )}
 
                   {detail.spoken_languages && detail.spoken_languages.length > 0 && (
@@ -333,7 +324,7 @@ export function DetailModal() {
                       <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                         Languages
                       </h4>
-                      <p className="mt-0.5 text-sm">
+                      <p className="mt-0.5 text-xs sm:text-sm">
                         {detail.spoken_languages.map((l) => l.english_name).join(", ")}
                       </p>
                     </div>
@@ -344,7 +335,7 @@ export function DetailModal() {
                       <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                         Production
                       </h4>
-                      <p className="mt-0.5 text-sm">
+                      <p className="mt-0.5 text-xs sm:text-sm">
                         {detail.production_companies.map((c) => c.name).join(", ")}
                       </p>
                     </div>
@@ -352,11 +343,14 @@ export function DetailModal() {
                 </div>
               </div>
 
-              {/* Similar / Recommendations */}
+              {/* Similar / Recommendations - responsive grid */}
               {similar.length > 0 && (
-                <div className="border-t border-border px-6 py-6 sm:px-8">
-                  <h3 className="mb-4 text-base font-bold">More Like This</h3>
-                  <div className="grid grid-cols-3 gap-3 sm:grid-cols-4 md:grid-cols-6">
+                <div className="border-t border-border px-4 py-4 sm:px-6 sm:py-6 md:px-8">
+                  <h3 className="mb-3 text-sm font-bold sm:mb-4 sm:text-base">
+                    More Like This
+                  </h3>
+                  {/* 3 col mobile, 4 col tablet, 5 col desktop, 6 col large desktop */}
+                  <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 sm:gap-3 md:grid-cols-5 lg:grid-cols-6">
                     {similar.map((movie) => (
                       <MovieCard
                         key={`sim-${movie.id}`}
