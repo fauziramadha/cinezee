@@ -20,6 +20,10 @@ export interface WatchHistoryItem extends SelectedMedia {
 }
 
 interface AppState {
+  // Auth modal
+  authModalOpen: boolean;
+  setAuthModalOpen: (open: boolean) => void;
+
   // Search
   searchOpen: boolean;
   setSearchOpen: (open: boolean) => void;
@@ -44,12 +48,19 @@ interface AppState {
 }
 
 export const useAppStore = create<AppState>((set, get) => ({
+  // Auth modal
+  authModalOpen: false,
+  setAuthModalOpen: (open) => set({ authModalOpen: open }),
+
+  // Search
   searchOpen: false,
   setSearchOpen: (open) => set({ searchOpen: open }),
 
+  // Detail modal
   selectedMedia: null,
   setSelectedMedia: (media) => set({ selectedMedia: media }),
 
+  // Player modal
   playerMedia: null,
   openPlayer: (media, season, episode) =>
     set({
@@ -60,6 +71,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   closePlayer: () =>
     set({ playerMedia: null, playerSeason: undefined, playerEpisode: undefined }),
 
+  // Watch history
   history: [],
   addToHistory: (item) => {
     const existing = get().history.filter((h) => h.id !== item.id);
