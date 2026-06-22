@@ -9,6 +9,7 @@ import { Footer } from "@/components/cinepro/footer";
 import { SearchModal } from "@/components/cinepro/search-modal";
 import { DetailModal } from "@/components/cinepro/detail-modal";
 import { PlayerModal } from "@/components/cinepro/player-modal";
+import { AuthModal } from "@/components/cinepro/auth-modal";
 import { useAppStore } from "@/lib/store";
 import type { Movie } from "@/lib/tmdb";
 import { Loader2 } from "lucide-react";
@@ -31,7 +32,6 @@ export default function Home() {
   useEffect(() => {
     let cancelled = false;
 
-    // Defer state updates to avoid synchronous setState in effect
     const loadData = async () => {
       await Promise.resolve();
       if (cancelled) return;
@@ -48,7 +48,6 @@ export default function Home() {
         setTrending(trend.results || []);
         setPopularMovies(popMovies.results || []);
         setPopularTV(popTV.results || []);
-        // Top rated = mix of movies + TV sorted by rating
         const all = [
           ...(popMovies.results || []),
           ...(popTV.results || []),
@@ -99,30 +98,24 @@ export default function Home() {
 
       {/* Content rows - SMALL gap on mobile (no overlap), larger on desktop */}
       <div className="relative z-10 space-y-6 pb-16 pt-4 sm:space-y-8 sm:pt-6 md:-mt-16 md:space-y-10 md:pt-0 lg:-mt-24">
-        {/* Continue Watching (only shows if history exists) */}
         <WatchHistory />
 
-        {/* Trending Now */}
         {!loading && trending.length > 0 && (
           <ContentRow title="🔥 Trending Now" movies={trending.slice(0, 12)} />
         )}
 
-        {/* Popular Movies */}
         {!loading && popularMovies.length > 0 && (
           <ContentRow title="🎬 Popular Movies" movies={popularMovies} />
         )}
 
-        {/* Top Rated */}
         {!loading && topRated.length > 0 && (
           <ContentRow title="⭐ Top Rated" movies={topRated} />
         )}
 
-        {/* Popular TV Shows */}
         {!loading && popularTV.length > 0 && (
           <ContentRow title="📺 Popular TV Shows" movies={popularTV} />
         )}
 
-        {/* Trending (full list) */}
         {!loading && trending.length > 0 && (
           <ContentRow title="🌟 All Trending" movies={trending} />
         )}
@@ -134,6 +127,7 @@ export default function Home() {
       <SearchModal />
       <DetailModal />
       <PlayerModal />
+      <AuthModal />
     </main>
   );
 }
