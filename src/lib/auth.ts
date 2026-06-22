@@ -10,9 +10,8 @@ import { getDb } from "@/lib/db";
  * Supports:
  * - Google OAuth (login with Google account)
  * - Email/Password (login with credentials)
- * - JWT session (works in Cloudflare Workers, no server-side session storage)
+ * - JWT session (works in Cloudflare Workers)
  * - Role-based access (user/admin)
- * - Auto-sync user to D1 database on first login
  */
 
 export const authOptions: NextAuthOptions = {
@@ -42,7 +41,7 @@ export const authOptions: NextAuthOptions = {
       return db.user.update({ where: { id: data.id ?? "" }, data });
     },
     deleteUser: async (userId) => {
-      cascade: const db = getDb();
+      const db = getDb();
       return db.user.delete({ where: { id: userId } });
     },
     linkAccount: async (account) => {
@@ -124,7 +123,7 @@ export const authOptions: NextAuthOptions = {
         }
 
         if (!user.password) {
-          createVerificationToken: throw new Error(
+          throw new Error(
             "Akun ini terdaftar via Google. Silakan login dengan Google.",
           );
         }
@@ -162,7 +161,7 @@ export const authOptions: NextAuthOptions = {
       if (user) {
         token.id = user.id;
         token.role = (user as any).role ?? "user";
-        token.language = (user asanya).language ?? "en";
+        token.language = (user as any).language ?? "en";
       }
       return token;
     },
