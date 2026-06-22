@@ -1,11 +1,20 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+// CineStream Database Schema
+// Cloudflare D1 (SQLite) + NextAuth.js
+//
+// This schema supports:
+// 1. User Account System (email/password + Google OAuth)
+// 2. Watchlist (Save to Watch Later)
+// 3. Continue Watching (Sync Cross-Device)
+// 4. User Rating & Review
+// 5. Comment System (with replies)
+// 6. Notification System
+// 7. Admin Dashboard (role-based)
+// 8. Real-Time Analytics
+// 9. Multi-Language Support (i18n)
 
 generator client {
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
+  previewFeatures = ["driverAdapters"]
 }
 
 datasource db {
@@ -13,20 +22,190 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// =====================================================
+// NextAuth.js Models (Required for Auth)
+// =====================================================
+
 model User {
-  id        String   @id @default(cuid())
-  email     String   @unique
-  name      String?
+  id            String    @id @default(cuid())
+  name          String?
+  email         String    @unique
+  emailVerified DateTime?
+  image         String?
+  // Email/password auth (bcrypt hash, null for Google-only users)
+  password      String?
+  // Role: "user" | "admin" — for Admin Dashboard
+  role          String    @default("user")
+  // i18n preference: "en" | "id" | "es" | etc.
+  language      String    @default("en")
+  // Soft delete / ban
+  banned        Boolean   @default(false)
+
+  // Relations
+  accounts       Account[]
+  sessions       Session[]
+  watchlist      Watchlist[]
+  watchHistory   WatchHistory[]
+  ratings        Rating[]
+  comments       Comment[]
+  notifications  Notification[]
+  analyticsEvents AnalyticsEvent[]
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
 
-model Post {
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model VerificationToken {
+  identifier String
+  token      String
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// =====================================================
+// App Models
+// =====================================================
+
+// Watchlist — "Save to Watch Later"
+model Watchlist {
+  id          String   @id @default(cuid())
+  userId      String
+  mediaId     Int
+  mediaType   String   // "movie" | "tv"
+  title       String
+  posterPath  String?
+  backdropPath String?
+  addedAt     DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, mediaId, mediaType])
+  @@index([userId])
+}
+
+// Continue Watching — sync cross-device
+model WatchHistory {
+  id           String   @id @default(cuid())
+  userId       String
+  mediaId      Int
+  mediaType    String   // "movie" | "tv"
+  title        String
+  posterPath   String?
+  backdropPath String?
+  season       Int?     // For TV shows
+  episode      Int?     // For TV shows
+  progress     Float    @default(0) // 0-100 percentage
+  watchedAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, mediaId, mediaType])
+  @@index([userId])
+}
+
+// User Rating & Review — merged (rating required, review optional)
+model Rating {
   id        String   @id @default(cuid())
-  title     String
-  content   String?
-  published Boolean  @default(false)
-  authorId  String
+  userId    String
+  mediaId   Int
+  mediaType String
+  rating    Float    // 0-10 (TMDB scale)
+  review    String?  // Optional review text
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, mediaId, mediaType])
+  @@index([mediaId, mediaType])
+  @@index([userId])
+}
+
+// Comment System — with nested replies
+model Comment {
+  id        String   @id @default(cuid())
+  userId    String
+  mediaId   Int
+  mediaType String
+  content   String
+  parentId  String?  // For replies (null = top-level comment)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user    User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  parent  Comment?  @relation("CommentReplies", fields: [parentId], references: [id], onDelete: Cascade)
+  replies Comment[] @relation("CommentReplies")
+
+  @@index([mediaId, mediaType])
+  @@index([userId])
+  @@index([parentId])
+}
+
+// Notification System
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  type      String   // "new_episode" | "new_movie" | "system" | "reply" | etc.
+  title     String
+  message   String
+  data      String?  // JSON string for additional data (mediaId, url, etc.)
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, read])
+  @@index([createdAt])
+}
+
+// Real-Time Analytics
+model AnalyticsEvent {
+  id        String   @id @default(cuid())
+  userId    String?  // Null = anonymous
+  eventType String   // "page_view" | "play" | "search" | "rating" | "comment" | etc.
+  mediaId   Int?
+  mediaType String?
+  metadata  String?  // JSON string for extra data
+  ipHash    String?  // Hashed IP for anonymous tracking
+  userAgent String?
+  createdAt DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([eventType, createdAt])
+  @@index([userId])
+  @@index([createdAt])
 }
