@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Search, Film, Menu, X, Github, Heart } from "lucide-react";
+import { useSession } from "next-auth/react";
+import { Search, Film, Menu, X, Github, Heart, LogIn } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Sheet,
@@ -11,11 +12,14 @@ import {
   SheetTrigger,
 } from "@/components/ui/sheet";
 import { useAppStore } from "@/lib/store";
+import { UserMenu } from "@/components/cinepro/user-menu";
 import { cn } from "@/lib/utils";
 
 export function Header() {
   const [scrolled, setScrolled] = useState(false);
+  const { data: session, status } = useSession();
   const setSearchOpen = useAppStore((s) => s.setSearchOpen);
+  const setAuthModalOpen = useAppStore((s) => s.setAuthModalOpen);
   const [mobileOpen, setMobileOpen] = useState(false);
 
   useEffect(() => {
@@ -69,7 +73,7 @@ export function Header() {
           </nav>
         </div>
 
-        {/* Right: Search + Mobile menu */}
+        {/* Right: Search + Auth + Mobile menu */}
         <div className="flex items-center gap-2">
           <Button
             variant="ghost"
@@ -83,6 +87,22 @@ export function Header() {
               ⌘K
             </kbd>
           </Button>
+
+          {/* Auth: UserMenu (if logged in) OR Login button (if not logged in) */}
+          {status === "loading" ? (
+            <div className="h-8 w-8 animate-pulse rounded-full bg-muted" />
+          ) : session?.user ? (
+            <UserMenu />
+          ) : (
+            <Button
+              size="sm"
+              onClick={() => setAuthModalOpen(true)}
+              className="gap-1.5 bg-primary text-primary-foreground hover:bg-primary/90"
+            >
+              <LogIn className="h-4 w-4" />
+              <span className="hidden sm:inline">Login</span>
+            </Button>
+          )}
 
           {/* Mobile menu */}
           <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
@@ -107,6 +127,7 @@ export function Header() {
                   </span>
                 </SheetTitle>
               </SheetHeader>
+
               <nav className="mt-8 flex flex-col gap-1">
                 {navItems.map((item) => (
                   <button
@@ -123,6 +144,39 @@ export function Header() {
                   </button>
                 ))}
               </nav>
+
+              {/* Auth section in mobile menu */}
+              <div className="mt-4 border-t border-border pt-4">
+                {session?.user ? (
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-3 px-4 py-2">
+                      <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary/20 text-sm font-semibold text-primary">
+                        {session.user.name?.[0]?.toUpperCase() || session.user.email?.[0]?.toUpperCase() || "U"}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-medium">
+                          {session.user.name || "User"}
+                        </p>
+                        <p className="truncate text-xs text-muted-foreground">
+                          {session.user.email}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <Button
+                    onClick={() => {
+                      setMobileOpen(false);
+                      setAuthModalOpen(true);
+                    }}
+                    className="w-full gap-1.5 bg-primary text-primary-foreground hover:bg-primary/90"
+                  >
+                    <LogIn className="h-4 w-4" />
+                    Login / Register
+                  </Button>
+                )}
+              </div>
+
               <div className="absolute bottom-6 left-6 right-6 space-y-3">
                 <a
                   href="https://github.com/cinepro-org/ui"
