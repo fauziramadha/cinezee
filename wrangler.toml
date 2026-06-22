@@ -1,5 +1,10 @@
-# Cloudflare Workers deployment config for CineStream
-# Deploy: npx wrangler deploy
+# CineStream — Cloudflare Workers Config
+# Updated: Remove [vars] section to prevent dashboard variables override
+#
+# ALL environment variables (secrets + non-secrets) are set in:
+# Cloudflare Dashboard → Workers & Pages → cinezee → Settings → Variables and Secrets
+#
+# This prevents the "variables disappear on redeploy" issue.
 
 name = "cinestream"
 main = ".open-next/worker.js"
@@ -11,28 +16,34 @@ compatibility_flags = ["nodejs_compat"]
 directory = ".open-next/assets"
 binding = "ASSETS"
 
-# Environment variables (public — safe to expose to client)
-[vars]
-NEXT_PUBLIC_APP_NAME = "CineStream"
+# =====================================================
+# D1 Database Binding (Cloudflare D1)
+# =====================================================
+# This connects the Worker to your D1 database.
+# Access in code via: getRequestContext().env.DB
+[[d1_databases]]
+binding = "DB"
+database_name = "cinezee-db"
+database_id = "b10ed6c8-9d1e-46f9-aea3-23eaf47094f0"
 
-# ⚠️ Secrets (DO NOT commit these — use `wrangler secret put` instead):
-# - TMDB_API_KEY: Your TMDB v3 API key from https://www.themoviedb.org/settings/api
-#   Run: npx wrangler secret put TMDB_API_KEY
+# =====================================================
+# Environment Variables
+# =====================================================
+# DO NOT put variables here! Set ALL variables in Dashboard instead:
+# Workers & Pages → cinezee → Settings → Variables and Secrets
 #
-# Without TMDB_API_KEY, the app uses built-in mock data so the UI is fully functional.
-# When you add a real key, the app automatically switches to live TMDB data.
+# Required variables to set in Dashboard:
+#   TMDB_API_KEY          — TMDB v3 API key (Plain text)
+#   NEXTAUTH_URL          — https://cinezee.fauziramadhani4321.workers.dev (Plain text)
+#   NEXTAUTH_SECRET       — Random 32+ char string (Plain text)
+#   GOOGLE_CLIENT_ID      — Google OAuth Client ID (Plain text)
+#   GOOGLE_CLIENT_SECRET  — Google OAuth Client Secret (Plain text)
+#   DATABASE_URL          — file:./prisma/dev.db (Plain text, dummy for Prisma CLI)
+#   NEXT_PUBLIC_APP_NAME  — CineStream (Plain text, optional)
 
-# Optional: KV namespace for caching (uncomment to enable)
-# [[kv_namespaces]]
-# binding = "CACHE"
-# id = "your-kv-namespace-id"
-
-# Optional: Custom domain
-# routes = [
-#   { pattern = "cinestream.yourdomain.com", custom_domain = true }
-# ]
-
-# Build settings
+# =====================================================
+# Build Settings
+# =====================================================
 [build]
 command = "npx @opennextjs/cloudflare build"
 
