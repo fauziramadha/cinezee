@@ -24,6 +24,10 @@ interface AppState {
   authModalOpen: boolean;
   setAuthModalOpen: (open: boolean) => void;
 
+  // Admin Dashboard
+  adminDashboardOpen: boolean;
+  setAdminDashboardOpen: (open: boolean) => void;
+
   // Search
   searchOpen: boolean;
   setSearchOpen: (open: boolean) => void;
@@ -51,6 +55,10 @@ export const useAppStore = create<AppState>((set, get) => ({
   // Auth modal
   authModalOpen: false,
   setAuthModalOpen: (open) => set({ authModalOpen: open }),
+
+  // Admin Dashboard
+  adminDashboardOpen: false,
+  setAdminDashboardOpen: (open) => set({ adminDashboardOpen: open }),
 
   // Search
   searchOpen: false,
