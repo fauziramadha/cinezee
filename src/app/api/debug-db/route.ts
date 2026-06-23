@@ -72,7 +72,7 @@ export async function GET() {
 
   // Step 4: Prisma Client (EDGE VERSION - no fs.readdir error)
   try {
-    const { PrismaClient } = await import("@prisma/client/edge");
+    const { PrismaClient } = await import("@prisma/client");
     const { PrismaD1 } = await import("@prisma/adapter-d1");
     
     const adapter = new PrismaD1(d1Binding);
