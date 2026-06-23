@@ -3,14 +3,15 @@
 import { useState, useRef, useEffect } from "react";
 import { useSession, signOut } from "next-auth/react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Button } from "@/components/ui/button";
 import { LogOut, User as UserIcon, Settings, ChevronDown, Loader2, Bookmark, History } from "lucide-react";
+import { useAppStore } from "@/lib/store";
 import { toast } from "sonner";
 
 export function UserMenu() {
   const { data: session, status } = useSession();
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+  const setAdminDashboardOpen = useAppStore((s) => s.setAdminDashboardOpen);
 
   // Close menu when clicking outside
   useEffect(() => {
@@ -44,6 +45,11 @@ export function UserMenu() {
     toast.loading("Logging out...");
     await signOut({ redirect: false });
     toast.success("Berhasil logout. Sampai jumpa lagi!");
+  };
+
+  const handleOpenAdmin = () => {
+    setMenuOpen(false);
+    setAdminDashboardOpen(true);
   };
 
   return (
@@ -112,7 +118,7 @@ export function UserMenu() {
             {/* Admin only */}
             {user.role === "admin" && (
               <button
-                onClick={() => setMenuOpen(false)}
+                onClick={handleOpenAdmin}
                 className="flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-sm text-foreground transition-colors hover:bg-muted"
               >
                 <Settings className="h-4 w-4 text-muted-foreground" />
