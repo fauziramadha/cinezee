@@ -26,6 +26,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useAppStore } from "@/lib/store";
+import { trackPlay } from "@/lib/analytics";
 import { cn } from "@/lib/utils";
 import type { MovieDetail } from "@/lib/tmdb";
 
@@ -109,6 +110,9 @@ export function PlayerModal() {
         
         // Save to history after providers loaded successfully
         saveToHistory();
+        
+        // Track play event for analytics
+        trackPlay(playerMedia.id, playerMedia.type, playerMedia.title);
       } catch {
         if (cancelled) return;
         setLoading(false);
