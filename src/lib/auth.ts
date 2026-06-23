@@ -17,19 +17,19 @@ import { getDb } from "@/lib/db";
 export const authOptions: NextAuthOptions = {
   adapter: {
     createUser: async (data) => {
-      const db = getDb();
+      const db = await getDb();
       return db.user.create({ data });
     },
     getUser: async (id) => {
-      const db = getDb();
+      const db = await getDb();
       return db.user.findUnique({ where: { id } });
     },
     getUserByEmail: async (email) => {
-      const db = getDb();
+      const db = await getDb();
       return db.user.findUnique({ where: { email } });
     },
     getUserByProviderAccountId: async (providerAccountId, provider) => {
-      const db = getDb();
+      const db = await getDb();
       const account = await db.account.findUnique({
         where: { provider_providerAccountId: { provider, providerAccountId } },
         include: { user: true },
@@ -37,48 +37,48 @@ export const authOptions: NextAuthOptions = {
       return account?.user ?? null;
     },
     updateUser: async (data) => {
-      const db = getDb();
+      const db = await getDb();
       return db.user.update({ where: { id: data.id ?? "" }, data });
     },
     deleteUser: async (userId) => {
-      const db = getDb();
+      const db = await getDb();
       return db.user.delete({ where: { id: userId } });
     },
     linkAccount: async (account) => {
-      const db = getDb();
+      const db = await getDb();
       return db.account.create({ data: account });
     },
     unlinkAccount: async (providerAccountId, provider) => {
-      const db = getDb();
+      const db = await getDb();
       await db.account.delete({
         where: { provider_providerAccountId: { provider, providerAccountId } },
       });
     },
     createSession: async (session) => {
-      const db = getDb();
+      const db = await getDb();
       return db.session.create({ data: session });
     },
     getSession: async (sessionToken) => {
-      const db = getDb();
+      const db = await getDb();
       return db.session.findUnique({ where: { sessionToken } });
     },
     updateSession: async (session) => {
-      const db = getDb();
+      const db = await getDb();
       return db.session.update({
         where: { sessionToken: session.sessionToken },
         data: session,
       });
     },
     deleteSession: async (sessionToken) => {
-      const db = getDb();
+      const db = await getDb();
       await db.session.delete({ where: { sessionToken } });
     },
     createVerificationToken: async (data) => {
-      const db = getDb();
+      const db = await getDb();
       return db.verificationToken.create({ data });
     },
     useVerificationToken: async (identifier, token) => {
-      const db = getDb();
+      const db = await getDb();
       try {
         return await db.verificationToken.delete({
           where: { identifier_token: { identifier, token } },
@@ -113,7 +113,7 @@ export const authOptions: NextAuthOptions = {
           throw new Error("Email dan password wajib diisi");
         }
 
-        const db = getDb();
+        const db = await getDb();
         const user = await db.user.findUnique({
           where: { email: credentials.email.toLowerCase() },
         });
