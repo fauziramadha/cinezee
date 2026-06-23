@@ -82,7 +82,7 @@ export async function POST(request: NextRequest) {
     const normalizedEmail = email.toLowerCase().trim();
 
     // 6. Connect to D1 database
-    const db = getDb();
+    const db = await getDb();
 
     // 7. Check if email already exists
     const existingUser = await db.user.findUnique({
