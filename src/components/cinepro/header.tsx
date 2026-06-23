@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/sheet";
 import { useAppStore } from "@/lib/store";
 import { UserMenu } from "@/components/cinepro/user-menu";
+import { NotificationDropdown } from "@/components/cinepro/notification-dropdown";
 import { cn } from "@/lib/utils";
 
 export function Header() {
@@ -87,6 +88,11 @@ export function Header() {
               ⌘K
             </kbd>
           </Button>
+
+          {/* Notification Bell (only if logged in) */}
+          {status === "authenticated" && session?.user && (
+            <NotificationDropdown />
+          )}
 
           {/* Auth: UserMenu (if logged in) OR Login button (if not logged in) */}
           {status === "loading" ? (
