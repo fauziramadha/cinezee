@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
+import { useSession } from "next-auth/react";
 import {
   X,
   ChevronLeft,
@@ -41,6 +42,7 @@ export function PlayerModal() {
     playerEpisode,
     closePlayer,
   } = useAppStore();
+  const { data: session, status } = useSession();
 
   const [providers, setProviders] = useState<ProviderInfo[]>([]);
   const [currentIdx, setCurrentIdx] = useState(0);
@@ -50,6 +52,31 @@ export function PlayerModal() {
   const [detail, setDetail] = useState<MovieDetail | null>(null);
   const [season, setSeason] = useState(playerSeason || 1);
   const [episode, setEpisode] = useState(playerEpisode || 1);
+
+  // Save to watch history (only if logged in)
+  const saveToHistory = useCallback(async () => {
+    if (!playerMedia || status !== "authenticated" || !session?.user) return;
+
+    try {
+      await fetch("/api/history", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          mediaId: playerMedia.id,
+          mediaType: playerMedia.type,
+          title: playerMedia.title,
+          posterPath: playerMedia.posterPath,
+          backdropPath: playerMedia.backdropPath,
+          season: playerMedia.type === "tv" ? season : null,
+          episode: playerMedia.type === "tv" ? episode : null,
+          progress: 0,
+        }),
+      });
+    } catch (error) {
+      // Silent fail - don't interrupt user experience
+      console.error("[SAVE HISTORY ERROR]", error);
+    }
+  }, [playerMedia, session, status, season, episode]);
 
   // Fetch providers when media changes
   useEffect(() => {
@@ -65,9 +92,7 @@ export function PlayerModal() {
       params.set("episode", String(episode));
     }
 
-    // Use a single async function to avoid synchronous setState in effect body
     const loadProviders = async () => {
-      // Defer state resets to avoid synchronous setState in effect
       await Promise.resolve();
       if (cancelled) return;
       setLoading(true);
@@ -81,6 +106,9 @@ export function PlayerModal() {
         if (cancelled) return;
         setProviders(data.providers || []);
         setLoading(false);
+        
+        // Save to history after providers loaded successfully
+        saveToHistory();
       } catch {
         if (cancelled) return;
         setLoading(false);
@@ -90,7 +118,6 @@ export function PlayerModal() {
 
     loadProviders();
 
-    // Also fetch detail for TV seasons/episodes (fire-and-forget)
     fetch(`/api/detail/${playerMedia.id}?type=${playerMedia.type}`)
       .then((res) => res.json())
       .then((data) => {
@@ -102,11 +129,11 @@ export function PlayerModal() {
     return () => {
       cancelled = true;
     };
-  }, [playerMedia, season, episode]);
+  }, [playerMedia, season, episode, saveToHistory]);
 
-  // Reset iframe state when provider changes (using a deferred update)
+  // Reset iframe state when provider changes
   useEffect(() => {
-    if (currentIdx === 0 && providers.length === 0) return; // skip initial mount
+    if (currentIdx === 0 && providers.length === 0) return;
     let cancelled = false;
     Promise.resolve().then(() => {
       if (cancelled) return;
@@ -133,7 +160,7 @@ export function PlayerModal() {
     }
   }, [currentIdx, providers.length]);
 
-  // Auto-switch to next provider on error (after 8s timeout)
+  // Auto-switch to next provider on error
   useEffect(() => {
     if (!iframeError || !providers.length) return;
     const timer = setTimeout(() => {
@@ -174,7 +201,6 @@ export function PlayerModal() {
             </p>
           </div>
 
-          {/* Provider switcher */}
           {providers.length > 0 && (
             <div className="flex items-center gap-2">
               <Select
@@ -252,7 +278,6 @@ export function PlayerModal() {
                 title={`${playerMedia.title} Player`}
               />
 
-              {/* Loading overlay before iframe loads */}
               {!iframeLoaded && !iframeError && (
                 <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black text-white">
                   <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -262,7 +287,6 @@ export function PlayerModal() {
                 </div>
               )}
 
-              {/* Error overlay */}
               {iframeError && (
                 <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-black p-6 text-center text-white">
                   <AlertCircle className="h-12 w-12 text-red-500" />
