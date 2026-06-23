@@ -1,5 +1,6 @@
 import { PrismaClient } from '@prisma/client'
 import { PrismaD1 } from '@prisma/adapter-d1'
+import { getCloudflareContext } from '@opennextjs/cloudflare'
 
 // Cache the Prisma client globally so it's reused across requests
 const globalForPrisma = globalThis as unknown as {
@@ -8,30 +9,16 @@ const globalForPrisma = globalThis as unknown as {
 
 /**
  * Get D1 binding from Cloudflare Workers environment.
- * Supports multiple @opennextjs/cloudflare versions.
+ * Uses the official async getCloudflareContext from OpenNext.
  */
-function getD1Binding(): D1Database {
-  // Try different ways to access D1 binding
-  // 1. Via getCloudflareContext (newer versions)
+async function getD1Binding(): Promise<D1Database> {
   try {
-    const mod = require('@opennextjs/cloudflare/next')
-    if (mod.getCloudflareContext) {
-      const ctx = mod.getCloudflareContext()
-      if (ctx?.env?.DB) return ctx.env.DB
+    const ctx = await getCloudflareContext()
+    if (ctx?.env?.DB) {
+      return ctx.env.DB as D1Database
     }
-    if (mod.getRequestContext) {
-      const ctx = mod.getRequestContext()
-      if (ctx?.env?.DB) return ctx.env.DB
-    }
-  } catch {}
-
-  // 2. Via globalThis (fallback)
-  const globalEnv = (globalThis as any).cf?.env ?? (globalThis as any).env
-  if (globalEnv?.DB) return globalEnv.DB
-
-  // 3. Via process.env (some setups)
-  if (typeof process !== 'undefined' && (process as any).env?.DB) {
-    return (process as any).env.DB
+  } catch (error) {
+    console.error('getCloudflareContext error:', error)
   }
 
   throw new Error(
@@ -42,26 +29,17 @@ function getD1Binding(): D1Database {
 
 /**
  * Get the Prisma client connected to Cloudflare D1.
- * Must be called inside a request context.
+ * Uses driverAdapters (configured in schema.prisma) which auto-detects edge runtime.
+ *
+ * IMPORTANT: This is an ASYNC function. Always use `await getDb()`.
  */
-export function getDb(): PrismaClient {
+export async function getDb(): Promise<PrismaClient> {
   if (globalForPrisma.prisma) {
     return globalForPrisma.prisma
   }
 
-  const d1 = getD1Binding()
+  const d1 = await getD1Binding()
   const adapter = new PrismaD1(d1)
   globalForPrisma.prisma = new PrismaClient({ adapter })
   return globalForPrisma.prisma
 }
-
-/**
- * Convenience export — works as a drop-in replacement for PrismaClient.
- */
-export const db = new Proxy({} as PrismaClient, {
-  get(_target, prop) {
-    const client = getDb()
-    const value = client[prop as keyof PrismaClient]
-    return typeof value === 'function' ? value.bind(client) : value
-  },
-})
