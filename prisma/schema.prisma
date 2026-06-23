@@ -1,21 +1,9 @@
 // CineStream Database Schema
 // Cloudflare D1 (SQLite) + NextAuth.js
-//
-// This schema supports:
-// 1. User Account System (email/password + Google OAuth)
-// 2. Watchlist (Save to Watch Later)
-// 3. Continue Watching (Sync Cross-Device)
-// 4. User Rating & Review
-// 5. Comment System (with replies)
-// 6. Notification System
-// 7. Admin Dashboard (role-based)
-// 8. Real-Time Analytics
-// 9. Multi-Language Support (i18n)
 
 generator client {
   provider        = "prisma-client-js"
   previewFeatures = ["driverAdapters"]
-  binaryTargets   = ["native"]
 }
 
 datasource db {
@@ -33,16 +21,11 @@ model User {
   email         String    @unique
   emailVerified DateTime?
   image         String?
-  // Email/password auth (bcrypt hash, null for Google-only users)
   password      String?
-  // Role: "user" | "admin" — for Admin Dashboard
   role          String    @default("user")
-  // i18n preference: "en" | "id" | "es" | etc.
   language      String    @default("en")
-  // Soft delete / ban
   banned        Boolean   @default(false)
 
-  // Relations
   accounts       Account[]
   sessions       Session[]
   watchlist      Watchlist[]
@@ -99,12 +82,11 @@ model VerificationToken {
 // App Models
 // =====================================================
 
-// Watchlist — "Save to Watch Later"
 model Watchlist {
   id          String   @id @default(cuid())
   userId      String
   mediaId     Int
-  mediaType   String   // "movie" | "tv"
+  mediaType   String
   title       String
   posterPath  String?
   backdropPath String?
@@ -116,18 +98,17 @@ model Watchlist {
   @@index([userId])
 }
 
-// Continue Watching — sync cross-device
 model WatchHistory {
   id           String   @id @default(cuid())
   userId       String
   mediaId      Int
-  mediaType    String   // "movie" | "tv"
+  mediaType    String
   title        String
   posterPath   String?
   backdropPath String?
-  season       Int?     // For TV shows
-  episode      Int?     // For TV shows
-  progress     Float    @default(0) // 0-100 percentage
+  season       Int?
+  episode      Int?
+  progress     Float    @default(0)
   watchedAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
@@ -137,14 +118,13 @@ model WatchHistory {
   @@index([userId])
 }
 
-// User Rating & Review — merged (rating required, review optional)
 model Rating {
   id        String   @id @default(cuid())
   userId    String
   mediaId   Int
   mediaType String
-  rating    Float    // 0-10 (TMDB scale)
-  review    String?  // Optional review text
+  rating    Float
+  review    String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -155,14 +135,13 @@ model Rating {
   @@index([userId])
 }
 
-// Comment System — with nested replies
 model Comment {
   id        String   @id @default(cuid())
   userId    String
   mediaId   Int
   mediaType String
   content   String
-  parentId  String?  // For replies (null = top-level comment)
+  parentId  String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -175,14 +154,13 @@ model Comment {
   @@index([parentId])
 }
 
-// Notification System
 model Notification {
   id        String   @id @default(cuid())
   userId    String
-  type      String   // "new_episode" | "new_movie" | "system" | "reply" | etc.
+  type      String
   title     String
   message   String
-  data      String?  // JSON string for additional data (mediaId, url, etc.)
+  data      String?
   read      Boolean  @default(false)
   createdAt DateTime @default(now())
 
@@ -192,15 +170,14 @@ model Notification {
   @@index([createdAt])
 }
 
-// Real-Time Analytics
 model AnalyticsEvent {
   id        String   @id @default(cuid())
-  userId    String?  // Null = anonymous
-  eventType String   // "page_view" | "play" | "search" | "rating" | "comment" | etc.
+  userId    String?
+  eventType String
   mediaId   Int?
   mediaType String?
-  metadata  String?  // JSON string for extra data
-  ipHash    String?  // Hashed IP for anonymous tracking
+  metadata  String?
+  ipHash    String?
   userAgent String?
   createdAt DateTime @default(now())
 
