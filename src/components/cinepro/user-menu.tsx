@@ -20,12 +20,20 @@ const LANGUAGES = [
 ];
 
 export function UserMenu() {
-  const { data: session, status, update } = useSession();
+  const { data: session, status } = useSession();
   const [menuOpen, setMenuOpen] = useState(false);
   const [langOpen, setLangOpen] = useState(false);
   const [langLoading, setLangLoading] = useState(false);
+  const [selectedLang, setSelectedLang] = useState<string>("en");
   const menuRef = useRef<HTMLDivElement>(null);
   const setAdminDashboardOpen = useAppStore((s) => s.setAdminDashboardOpen);
+
+  // Sync local state with session when session loads
+  useEffect(() => {
+    if (session?.user?.language) {
+      setSelectedLang(session.user.language);
+    }
+  }, [session]);
 
   // Close menu when clicking outside
   useEffect(() => {
@@ -54,7 +62,7 @@ export function UserMenu() {
 
   const user = session.user;
   const initial = user.name?.[0]?.toUpperCase() || user.email?.[0]?.toUpperCase() || "U";
-  const currentLang = LANGUAGES.find(l => l.code === user.language) || LANGUAGES[0];
+  const currentLang = LANGUAGES.find(l => l.code === selectedLang) || LANGUAGES[0];
 
   const handleLogout = async () => {
     setMenuOpen(false);
@@ -78,8 +86,7 @@ export function UserMenu() {
       });
 
       if (res.ok) {
-        // Update session locally
-        await update({ ...session, user: { ...user, language: code } });
+        setSelectedLang(code); // Update local state immediately
         toast.success(`Language changed to ${LANGUAGES.find(l => l.code === code)?.name}`);
         setLangOpen(false);
       } else {
@@ -181,12 +188,12 @@ export function UserMenu() {
                       key={lang.code}
                       onClick={() => handleLanguageChange(lang.code)}
                       className={`flex w-full items-center gap-2 rounded px-2 py-1.5 text-xs transition-colors hover:bg-muted ${
-                        lang.code === currentLang.code ? "bg-primary/10 text-primary" : "text-foreground"
+                        lang.code === selectedLang ? "bg-primary/10 text-primary" : "text-foreground"
                       }`}
                     >
                       <span className="text-sm">{lang.flag}</span>
                       <span className="flex-1 text-left">{lang.name}</span>
-                      {lang.code === currentLang.code && (
+                      {lang.code === selectedLang && (
                         <Check className="h-3 w-3 text-primary" />
                       )}
                     </button>
