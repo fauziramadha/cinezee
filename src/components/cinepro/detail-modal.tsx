@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Image from "next/image";
+import { useSession } from "next-auth/react";
 import {
   Play,
   X,
@@ -9,7 +10,8 @@ import {
   Calendar,
   Clock,
   Loader2,
-  Plus,
+  Bookmark,
+  Check,
   Share2,
 } from "lucide-react";
 import {
@@ -24,12 +26,16 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { useAppStore } from "@/lib/store";
 import { getImageUrl, type MovieDetail } from "@/lib/tmdb";
 import { MovieCard } from "./movie-card";
+import { toast } from "sonner";
 
 export function DetailModal() {
-  const { selectedMedia, setSelectedMedia, openPlayer, addToHistory } = useAppStore();
+  const { selectedMedia, setSelectedMedia, openPlayer, addToHistory, setAuthModalOpen } = useAppStore();
+  const { data: session, status } = useSession();
   const [detail, setDetail] = useState<MovieDetail | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [inWatchlist, setInWatchlist] = useState(false);
+  const [watchlistLoading, setWatchlistLoading] = useState(false);
 
   // Fetch detail when media is selected
   useEffect(() => {
@@ -37,6 +43,7 @@ export function DetailModal() {
       Promise.resolve().then(() => {
         setDetail(null);
         setError(null);
+        setInWatchlist(false);
       });
       return;
     }
@@ -66,10 +73,26 @@ export function DetailModal() {
 
     loadDetail();
 
+    // Check if already in watchlist (only if logged in)
+    if (status === "authenticated" && session?.user) {
+      fetch("/api/watchlist")
+        .then((res) => res.json())
+        .then((data) => {
+          if (cancelled) return;
+          const exists = data.watchlist?.some(
+            (item: any) =>
+              item.mediaId === selectedMedia.id &&
+              item.mediaType === selectedMedia.type,
+          );
+          setInWatchlist(!!exists);
+        })
+        .catch(() => {});
+    }
+
     return () => {
       cancelled = true;
     };
-  }, [selectedMedia]);
+  }, [selectedMedia, session, status]);
 
   const handleOpen = () => {
     if (!selectedMedia) return;
@@ -80,6 +103,72 @@ export function DetailModal() {
     openPlayer(selectedMedia);
   };
 
+  const handleToggleWatchlist = async () => {
+    if (!selectedMedia || !detail) return;
+
+    // If not logged in, open auth modal
+    if (status !== "authenticated" || !session?.user) {
+      setAuthModalOpen(true);
+      toast.info("Silakan login dulu untuk menyimpan ke watchlist");
+      return;
+    }
+
+    setWatchlistLoading(true);
+
+    try {
+      if (inWatchlist) {
+        // Find the watchlist item ID to delete
+        const listRes = await fetch("/api/watchlist");
+        const listData = await listRes.json();
+        const item = listData.watchlist?.find(
+          (i: any) =>
+            i.mediaId === selectedMedia.id &&
+            i.mediaType === selectedMedia.type,
+        );
+
+        if (item) {
+          const res = await fetch(`/api/watchlist?id=${item.id}`, {
+            method: "DELETE",
+          });
+          if (res.ok) {
+            setInWatchlist(false);
+            toast.success("Dihapus dari watchlist");
+          }
+        }
+      } else {
+        // Add to watchlist
+        const res = await fetch("/api/watchlist", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            mediaId: selectedMedia.id,
+            mediaType: selectedMedia.type,
+            title: detail.title || detail.name || selectedMedia.title,
+            posterPath: detail.poster_path,
+            backdropPath: detail.backdrop_path,
+          }),
+        });
+
+        if (res.ok) {
+          setInWatchlist(true);
+          toast.success("Ditambahkan ke watchlist");
+        } else {
+          const data = await res.json();
+          if (data.error === "Already in watchlist") {
+            setInWatchlist(true);
+            toast.info("Sudah ada di watchlist");
+          } else {
+            toast.error(data.error || "Gagal menambahkan ke watchlist");
+          }
+        }
+      }
+    } catch (error) {
+      toast.error("Terjadi kesalahan. Silakan coba lagi.");
+    } finally {
+      setWatchlistLoading(false);
+    }
+  };
+
   if (!selectedMedia) return null;
 
   const title = detail?.title || detail?.name || selectedMedia.title;
@@ -88,7 +177,6 @@ export function DetailModal() {
   const runtime = detail?.runtime || detail?.episode_run_time?.[0];
   const director = detail?.credits?.crew?.find((c) => c.job === "Director")?.name;
   const creator = detail?.created_by?.[0]?.name;
-  // Cast: 8 orang (bukan 6) supaya grid di desktop lebih penuh
   const cast = detail?.credits?.cast?.slice(0, 8) || [];
   const trailer = detail?.videos?.results?.find(
     (v) => v.site === "YouTube" && v.type === "Trailer",
@@ -102,13 +190,11 @@ export function DetailModal() {
         if (!open) setSelectedMedia(null);
       }}
     >
-      {/* Modal width: penuh di HP, 2xl di tablet, 4xl di desktop, 6xl di layar besar */}
       <DialogContent className="max-h-[95vh] max-w-[95vw] overflow-hidden p-0 sm:max-w-2xl md:max-w-4xl lg:max-w-6xl">
         <DialogHeader className="sr-only">
           <DialogTitle>{title}</DialogTitle>
         </DialogHeader>
 
-        {/* Close button */}
         <button
           onClick={() => setSelectedMedia(null)}
           className="absolute right-3 top-3 z-30 flex h-9 w-9 items-center justify-center rounded-full bg-black/70 text-white backdrop-blur-sm transition-colors hover:bg-primary"
@@ -155,7 +241,6 @@ export function DetailModal() {
                 <div className="absolute inset-0 bg-gradient-to-t from-card via-card/30 to-transparent" />
                 <div className="absolute inset-0 bg-gradient-to-r from-card/80 via-transparent to-transparent" />
 
-                {/* Title overlay - padding lebih kecil di HP */}
                 <div className="absolute bottom-0 left-0 right-0 p-4 sm:p-6 md:p-8">
                   <Badge className="mb-2 bg-primary text-primary-foreground">
                     {selectedMedia.type === "tv" ? "TV Series" : "Movie"}
@@ -171,7 +256,7 @@ export function DetailModal() {
                 </div>
               </div>
 
-              {/* Action bar - padding lebih kecil di HP */}
+              {/* Action bar */}
               <div className="flex flex-wrap items-center gap-2 border-b border-border bg-card/50 px-4 py-3 sm:gap-3 sm:px-6 sm:py-4 md:px-8">
                 <Button
                   size="lg"
@@ -193,19 +278,32 @@ export function DetailModal() {
                     </Button>
                   </a>
                 )}
-                <Button size="icon" variant="outline" aria-label="Add to list">
-                  <Plus className="h-4 w-4" />
+                {/* Watchlist toggle button */}
+                <Button
+                  size="icon"
+                  variant="outline"
+                  onClick={handleToggleWatchlist}
+                  disabled={watchlistLoading}
+                  aria-label={inWatchlist ? "Remove from watchlist" : "Add to watchlist"}
+                  className={inWatchlist ? "border-primary text-primary" : ""}
+                >
+                  {watchlistLoading ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : inWatchlist ? (
+                    <Check className="h-4 w-4" />
+                  ) : (
+                    <Bookmark className="h-4 w-4" />
+                  )}
                 </Button>
                 <Button size="icon" variant="outline" aria-label="Share">
                   <Share2 className="h-4 w-4" />
                 </Button>
               </div>
 
-              {/* Content grid - 1 col mobile, 3 col desktop */}
+              {/* Content grid */}
               <div className="grid gap-4 p-4 sm:gap-6 sm:p-6 md:grid-cols-3 md:p-8">
-                {/* Left column - main info */}
+                {/* Left column */}
                 <div className="md:col-span-2">
-                  {/* Quick stats - font lebih kecil di HP */}
                   <div className="mb-3 flex flex-wrap items-center gap-2 text-xs sm:mb-4 sm:gap-3 sm:text-sm">
                     <span className="flex items-center gap-1">
                       <Star className="h-3.5 w-3.5 fill-yellow-400 text-yellow-400 sm:h-4 sm:w-4" />
@@ -233,7 +331,6 @@ export function DetailModal() {
                     )}
                   </div>
 
-                  {/* Genres */}
                   {detail.genres && detail.genres.length > 0 && (
                     <div className="mb-3 flex flex-wrap gap-1.5 sm:mb-4">
                       {detail.genres.map((genre) => (
@@ -244,7 +341,6 @@ export function DetailModal() {
                     </div>
                   )}
 
-                  {/* Overview */}
                   <h3 className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground sm:mb-2 sm:text-sm">
                     Overview
                   </h3>
@@ -252,7 +348,6 @@ export function DetailModal() {
                     {detail.overview || "No overview available."}
                   </p>
 
-                  {/* Cast - responsive: 2 col mobile, 3 col tablet, 4 col desktop */}
                   {cast.length > 0 && (
                     <div className="mt-4 sm:mt-6">
                       <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground sm:mb-3 sm:text-sm">
@@ -260,10 +355,7 @@ export function DetailModal() {
                       </h3>
                       <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-3 lg:grid-cols-4">
                         {cast.map((person) => (
-                          <div
-                            key={person.id}
-                            className="flex items-center gap-2"
-                          >
+                          <div key={person.id} className="flex items-center gap-2">
                             <div className="relative h-10 w-10 shrink-0 overflow-hidden rounded-full bg-muted sm:h-12 sm:w-12">
                               {person.profile_path ? (
                                 <Image
@@ -291,7 +383,7 @@ export function DetailModal() {
                   )}
                 </div>
 
-                {/* Right column - sidebar info */}
+                {/* Right column */}
                 <div className="space-y-3 sm:space-y-4">
                   {(director || creator) && (
                     <div>
@@ -343,20 +435,15 @@ export function DetailModal() {
                 </div>
               </div>
 
-              {/* Similar / Recommendations - responsive grid */}
+              {/* Similar / Recommendations */}
               {similar.length > 0 && (
                 <div className="border-t border-border px-4 py-4 sm:px-6 sm:py-6 md:px-8">
                   <h3 className="mb-3 text-sm font-bold sm:mb-4 sm:text-base">
                     More Like This
                   </h3>
-                  {/* 3 col mobile, 4 col tablet, 5 col desktop, 6 col large desktop */}
                   <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 sm:gap-3 md:grid-cols-5 lg:grid-cols-6">
                     {similar.map((movie) => (
-                      <MovieCard
-                        key={`sim-${movie.id}`}
-                        movie={movie}
-                        size="sm"
-                      />
+                      <MovieCard key={`sim-${movie.id}`} movie={movie} size="sm" />
                     ))}
                   </div>
                 </div>
