@@ -39,7 +39,7 @@ database_id = "b10ed6c8-9d1e-46f9-aea3-23eaf47094f0"
 # IMPORTANT: "npx prisma generate" must run BEFORE @opennextjs/cloudflare build
 # to generate the Prisma Client (TypeScript code) that the app needs at runtime.
 [build]
-command = "npx prisma generate --no-engine && npx @opennextjs/cloudflare build"
+command = "npx @opennextjs/cloudflare build"
 
 # Observability
 [observability]
