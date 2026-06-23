@@ -10,6 +10,7 @@ import { SearchModal } from "@/components/cinepro/search-modal";
 import { DetailModal } from "@/components/cinepro/detail-modal";
 import { PlayerModal } from "@/components/cinepro/player-modal";
 import { AuthModal } from "@/components/cinepro/auth-modal";
+import { AdminDashboard } from "@/components/cinepro/admin-dashboard";
 import { useAppStore } from "@/lib/store";
 import type { Movie } from "@/lib/tmdb";
 import { Loader2 } from "lucide-react";
@@ -128,6 +129,7 @@ export default function Home() {
       <DetailModal />
       <PlayerModal />
       <AuthModal />
+      <AdminDashboard />
     </main>
   );
 }
