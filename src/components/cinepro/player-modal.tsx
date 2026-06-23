@@ -178,6 +178,7 @@ export function PlayerModal() {
   if (!playerMedia) return null;
 
   const iframeUrl = currentProvider?.url;
+  const isTV = playerMedia.type === "tv" && detail?.seasons;
 
   return (
     <Dialog
@@ -187,18 +188,17 @@ export function PlayerModal() {
       }}
     >
       <DialogContent
-        className="max-h-[100vh] max-w-[100vw] gap-0 overflow-hidden p-0 sm:max-w-5xl sm:rounded-xl"
-        style={{ height: "100vh" }}
+        className="flex h-[100dvh] max-h-[100dvh] w-full max-w-[100vw] flex-col gap-0 overflow-hidden border-0 bg-black p-0 sm:rounded-none md:h-[90vh] md:max-h-[90vh] md:w-[95vw] md:max-w-5xl md:rounded-xl"
       >
         <DialogTitle className="sr-only">{playerMedia.title} Player</DialogTitle>
 
-        {/* Top bar */}
-        <div className="absolute left-0 right-0 top-0 z-30 flex items-center justify-between gap-3 bg-gradient-to-b from-black/90 to-transparent px-4 py-3 sm:px-6">
+        {/* Top bar - fixed height, not absolute */}
+        <div className="flex shrink-0 items-center justify-between gap-2 bg-black px-3 py-2 sm:px-4 sm:py-3">
           <div className="min-w-0 flex-1">
-            <h2 className="truncate text-sm font-semibold text-white sm:text-base">
+            <h2 className="truncate text-xs font-semibold text-white sm:text-sm md:text-base">
               {playerMedia.title}
             </h2>
-            <p className="truncate text-xs text-white/60">
+            <p className="truncate text-[10px] text-white/60 sm:text-xs">
               {playerMedia.type === "tv"
                 ? `Season ${season} • Episode ${episode}`
                 : "Now Playing"}
@@ -206,13 +206,13 @@ export function PlayerModal() {
           </div>
 
           {providers.length > 0 && (
-            <div className="flex items-center gap-2">
+            <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
               <Select
                 value={String(currentIdx)}
                 onValueChange={(v) => setCurrentIdx(parseInt(v, 10))}
               >
-                <SelectTrigger className="h-8 w-32 gap-1 border-white/20 bg-black/60 text-xs text-white backdrop-blur-sm sm:w-40">
-                  <Server className="h-3.5 w-3.5" />
+                <SelectTrigger className="h-7 w-24 gap-1 border-white/20 bg-white/10 text-[10px] text-white backdrop-blur-sm sm:h-8 sm:w-32 sm:text-xs md:w-40">
+                  <Server className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -223,7 +223,7 @@ export function PlayerModal() {
                         <Badge
                           variant="outline"
                           className={cn(
-                            "ml-1 px-1 text-[9px]",
+                            "ml-1 px-1 text-[8px] sm:text-[9px]",
                             p.brutality === 0
                               ? "border-green-500/40 text-green-400"
                               : p.brutality <= 2
@@ -247,17 +247,17 @@ export function PlayerModal() {
 
               <button
                 onClick={() => closePlayer()}
-                className="flex h-9 w-9 items-center justify-center rounded-full bg-black/60 text-white backdrop-blur-sm transition-colors hover:bg-primary"
+                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-white/10 text-white backdrop-blur-sm transition-colors hover:bg-primary sm:h-9 sm:w-9"
                 aria-label="Close player"
               >
-                <X className="h-4 w-4" />
+                <X className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
               </button>
             </div>
           )}
         </div>
 
-        {/* Player area */}
-        <div className="relative h-full w-full bg-black">
+        {/* Player area - flex-1 to fill remaining space */}
+        <div className="relative flex-1 overflow-hidden bg-black">
           {loading && (
             <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-white">
               <Loader2 className="h-10 w-10 animate-spin text-primary" />
@@ -332,11 +332,11 @@ export function PlayerModal() {
           )}
         </div>
 
-        {/* Bottom controls for TV shows */}
-        {playerMedia.type === "tv" && detail?.seasons && (
-          <div className="absolute bottom-0 left-0 right-0 z-30 flex items-center gap-3 bg-gradient-to-t from-black/90 to-transparent px-4 py-3 sm:px-6">
+        {/* Bottom controls for TV shows - fixed height, not absolute */}
+        {isTV && (
+          <div className="flex shrink-0 items-center gap-2 bg-black px-3 py-2 sm:gap-3 sm:px-4 sm:py-3">
             <Select value={String(season)} onValueChange={(v) => setSeason(parseInt(v, 10))}>
-              <SelectTrigger className="h-8 w-24 border-white/20 bg-black/60 text-xs text-white backdrop-blur-sm">
+              <SelectTrigger className="h-7 w-20 border-white/20 bg-white/10 text-[10px] text-white backdrop-blur-sm sm:h-8 sm:w-24 sm:text-xs">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -351,7 +351,7 @@ export function PlayerModal() {
             </Select>
 
             <Select value={String(episode)} onValueChange={(v) => setEpisode(parseInt(v, 10))}>
-              <SelectTrigger className="h-8 w-28 border-white/20 bg-black/60 text-xs text-white backdrop-blur-sm">
+              <SelectTrigger className="h-7 w-24 border-white/20 bg-white/10 text-[10px] text-white backdrop-blur-sm sm:h-8 sm:w-28 sm:text-xs">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent className="max-h-72">
@@ -367,19 +367,19 @@ export function PlayerModal() {
               <Button
                 size="icon"
                 variant="ghost"
-                className="h-8 w-8 text-white hover:bg-white/10"
+                className="h-7 w-7 text-white hover:bg-white/10 sm:h-8 sm:w-8"
                 disabled={episode <= 1}
                 onClick={() => setEpisode(Math.max(1, episode - 1))}
               >
-                <ChevronLeft className="h-4 w-4" />
+                <ChevronLeft className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
               </Button>
               <Button
                 size="icon"
                 variant="ghost"
-                className="h-8 w-8 text-white hover:bg-white/10"
+                className="h-7 w-7 text-white hover:bg-white/10 sm:h-8 sm:w-8"
                 onClick={() => setEpisode(episode + 1)}
               >
-                <ChevronRight className="h-4 w-4" />
+                <ChevronRight className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
               </Button>
             </div>
           </div>
