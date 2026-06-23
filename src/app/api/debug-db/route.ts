@@ -18,11 +18,10 @@ export async function GET() {
     NODE_ENV: process.env.NODE_ENV,
   });
 
-  // Step 2: Coba akses D1 binding dengan berbagai cara
+  // Step 2: Coba akses D1 binding
   let d1Binding: D1Database | null = null;
   const bindingMethods: string[] = [];
 
-  // Method A: getCloudflareContext (async, versi baru)
   try {
     const mod = await import("@opennextjs/cloudflare");
     if (mod.getCloudflareContext) {
@@ -41,53 +40,20 @@ export async function GET() {
     bindingMethods.push(`getCloudflareContext error: ${e.message}`);
   }
 
-  // Method B: getRequestContext (sync, versi lama)
-  try {
-    const mod = require("@opennextjs/cloudflare/next");
-    if (mod.getRequestContext) {
-      bindingMethods.push("getRequestContext found");
-      const ctx = mod.getRequestContext();
-      if (ctx?.env?.DB) {
-        d1Binding = ctx.env.DB;
-        bindingMethods.push("getRequestContext: DB found!");
-      } else {
-        bindingMethods.push("getRequestContext: DB NOT found in env");
-      }
-    } else {
-      bindingMethods.push("getRequestContext NOT exported");
-    }
-  } catch (e: any) {
-    bindingMethods.push(`getRequestContext error: ${e.message}`);
-  }
-
-  // Method C: globalThis fallback
-  try {
-    const globalEnv = (globalThis as any).cf?.env ?? (globalThis as any).env;
-    if (globalEnv?.DB) {
-      d1Binding = globalEnv.DB;
-      bindingMethods.push("globalThis: DB found!");
-    } else {
-      bindingMethods.push("globalThis: DB NOT found");
-    }
-  } catch (e: any) {
-    bindingMethods.push(`globalThis error: ${e.message}`);
-  }
-
   results.steps.push({
     step: "2. D1 Binding Methods",
     methods: bindingMethods,
     d1Found: !!d1Binding,
   });
 
-  // Kalau D1 tidak ketemu, stop di sini
   if (!d1Binding) {
     return NextResponse.json({
       ...results,
-      error: "D1 binding NOT FOUND. Check wrangler.toml and Cloudflare Dashboard bindings.",
+      error: "D1 binding NOT FOUND.",
     });
   }
 
-  // Step 3: Coba raw SQL query ke D1 (tanpa Prisma)
+  // Step 3: Raw SQL query ke D1
   try {
     const stmt = d1Binding.prepare("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name;");
     const tables = await stmt.all();
@@ -104,31 +70,29 @@ export async function GET() {
     });
   }
 
-  // Step 4: Coba akses Prisma Client
+  // Step 4: Prisma Client (EDGE VERSION - no fs.readdir error)
   try {
-    const { PrismaClient } = await import("@prisma/client");
+    const { PrismaClient } = await import("@prisma/client/edge");
     const { PrismaD1 } = await import("@prisma/adapter-d1");
     
     const adapter = new PrismaD1(d1Binding);
     const prisma = new PrismaClient({ adapter });
     
-    // Coba query user count
     const userCount = await prisma.user.count();
     results.steps.push({
-      step: "4. Prisma Query",
+      step: "4. Prisma Query (Edge)",
       success: true,
       userCount,
     });
   } catch (e: any) {
     results.steps.push({
-      step: "4. Prisma Query",
+      step: "4. Prisma Query (Edge)",
       success: false,
       error: e.message,
-      stack: e.stack?.split("\n").slice(0, 5),
     });
   }
 
-  // Step 5: Coba bcrypt
+  // Step 5: Bcrypt
   try {
     const bcrypt = await import("bcryptjs");
     const hash = await bcrypt.hash("test", 10);
