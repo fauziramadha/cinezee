@@ -4,39 +4,15 @@ import { useEffect, useState, useCallback } from "react";
 import Image from "next/image";
 import { useSession } from "next-auth/react";
 import {
-  Play,
-  X,
-  Star,
-  Calendar,
-  Clock,
-  Loader2,
-  Bookmark,
-  Check,
-  Share2,
-  MessageSquare,
-  Send,
-  Trash2,
-  CornerDownRight,
-  ChevronLeft,
-  ChevronRight,
+  Play, X, Star, Calendar, Clock, Loader2, Bookmark, Check, Share2,
+  MessageSquare, Send, Trash2, CornerDownRight, ChevronLeft, ChevronRight,
 } from "lucide-react";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useAppStore } from "@/lib/store";
 import { getImageUrl, type MovieDetail } from "@/lib/tmdb";
 import { MovieCard } from "./movie-card";
@@ -50,7 +26,6 @@ interface Episode { episodeNumber: number; name: string; overview: string; still
 export function DetailModal() {
   const { selectedMedia, setSelectedMedia, openPlayer, addToHistory, setAuthModalOpen } = useAppStore();
   const { data: session, status } = useSession();
-
   const [detail, setDetail] = useState<MovieDetail | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -117,19 +92,15 @@ export function DetailModal() {
     return () => { cancelled = true; };
   }, [selectedMedia, session, status]);
 
-  // Fetch episodes when season changes (TV only)
   useEffect(() => {
     if (!selectedMedia || selectedMedia.type !== "tv" || !detail) return;
     let cancelled = false;
     setEpisodesLoading(true);
     fetch(`/api/season?id=${selectedMedia.id}&season=${season}`)
-      .then((res) => res.json())
-      .then((data) => {
+      .then((res) => res.json()).then((data) => {
         if (cancelled) return;
         setEpisodes(data.episodes || []);
-      })
-      .catch(() => {})
-      .finally(() => { if (!cancelled) setEpisodesLoading(false); });
+      }).catch(() => {}).finally(() => { if (!cancelled) setEpisodesLoading(false); });
     return () => { cancelled = true; };
   }, [selectedMedia, detail, season]);
 
@@ -169,7 +140,8 @@ export function DetailModal() {
     if (!selectedMedia || !commentText.trim()) return;
     if (status !== "authenticated") { setAuthModalOpen(true); return; }
     setCommentLoading(true);
-    try { const res = await fetch("/api/comments", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mediaId: selectedMedia.id, mediaType: selectedMedia.type, content: commentText }) });
+    try {
+      const res = await fetch("/api/comments", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mediaId: selectedMedia.id, mediaType: selectedMedia.type, content: commentText }) });
       if (res.ok) { setCommentText(""); toast.success("Komentar ditambahkan"); const refresh = await fetch(`/api/comments?mediaId=${selectedMedia.id}&mediaType=${selectedMedia.type}`); const data = await refresh.json(); setComments(data.comments || []); }
     } catch { toast.error("Gagal menambahkan komentar"); } finally { setCommentLoading(false); }
   };
@@ -177,7 +149,8 @@ export function DetailModal() {
   const handlePostReply = async (parentId: string) => {
     if (!selectedMedia || !replyText.trim()) return;
     setCommentLoading(true);
-    try { const res = await fetch("/api/comments", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mediaId: selectedMedia.id, mediaType: selectedMedia.type, content: replyText, parentId }) });
+    try {
+      const res = await fetch("/api/comments", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mediaId: selectedMedia.id, mediaType: selectedMedia.type, content: replyText, parentId }) });
       if (res.ok) { setReplyText(""); setReplyTo(null); toast.success("Reply ditambahkan"); const refresh = await fetch(`/api/comments?mediaId=${selectedMedia.id}&mediaType=${selectedMedia.type}`); const data = await refresh.json(); setComments(data.comments || []); }
     } catch { toast.error("Gagal menambahkan reply"); } finally { setCommentLoading(false); }
   };
@@ -199,78 +172,83 @@ export function DetailModal() {
   const similar = detail?.recommendations?.results?.slice(0, 12) || [];
   const avgUserRating = ratings.length > 0 ? (ratings.reduce((sum, r) => sum + r.rating, 0) / ratings.length).toFixed(1) : null;
   const isTV = selectedMedia.type === "tv";
-    return (
+
+  return (
     <Dialog open={!!selectedMedia} onOpenChange={(open) => { if (!open) setSelectedMedia(null); }}>
       <DialogContent className="max-h-[95vh] max-w-[95vw] overflow-hidden p-0 sm:max-w-2xl md:max-w-4xl lg:max-w-6xl">
         <DialogHeader className="sr-only"><DialogTitle>{title}</DialogTitle></DialogHeader>
         <button onClick={() => setSelectedMedia(null)} className="absolute right-3 top-3 z-30 flex h-9 w-9 items-center justify-center rounded-full bg-black/70 text-white backdrop-blur-sm transition-colors hover:bg-primary" aria-label="Close"><X className="h-4 w-4" /></button>
 
-        <ScrollArea className="max-h-[95vh]">
+        {/* KEY FIX: overflow-hidden on container to prevent horizontal expansion */}
+        <div className="max-h-[95vh] overflow-y-auto overflow-x-hidden">
           {loading ? (
             <div className="flex h-96 items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
           ) : error ? (
             <div className="flex h-96 flex-col items-center justify-center gap-3 p-6 text-center"><p className="text-sm text-destructive">{error}</p><Button variant="secondary" size="sm" onClick={() => setSelectedMedia(null)}>Go back</Button></div>
           ) : detail ? (
-            <div className="fade-in pb-20">
-              {/* Hero - SHORTER on mobile */}
-              <div className="relative h-[25vh] min-h-[160px] w-full overflow-hidden bg-muted sm:h-[35vh] md:aspect-video md:h-auto">
+            <div className="fade-in pb-16">
+              {/* Hero - shorter on mobile */}
+              <div className="relative h-[22vh] min-h-[140px] w-full overflow-hidden bg-muted sm:h-[30vh] md:aspect-video md:h-auto">
                 {detail.backdrop_path && <Image src={getImageUrl(detail.backdrop_path, "original")} alt={title} fill sizes="(max-width: 768px) 100vw, 1024px" className="object-cover" unoptimized priority />}
                 <div className="absolute inset-0 bg-gradient-to-t from-card via-card/30 to-transparent" />
                 <div className="absolute inset-0 bg-gradient-to-r from-card/80 via-transparent to-transparent" />
                 <div className="absolute bottom-0 left-0 right-0 p-3 sm:p-6 md:p-8">
                   <Badge className="mb-1 bg-primary text-primary-foreground sm:mb-2">{isTV ? "TV Series" : "Movie"}</Badge>
                   <h2 className="text-lg font-extrabold tracking-tight text-white drop-shadow-lg sm:text-2xl md:text-4xl">{title}</h2>
-                  {detail.tagline && <p className="mt-0.5 text-[10px] italic text-white/80 sm:text-sm">&quot;{detail.tagline}&quot;</p>}
+                  {detail.tagline && <p className="mt-0.5 truncate text-[10px] italic text-white/80 sm:text-sm">&quot;{detail.tagline}&quot;</p>}
                 </div>
               </div>
 
               {/* Action bar */}
               <div className="flex flex-wrap items-center gap-2 border-b border-border bg-card/50 px-4 py-3 sm:gap-3 sm:px-6 md:px-8">
-                <Button size="sm" onClick={handleOpen} className="gap-2 bg-primary text-primary-foreground hover:bg-primary/90 sm:size-lg"><Play className="h-4 w-4 fill-current" /><span className="text-xs sm:text-sm">Play Now</span></Button>
+                <Button size="sm" onClick={handleOpen} className="gap-2 bg-primary text-primary-foreground hover:bg-primary/90 sm:size-lg"><Play className="h-4 w-4 fill-current" /><span className="text-xs sm:text-sm">Play</span></Button>
                 {trailer && <a href={`https://www.youtube.com/watch?v=${trailer.key}`} target="_blank" rel="noopener noreferrer"><Button size="sm" variant="secondary" className="gap-2 sm:size-lg"><Play className="h-3 w-3 sm:h-4 sm:w-4" /><span className="text-xs sm:text-sm">Trailer</span></Button></a>}
                 <Button size="icon" variant="outline" onClick={handleToggleWatchlist} disabled={watchlistLoading} className={inWatchlist ? "border-primary text-primary" : ""}>{watchlistLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : inWatchlist ? <Check className="h-4 w-4" /> : <Bookmark className="h-4 w-4" />}</Button>
                 <Button size="icon" variant="outline" aria-label="Share"><Share2 className="h-4 w-4" /></Button>
               </div>
 
-              {/* Season/Episode selector + Episode thumbnails - TV only */}
+              {/* Season/Episode selector + Episode thumbnails */}
               {isTV && detail?.seasons && (
                 <div className="border-b border-border bg-card/30 px-4 py-3 sm:px-6 md:px-8">
-                  {/* Selector row */}
+                  {/* Selector row - compact */}
                   <div className="mb-3 flex items-center gap-2">
                     <Select value={String(season)} onValueChange={(v) => { setSeason(parseInt(v, 10)); setEpisode(1); }}>
-                      <SelectTrigger className="h-8 flex-1 text-xs sm:w-32"><SelectValue /></SelectTrigger>
-                      <SelectContent>{detail.seasons.filter((s) => s.season_number > 0).map((s) => (<SelectItem key={s.id} value={String(s.season_number)}>Season {s.season_number}</SelectItem>))}</SelectContent>
+                      <SelectTrigger className="h-8 w-28 shrink-0 text-xs"><SelectValue /></SelectTrigger>
+                      <SelectContent>{detail.seasons.filter((s) => s.season_number > 0).map((s) => (<SelectItem key={s.id} value={String(s.season_number)}>S{s.season_number}</SelectItem>))}</SelectContent>
                     </Select>
+                    <span className="ml-auto text-[10px] text-muted-foreground">EP {episode}</span>
                     <div className="flex gap-1">
                       <Button size="icon" variant="ghost" className="h-8 w-8" disabled={episode <= 1} onClick={() => setEpisode(Math.max(1, episode - 1))}><ChevronLeft className="h-4 w-4" /></Button>
                       <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => setEpisode(episode + 1)}><ChevronRight className="h-4 w-4" /></Button>
                     </div>
                   </div>
 
-                  {/* Episode thumbnails - horizontal scroll, clickable */}
+                  {/* Episode thumbnails - horizontal scroll */}
                   {episodesLoading ? (
                     <div className="flex h-24 items-center justify-center"><Loader2 className="h-5 w-5 animate-spin text-primary" /></div>
                   ) : episodes.length > 0 ? (
-                    <div className="flex gap-2 overflow-x-auto pb-2" style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}>
-                      {episodes.map((ep) => (
-                        <button key={ep.episodeNumber} onClick={() => setEpisode(ep.episodeNumber)} className={`relative aspect-video w-32 shrink-0 overflow-hidden rounded-lg border-2 transition-all sm:w-40 ${episode === ep.episodeNumber ? "border-primary" : "border-transparent hover:border-border"}`}>
-                          {ep.stillPath ? <Image src={getImageUrl(ep.stillPath, "w300")} alt={`Ep ${ep.episodeNumber}`} fill sizes="160px" className="object-cover" unoptimized /> : <div className="flex h-full items-center justify-center bg-muted"><span className="text-[10px] text-muted-foreground">No Image</span></div>}
-                          <div className="absolute inset-0 bg-gradient-to-t from-black/90 to-transparent" />
-                          <div className="absolute bottom-1 left-1 right-1">
-                            <p className="truncate text-[9px] font-bold text-white sm:text-[10px]">EP {ep.episodeNumber}</p>
-                            <p className="truncate text-[8px] text-white/70 sm:text-[9px]">{ep.name}</p>
-                          </div>
-                          {episode === ep.episodeNumber && <div className="absolute inset-0 flex items-center justify-center bg-primary/20"><div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary"><Play className="h-3 w-3 fill-white text-white" /></div></div>}
-                        </button>
-                      ))}
+                    <div className="overflow-x-auto pb-1" style={{ scrollbarWidth: "none", WebkitOverflowScrolling: "touch" }}>
+                      <div className="flex gap-2">
+                        {episodes.map((ep) => (
+                          <button key={ep.episodeNumber} onClick={() => setEpisode(ep.episodeNumber)} className={`relative aspect-video w-28 shrink-0 overflow-hidden rounded-lg border-2 transition-all sm:w-36 ${episode === ep.episodeNumber ? "border-primary" : "border-transparent hover:border-border"}`}>
+                            {ep.stillPath ? <Image src={getImageUrl(ep.stillPath, "w300")} alt={`Ep ${ep.episodeNumber}`} fill sizes="144px" className="object-cover" unoptimized /> : <div className="flex h-full items-center justify-center bg-muted"><span className="text-[10px] text-muted-foreground">No Img</span></div>}
+                            <div className="absolute inset-0 bg-gradient-to-t from-black/90 to-transparent" />
+                            <div className="absolute bottom-1 left-1 right-1">
+                              <p className="truncate text-[9px] font-bold text-white">EP {ep.episodeNumber}</p>
+                              <p className="truncate text-[8px] text-white/70">{ep.name}</p>
+                            </div>
+                            {episode === ep.episodeNumber && <div className="absolute inset-0 flex items-center justify-center bg-primary/20"><div className="flex h-7 w-7 items-center justify-center rounded-full bg-primary"><Play className="h-3 w-3 fill-white text-white" /></div></div>}
+                          </button>
+                        ))}
+                      </div>
                     </div>
                   ) : null}
                 </div>
               )}
 
-              {/* Content grid */}
+              {/* Content grid - overflow-hidden to prevent cast overflow */}
               <div className="grid gap-4 p-4 sm:gap-6 sm:p-6 md:grid-cols-3 md:p-8">
-                <div className="md:col-span-2">
+                <div className="min-w-0 md:col-span-2">
                   <div className="mb-3 flex flex-wrap items-center gap-2 text-xs sm:mb-4 sm:gap-3 sm:text-sm">
                     <span className="flex items-center gap-1"><Star className="h-3.5 w-3.5 fill-yellow-400 text-yellow-400 sm:h-4 sm:w-4" /><span className="font-semibold">{tmdbRating}</span><span className="text-muted-foreground">TMDB</span></span>
                     {avgUserRating && <span className="flex items-center gap-1 text-primary"><Star className="h-3.5 w-3.5 fill-primary text-primary sm:h-4 sm:w-4" /><span className="font-semibold">{avgUserRating}</span><span className="text-muted-foreground">User</span></span>}
@@ -280,13 +258,13 @@ export function DetailModal() {
                   </div>
                   {detail.genres && detail.genres.length > 0 && (<div className="mb-3 flex flex-wrap gap-1.5 sm:mb-4">{detail.genres.map((g) => <Badge key={g.id} variant="outline" className="text-xs">{g.name}</Badge>)}</div>)}
                   <h3 className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground sm:mb-2 sm:text-sm">Overview</h3>
-                  <p className="text-xs leading-relaxed text-foreground/90 sm:text-sm md:text-base">{detail.overview || "No overview available."}</p>
+                  <p className="break-words text-xs leading-relaxed text-foreground/90 sm:text-sm md:text-base">{detail.overview || "No overview available."}</p>
 
                   {cast.length > 0 && (
                     <div className="mt-4 sm:mt-6">
                       <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground sm:mb-3 sm:text-sm">Top Cast</h3>
-                      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-3 lg:grid-cols-4">
-                        {cast.map((p) => (<div key={p.id} className="flex items-center gap-2"><div className="relative h-10 w-10 shrink-0 overflow-hidden rounded-full bg-muted sm:h-12 sm:w-12">{p.profile_path && <Image src={getImageUrl(p.profile_path, "w185")} alt={p.name} fill sizes="48px" className="object-cover" unoptimized />}</div><div className="min-w-0 flex-1"><p className="truncate text-xs font-medium sm:text-sm">{p.name}</p><p className="truncate text-[10px] text-muted-foreground sm:text-xs">{p.character}</p></div></div>))}
+                      <div className="grid grid-cols-2 gap-2 overflow-hidden sm:grid-cols-3 sm:gap-3 lg:grid-cols-4">
+                        {cast.map((p) => (<div key={p.id} className="flex min-w-0 items-center gap-2"><div className="relative h-10 w-10 shrink-0 overflow-hidden rounded-full bg-muted sm:h-12 sm:w-12">{p.profile_path && <Image src={getImageUrl(p.profile_path, "w185")} alt={p.name} fill sizes="48px" className="object-cover" unoptimized />}</div><div className="min-w-0 flex-1 overflow-hidden"><p className="truncate text-xs font-medium sm:text-sm">{p.name}</p><p className="truncate text-[10px] text-muted-foreground sm:text-xs">{p.character}</p></div></div>))}
                       </div>
                     </div>
                   )}
@@ -301,41 +279,44 @@ export function DetailModal() {
                   </div>
                 </div>
 
-                <div className="space-y-3 sm:space-y-4">
-                  {(director || creator) && <div><h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{isTV ? "Creator" : "Director"}</h4><p className="mt-0.5 text-xs sm:text-sm">{director || creator}</p></div>}
+                <div className="min-w-0 space-y-3 sm:space-y-4">
+                  {(director || creator) && <div className="overflow-hidden"><h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{isTV ? "Creator" : "Director"}</h4><p className="mt-0.5 break-words text-xs sm:text-sm">{director || creator}</p></div>}
                   {isTV && detail.number_of_seasons && <div className="flex gap-4"><div><h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Seasons</h4><p className="mt-0.5 text-xs sm:text-sm">{detail.number_of_seasons}</p></div><div><h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Episodes</h4><p className="mt-0.5 text-xs sm:text-sm">{detail.number_of_episodes}</p></div></div>}
-                  {detail.spoken_languages && detail.spoken_languages.length > 0 && <div><h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Languages</h4><p className="mt-0.5 text-xs sm:text-sm">{detail.spoken_languages.map((l) => l.english_name).join(", ")}</p></div>}
-                  {detail.production_companies && detail.production_companies.length > 0 && <div><h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Production</h4><p className="mt-0.5 text-xs sm:text-sm">{detail.production_companies.map((c) => c.name).join(", ")}</p></div>}
+                  {detail.spoken_languages && detail.spoken_languages.length > 0 && <div className="overflow-hidden"><h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Languages</h4><p className="mt-0.5 break-words text-xs sm:text-sm">{detail.spoken_languages.map((l) => l.english_name).join(", ")}</p></div>}
+                  {detail.production_companies && detail.production_companies.length > 0 && <div className="overflow-hidden"><h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Production</h4><p className="mt-0.5 break-words text-xs sm:text-sm">{detail.production_companies.map((c) => c.name).join(", ")}</p></div>}
                 </div>
               </div>
 
-              {/* More Like This - horizontal scroll with touch support */}
+              {/* More Like This - horizontal scroll */}
               {similar.length > 0 && (
                 <div className="border-t border-border py-4 sm:py-6">
                   <h3 className="mb-3 px-4 text-sm font-bold sm:mb-4 sm:px-6 sm:text-base md:px-8">More Like This</h3>
-                  <div className="flex gap-3 overflow-x-auto px-4 pb-2 sm:px-6 lg:px-8" style={{ scrollbarWidth: "none", msOverflowStyle: "none", touchAction: "pan-x" }}>
-                    {similar.map((m) => <div key={`sim-${m.id}`} className="shrink-0"><MovieCard movie={m} size="sm" /></div>)}
+                  <div className="overflow-x-auto px-4 pb-2 sm:px-6 lg:px-8" style={{ scrollbarWidth: "none", WebkitOverflowScrolling: "touch" }}>
+                    <div className="flex gap-3">
+                      {similar.map((m) => <div key={`sim-${m.id}`} className="shrink-0"><MovieCard movie={m} size="sm" /></div>)}
+                    </div>
                   </div>
                 </div>
               )}
 
-              {/* Comments */}
-              <div className="border-t border-border px-4 py-4 pb-16 sm:px-6 sm:py-6 md:px-8">
+              {/* Comments - vertical scroll for list */}
+              <div className="border-t border-border px-4 py-4 pb-12 sm:px-6 sm:py-6 md:px-8">
                 <h3 className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground sm:text-sm"><MessageSquare className="h-4 w-4" />Comments ({comments.length})</h3>
                 <div className="mb-4 flex gap-2">
                   <Avatar className="h-8 w-8 shrink-0"><AvatarImage src={session?.user?.image || undefined} /><AvatarFallback className="bg-primary/20 text-xs text-primary">{session?.user?.name?.[0]?.toUpperCase() || "U"}</AvatarFallback></Avatar>
-                  <div className="flex-1">
+                  <div className="min-w-0 flex-1">
                     <textarea value={commentText} onChange={(e) => setCommentText(e.target.value)} placeholder={status === "authenticated" ? "Tulis komentar..." : "Login untuk berkomentar"} disabled={status !== "authenticated"} className="w-full resize-none rounded-lg border border-border bg-transparent px-3 py-2 text-sm outline-none placeholder:text-muted-foreground focus:border-primary disabled:opacity-50" rows={2} maxLength={2000} />
                     {status === "authenticated" && <Button size="sm" onClick={handlePostComment} disabled={!commentText.trim() || commentLoading} className="mt-2 gap-1.5">{commentLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}Post</Button>}
                   </div>
                 </div>
-                <div className="space-y-3">
-                  {comments.length === 0 ? <p className="py-4 text-center text-xs text-muted-foreground">Belum ada komentar. Jadilah yang pertama!</p> : comments.map((c) => <CommentNode key={c.id} comment={c} currentUserId={session?.user?.id} onReply={(id) => { setReplyTo(id); setReplyText(""); }} replyTo={replyTo} replyText={replyText} setReplyText={setReplyText} onPostReply={handlePostReply} onDelete={handleDeleteComment} commentLoading={commentLoading} level={0} />)}
+                {/* Comments list - max height with vertical scroll */}
+                <div className="max-h-[300px] space-y-3 overflow-y-auto pr-1" style={{ scrollbarWidth: "thin", WebkitOverflowScrolling: "touch" }}>
+                  {comments.length === 0 ? <p className="py-4 text-center text-xs text-muted-foreground">Belum ada komentar. Jadilah yang pertama!</p> : comments.map((c) => <CommentNode key={c.id} comment={c} currentUserId={session?.user?.id} onReply={(id: string) => { setReplyTo(id); setReplyText(""); }} replyTo={replyTo} replyText={replyText} setReplyText={setReplyText} onPostReply={handlePostReply} onDelete={handleDeleteComment} commentLoading={commentLoading} level={0} />)}
                 </div>
               </div>
             </div>
           ) : null}
-        </ScrollArea>
+        </div>
       </DialogContent>
     </Dialog>
   );
@@ -346,11 +327,11 @@ function CommentNode({ comment, currentUserId, onReply, replyTo, replyText, setR
   const timeAgo = new Date(comment.createdAt).toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" });
   const isOwner = currentUserId === comment.userId;
   return (
-    <div className={level > 0 ? "ml-8 border-l border-border pl-3" : ""}>
+    <div className={level > 0 ? "ml-6 border-l border-border pl-3" : ""}>
       <div className="flex gap-2">
         <Avatar className="h-8 w-8 shrink-0"><AvatarImage src={comment.userImage || undefined} /><AvatarFallback className="bg-primary/20 text-xs text-primary">{initial}</AvatarFallback></Avatar>
         <div className="min-w-0 flex-1">
-          <div className="rounded-lg bg-muted/40 px-3 py-2"><div className="flex items-center justify-between gap-2"><span className="text-xs font-semibold">{comment.userName || "Anonymous"}</span><span className="text-[10px] text-muted-foreground">{timeAgo}</span></div><p className="mt-1 text-xs leading-relaxed sm:text-sm">{comment.content}</p></div>
+          <div className="rounded-lg bg-muted/40 px-3 py-2"><div className="flex items-center justify-between gap-2"><span className="text-xs font-semibold">{comment.userName || "Anonymous"}</span><span className="text-[10px] text-muted-foreground">{timeAgo}</span></div><p className="mt-1 break-words text-xs leading-relaxed sm:text-sm">{comment.content}</p></div>
           <div className="mt-1 flex items-center gap-3 px-1"><button onClick={() => onReply(comment.id)} className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-primary"><CornerDownRight className="h-3 w-3" />Reply</button>{isOwner && <button onClick={() => onDelete(comment.id)} className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-destructive"><Trash2 className="h-3 w-3" />Delete</button>}</div>
           {replyTo === comment.id && <div className="mt-2 flex gap-2"><textarea value={replyText} onChange={(e) => setReplyText(e.target.value)} placeholder={`Reply to ${comment.userName || "user"}...`} className="flex-1 resize-none rounded-lg border border-border bg-transparent px-3 py-2 text-xs outline-none focus:border-primary" rows={2} maxLength={2000} autoFocus /><Button size="sm" onClick={() => onPostReply(comment.id)} disabled={!replyText.trim() || commentLoading} className="gap-1 self-end">{commentLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Send className="h-3 w-3" />}</Button></div>}
         </div>
