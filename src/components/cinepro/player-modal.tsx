@@ -54,6 +54,12 @@ export function PlayerModal() {
   const [season, setSeason] = useState(playerSeason || 1);
   const [episode, setEpisode] = useState(playerEpisode || 1);
 
+  // KEY FIX: Sync local state when playerSeason/playerEpisode changes in store
+  useEffect(() => {
+    setSeason(playerSeason || 1);
+    setEpisode(playerEpisode || 1);
+  }, [playerSeason, playerEpisode]);
+
   // Save to watch history (only if logged in)
   const saveToHistory = useCallback(async () => {
     if (!playerMedia || status !== "authenticated" || !session?.user) return;
@@ -74,7 +80,6 @@ export function PlayerModal() {
         }),
       });
     } catch (error) {
-      // Silent fail - don't interrupt user experience
       console.error("[SAVE HISTORY ERROR]", error);
     }
   }, [playerMedia, session, status, season, episode]);
@@ -107,11 +112,7 @@ export function PlayerModal() {
         if (cancelled) return;
         setProviders(data.providers || []);
         setLoading(false);
-        
-        // Save to history after providers loaded successfully
         saveToHistory();
-        
-        // Track play event for analytics
         trackPlay(playerMedia.id, playerMedia.type, playerMedia.title);
       } catch {
         if (cancelled) return;
@@ -135,7 +136,6 @@ export function PlayerModal() {
     };
   }, [playerMedia, season, episode, saveToHistory]);
 
-  // Reset iframe state when provider changes
   useEffect(() => {
     if (currentIdx === 0 && providers.length === 0) return;
     let cancelled = false;
@@ -164,7 +164,6 @@ export function PlayerModal() {
     }
   }, [currentIdx, providers.length]);
 
-  // Auto-switch to next provider on error
   useEffect(() => {
     if (!iframeError || !providers.length) return;
     const timer = setTimeout(() => {
@@ -192,7 +191,7 @@ export function PlayerModal() {
       >
         <DialogTitle className="sr-only">{playerMedia.title} Player</DialogTitle>
 
-        {/* Top bar - fixed height, not absolute */}
+        {/* Top bar */}
         <div className="flex shrink-0 items-center justify-between gap-2 bg-black px-3 py-2 sm:px-4 sm:py-3">
           <div className="min-w-0 flex-1">
             <h2 className="truncate text-xs font-semibold text-white sm:text-sm md:text-base">
@@ -256,7 +255,7 @@ export function PlayerModal() {
           )}
         </div>
 
-        {/* Player area - flex-1 to fill remaining space */}
+        {/* Player area */}
         <div className="relative flex-1 overflow-hidden bg-black">
           {loading && (
             <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-white">
@@ -332,7 +331,7 @@ export function PlayerModal() {
           )}
         </div>
 
-        {/* Bottom controls for TV shows - fixed height, not absolute */}
+        {/* Bottom controls for TV shows */}
         {isTV && (
           <div className="flex shrink-0 items-center gap-2 bg-black px-3 py-2 sm:gap-3 sm:px-4 sm:py-3">
             <Select value={String(season)} onValueChange={(v) => setSeason(parseInt(v, 10))}>
