@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import { Header } from "@/components/cinepro/header";
 import { HeroCarousel } from "@/components/cinepro/hero-carousel";
 import { ContentRow } from "@/components/cinepro/content-row";
@@ -11,10 +12,52 @@ import { DetailModal } from "@/components/cinepro/detail-modal";
 import { PlayerModal } from "@/components/cinepro/player-modal";
 import { AuthModal } from "@/components/cinepro/auth-modal";
 import { AdminDashboard } from "@/components/cinepro/admin-dashboard";
-import { useAppStore } from "@/lib/store";
+import { useAppStore, type SelectedMedia } from "@/lib/store";
 import { trackPageView } from "@/lib/analytics";
 import type { Movie } from "@/lib/tmdb";
 import { Loader2 } from "lucide-react";
+
+// Wrapper component to use useSearchParams (requires Suspense)
+function DeepLinkHandler() {
+  const searchParams = useSearchParams();
+  const setSelectedMedia = useAppStore((s) => s.setSelectedMedia);
+
+  useEffect(() => {
+    const movieId = searchParams.get("movie");
+    const tvId = searchParams.get("tv");
+
+    if (movieId || tvId) {
+      const id = movieId || tvId;
+      const type = movieId ? "movie" : "tv";
+      
+      // Fetch basic media info to get title and poster
+      fetch(`/api/detail/${id}?type=${type}`)
+        .then((res) => res.json())
+        .then((data) => {
+          const media: SelectedMedia = {
+            id: parseInt(id!, 10),
+            type: type as "movie" | "tv",
+            title: data.title || data.name || "Loading...",
+            posterPath: data.poster_path || null,
+            backdropPath: data.backdrop_path || null,
+          };
+          setSelectedMedia(media);
+        })
+        .catch(() => {
+          // If fetch fails, still open modal with basic info
+          setSelectedMedia({
+            id: parseInt(id!, 10),
+            type: type as "movie" | "tv",
+            title: "Loading...",
+            posterPath: null,
+            backdropPath: null,
+          });
+        });
+    }
+  }, [searchParams, setSelectedMedia]);
+
+  return null;
+}
 
 export default function Home() {
   const [trending, setTrending] = useState<Movie[]>([]);
@@ -28,7 +71,6 @@ export default function Home() {
   const loadHistory = useAppStore((s) => s.loadHistory);
   useEffect(() => {
     loadHistory();
-    // Track page view
     trackPageView("/");
   }, [loadHistory]);
 
@@ -74,6 +116,11 @@ export default function Home() {
 
   return (
     <main className="min-h-screen bg-background">
+      {/* Deep Link Handler - detects ?movie=123 or ?tv=456 in URL */}
+      <Suspense fallback={null}>
+        <DeepLinkHandler />
+      </Suspense>
+
       <Header />
 
       {/* Hero - lebih compact di mobile (60vh), tinggi normal di desktop */}
