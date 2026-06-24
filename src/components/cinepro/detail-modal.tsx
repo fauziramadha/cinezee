@@ -73,31 +73,24 @@ export function DetailModal() {
   const { selectedMedia, setSelectedMedia, openPlayer, addToHistory, setAuthModalOpen } = useAppStore();
   const { data: session, status } = useSession();
   
-  // Detail state
   const [detail, setDetail] = useState<MovieDetail | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   
-  // Watchlist state
   const [inWatchlist, setInWatchlist] = useState(false);
   const [watchlistLoading, setWatchlistLoading] = useState(false);
   
-  // Rating state
   const [ratings, setRatings] = useState<RatingItem[]>([]);
   const [userRating, setUserRating] = useState<UserRating | null>(null);
   const [hoverRating, setHoverRating] = useState(0);
   const [ratingLoading, setRatingLoading] = useState(false);
   
-  // Comment state
   const [comments, setComments] = useState<CommentItem[]>([]);
   const [commentText, setCommentText] = useState("");
   const [commentLoading, setCommentLoading] = useState(false);
   const [replyTo, setReplyTo] = useState<string | null>(null);
   const [replyText, setReplyText] = useState("");
 
-  // =====================================================
-  // Fetch all data when media is selected
-  // =====================================================
   useEffect(() => {
     if (!selectedMedia) {
       Promise.resolve().then(() => {
@@ -120,7 +113,6 @@ export function DetailModal() {
       if (cancelled) return;
       setLoading(true);
       setError(null);
-
       try {
         const res = await fetch(`/api/detail/${selectedMedia.id}?type=${selectedMedia.type}`);
         if (!res.ok) throw new Error("Failed to load");
@@ -137,7 +129,6 @@ export function DetailModal() {
 
     loadDetail();
 
-    // Fetch watchlist status
     if (status === "authenticated" && session?.user) {
       fetch("/api/watchlist")
         .then((res) => res.json())
@@ -151,7 +142,6 @@ export function DetailModal() {
         .catch(() => {});
     }
 
-    // Fetch ratings
     fetch(`/api/ratings?mediaId=${selectedMedia.id}&mediaType=${selectedMedia.type}`)
       .then((res) => res.json())
       .then((data) => {
@@ -161,7 +151,6 @@ export function DetailModal() {
       })
       .catch(() => {});
 
-    // Fetch comments
     fetch(`/api/comments?mediaId=${selectedMedia.id}&mediaType=${selectedMedia.type}`)
       .then((res) => res.json())
       .then((data) => {
@@ -173,9 +162,6 @@ export function DetailModal() {
     return () => { cancelled = true; };
   }, [selectedMedia, session, status]);
 
-  // =====================================================
-  // Handlers
-  // =====================================================
   const handleOpen = () => {
     if (!selectedMedia) return;
     addToHistory({ ...selectedMedia, watchedAt: new Date().toISOString() });
@@ -238,16 +224,11 @@ export function DetailModal() {
       const res = await fetch("/api/ratings", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          mediaId: selectedMedia.id,
-          mediaType: selectedMedia.type,
-          rating: value,
-        }),
+        body: JSON.stringify({ mediaId: selectedMedia.id, mediaType: selectedMedia.type, rating: value }),
       });
       if (res.ok) {
         setUserRating({ id: "", rating: value, review: null });
         toast.success(value === 0 ? "Rating dihapus" : "Rating disimpan!");
-        // Refresh ratings
         const refresh = await fetch(`/api/ratings?mediaId=${selectedMedia.id}&mediaType=${selectedMedia.type}`);
         const data = await refresh.json();
         setRatings(data.ratings || []);
@@ -272,11 +253,7 @@ export function DetailModal() {
       const res = await fetch("/api/comments", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          mediaId: selectedMedia.id,
-          mediaType: selectedMedia.type,
-          content: commentText,
-        }),
+        body: JSON.stringify({ mediaId: selectedMedia.id, mediaType: selectedMedia.type, content: commentText }),
       });
       if (res.ok) {
         setCommentText("");
@@ -300,12 +277,7 @@ export function DetailModal() {
       const res = await fetch("/api/comments", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          mediaId: selectedMedia.id,
-          mediaType: selectedMedia.type,
-          content: replyText,
-          parentId,
-        }),
+        body: JSON.stringify({ mediaId: selectedMedia.id, mediaType: selectedMedia.type, content: replyText, parentId }),
       });
       if (res.ok) {
         setReplyText("");
@@ -334,9 +306,6 @@ export function DetailModal() {
     }
   };
 
-  // =====================================================
-  // Render
-  // =====================================================
   if (!selectedMedia) return null;
 
   const title = detail?.title || detail?.name || selectedMedia.title;
@@ -348,46 +317,31 @@ export function DetailModal() {
   const cast = detail?.credits?.cast?.slice(0, 8) || [];
   const trailer = detail?.videos?.results?.find((v) => v.site === "YouTube" && v.type === "Trailer");
   const similar = detail?.recommendations?.results?.slice(0, 12) || [];
-
-  // Calculate average user rating
-  const avgUserRating = ratings.length > 0
-    ? (ratings.reduce((sum, r) => sum + r.rating, 0) / ratings.length).toFixed(1)
-    : null;
-
-  return (
+  const avgUserRating = ratings.length > 0 ? (ratings.reduce((sum, r) => sum + r.rating, 0) / ratings.length).toFixed(1) : null;
+    return (
     <Dialog open={!!selectedMedia} onOpenChange={(open) => { if (!open) setSelectedMedia(null); }}>
       <DialogContent className="max-h-[95vh] max-w-[95vw] overflow-hidden p-0 sm:max-w-2xl md:max-w-4xl lg:max-w-6xl">
         <DialogHeader className="sr-only">
           <DialogTitle>{title}</DialogTitle>
         </DialogHeader>
 
-        <button
-          onClick={() => setSelectedMedia(null)}
-          className="absolute right-3 top-3 z-30 flex h-9 w-9 items-center justify-center rounded-full bg-black/70 text-white backdrop-blur-sm transition-colors hover:bg-primary"
-          aria-label="Close"
-        >
+        <button onClick={() => setSelectedMedia(null)} className="absolute right-3 top-3 z-30 flex h-9 w-9 items-center justify-center rounded-full bg-black/70 text-white backdrop-blur-sm transition-colors hover:bg-primary" aria-label="Close">
           <X className="h-4 w-4" />
         </button>
 
         <ScrollArea className="max-h-[95vh]">
-          {loading && (
+          {loading ? (
             <div className="flex h-96 items-center justify-center">
               <Loader2 className="h-8 w-8 animate-spin text-primary" />
             </div>
-          )}
-
-          {error && !loading && (
+          ) : error ? (
             <div className="flex h-96 flex-col items-center justify-center gap-3 p-6 text-center">
               <p className="text-sm text-destructive">{error}</p>
-              <Button variant="secondary" size="sm" onClick={() => setSelectedMedia(null)}>
-                Go back
-              </Button>
+              <Button variant="secondary" size="sm" onClick={() => setSelectedMedia(null)}>Go back</Button>
             </div>
-          )}
-
-          {detail && !loading && !error && (
+          ) : detail && !loading && !error ? (
             <div className="fade-in">
-              {/* Hero section */}
+              {/* Hero */}
               <div className="relative aspect-video w-full overflow-hidden bg-muted">
                 {detail.backdrop_path && (
                   <Image src={getImageUrl(detail.backdrop_path, "original")} alt={title} fill sizes="(max-width: 768px) 100vw, 1024px" className="object-cover" unoptimized priority />
@@ -395,47 +349,33 @@ export function DetailModal() {
                 <div className="absolute inset-0 bg-gradient-to-t from-card via-card/30 to-transparent" />
                 <div className="absolute inset-0 bg-gradient-to-r from-card/80 via-transparent to-transparent" />
                 <div className="absolute bottom-0 left-0 right-0 p-4 sm:p-6 md:p-8">
-                  <Badge className="mb-2 bg-primary text-primary-foreground">
-                    {selectedMedia.type === "tv" ? "TV Series" : "Movie"}
-                  </Badge>
-                  <h2 className="text-xl font-extrabold tracking-tight text-white drop-shadow-lg sm:text-2xl md:text-4xl">
-                    {title}
-                  </h2>
-                  {detail.tagline && (
-                    <p className="mt-1 text-xs italic text-white/80 sm:text-sm">
-                      &quot;{detail.tagline}&quot;
-                    </p>
-                  )}
+                  <Badge className="mb-2 bg-primary text-primary-foreground">{selectedMedia.type === "tv" ? "TV Series" : "Movie"}</Badge>
+                  <h2 className="text-xl font-extrabold tracking-tight text-white drop-shadow-lg sm:text-2xl md:text-4xl">{title}</h2>
+                  {detail.tagline && <p className="mt-1 text-xs italic text-white/80 sm:text-sm">&quot;{detail.tagline}&quot;</p>}
                 </div>
               </div>
 
               {/* Action bar */}
               <div className="flex flex-wrap items-center gap-2 border-b border-border bg-card/50 px-4 py-3 sm:gap-3 sm:px-6 sm:py-4 md:px-8">
                 <Button size="lg" onClick={handleOpen} className="gap-2 bg-primary text-primary-foreground hover:bg-primary/90">
-                  <Play className="h-4 w-4 fill-current sm:h-5 sm:w-5" />
-                  Play Now
+                  <Play className="h-4 w-4 fill-current sm:h-5 sm:w-5" />Play Now
                 </Button>
                 {trailer && (
                   <a href={`https://www.youtube.com/watch?v=${trailer.key}`} target="_blank" rel="noopener noreferrer">
-                    <Button size="lg" variant="secondary" className="gap-2">
-                      <Play className="h-4 w-4" />
-                      Trailer
-                    </Button>
+                    <Button size="lg" variant="secondary" className="gap-2"><Play className="h-4 w-4" />Trailer</Button>
                   </a>
                 )}
                 <Button size="icon" variant="outline" onClick={handleToggleWatchlist} disabled={watchlistLoading} aria-label={inWatchlist ? "Remove from watchlist" : "Add to watchlist"} className={inWatchlist ? "border-primary text-primary" : ""}>
                   {watchlistLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : inWatchlist ? <Check className="h-4 w-4" /> : <Bookmark className="h-4 w-4" />}
                 </Button>
-                <Button size="icon" variant="outline" aria-label="Share">
-                  <Share2 className="h-4 w-4" />
-                </Button>
+                <Button size="icon" variant="outline" aria-label="Share"><Share2 className="h-4 w-4" /></Button>
               </div>
 
-              {/* Content grid */}
+              {/* Content grid - 1 col mobile, 3 col desktop */}
               <div className="grid gap-4 p-4 sm:gap-6 sm:p-6 md:grid-cols-3 md:p-8">
                 {/* Left column */}
                 <div className="md:col-span-2">
-                  {/* Quick stats */}
+                  {/* Stats */}
                   <div className="mb-3 flex flex-wrap items-center gap-2 text-xs sm:mb-4 sm:gap-3 sm:text-sm">
                     <span className="flex items-center gap-1">
                       <Star className="h-3.5 w-3.5 fill-yellow-400 text-yellow-400 sm:h-4 sm:w-4" />
@@ -449,49 +389,35 @@ export function DetailModal() {
                         <span className="text-muted-foreground">User ({ratings.length})</span>
                       </span>
                     )}
-                    {year && (
-                      <span className="flex items-center gap-1 text-muted-foreground">
-                        <Calendar className="h-3.5 w-3.5 sm:h-4 sm:w-4" />{year}
-                      </span>
-                    )}
-                    {runtime && (
-                      <span className="flex items-center gap-1 text-muted-foreground">
-                        <Clock className="h-3.5 w-3.5 sm:h-4 sm:w-4" />{runtime}m
-                      </span>
-                    )}
+                    {year && <span className="flex items-center gap-1 text-muted-foreground"><Calendar className="h-3.5 w-3.5 sm:h-4 sm:w-4" />{year}</span>}
+                    {runtime && <span className="flex items-center gap-1 text-muted-foreground"><Clock className="h-3.5 w-3.5 sm:h-4 sm:w-4" />{runtime}m</span>}
                     {detail.status && <Badge variant="secondary" className="text-xs">{detail.status}</Badge>}
                   </div>
 
                   {/* Genres */}
                   {detail.genres && detail.genres.length > 0 && (
                     <div className="mb-3 flex flex-wrap gap-1.5 sm:mb-4">
-                      {detail.genres.map((genre) => (
-                        <Badge key={genre.id} variant="outline" className="text-xs">{genre.name}</Badge>
-                      ))}
+                      {detail.genres.map((g) => <Badge key={g.id} variant="outline" className="text-xs">{g.name}</Badge>)}
                     </div>
                   )}
 
                   {/* Overview */}
                   <h3 className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground sm:mb-2 sm:text-sm">Overview</h3>
-                  <p className="text-xs leading-relaxed text-foreground/90 sm:text-sm md:text-base">
-                    {detail.overview || "No overview available."}
-                  </p>
+                  <p className="text-xs leading-relaxed text-foreground/90 sm:text-sm md:text-base">{detail.overview || "No overview available."}</p>
 
                   {/* Cast */}
                   {cast.length > 0 && (
                     <div className="mt-4 sm:mt-6">
                       <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground sm:mb-3 sm:text-sm">Top Cast</h3>
                       <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-3 lg:grid-cols-4">
-                        {cast.map((person) => (
-                          <div key={person.id} className="flex items-center gap-2">
+                        {cast.map((p) => (
+                          <div key={p.id} className="flex items-center gap-2">
                             <div className="relative h-10 w-10 shrink-0 overflow-hidden rounded-full bg-muted sm:h-12 sm:w-12">
-                              {person.profile_path && (
-                                <Image src={getImageUrl(person.profile_path, "w185")} alt={person.name} fill sizes="48px" className="object-cover" unoptimized />
-                              )}
+                              {p.profile_path && <Image src={getImageUrl(p.profile_path, "w185")} alt={p.name} fill sizes="48px" className="object-cover" unoptimized />}
                             </div>
                             <div className="min-w-0 flex-1">
-                              <p className="truncate text-xs font-medium sm:text-sm">{person.name}</p>
-                              <p className="truncate text-[10px] text-muted-foreground sm:text-xs">{person.character}</p>
+                              <p className="truncate text-xs font-medium sm:text-sm">{p.name}</p>
+                              <p className="truncate text-[10px] text-muted-foreground sm:text-xs">{p.character}</p>
                             </div>
                           </div>
                         ))}
@@ -499,173 +425,91 @@ export function DetailModal() {
                     </div>
                   )}
 
-                  {/* ===================================================== */}
-                  {/* Rating Section (NEW) */}
-                  {/* ===================================================== */}
+                  {/* Rating Section - NOW AFTER CAST */}
                   <div className="mt-6 border-t border-border pt-4">
-                    <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground sm:text-sm">
-                      Rate This {selectedMedia.type === "tv" ? "Series" : "Movie"}
-                    </h3>
+                    <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground sm:text-sm">Rate This {selectedMedia.type === "tv" ? "Series" : "Movie"}</h3>
                     <div className="flex items-center gap-1">
-                      {[1, 2, 3, 4, 5].map((star) => {
-                        const value = star * 2; // 5 stars = 10 rating
+                      {[1,2,3,4,5].map((star) => {
+                        const value = star * 2;
                         const isActive = (hoverRating || userRating?.rating || 0) >= value;
                         return (
-                          <button
-                            key={star}
-                            onClick={() => handleRate(value)}
-                            onMouseEnter={() => setHoverRating(value)}
-                            onMouseLeave={() => setHoverRating(0)}
-                            disabled={ratingLoading}
-                            className="transition-transform hover:scale-110 disabled:opacity-50"
-                            aria-label={`Rate ${value} out of 10`}
-                          >
-                            <Star
-                              className={isActive ? "h-6 w-6 fill-yellow-400 text-yellow-400 sm:h-7 sm:w-7" : "h-6 w-6 text-muted-foreground sm:h-7 sm:w-7"}
-                            />
+                          <button key={star} onClick={() => handleRate(value)} onMouseEnter={() => setHoverRating(value)} onMouseLeave={() => setHoverRating(0)} disabled={ratingLoading} className="transition-transform hover:scale-110 disabled:opacity-50" aria-label={`Rate ${value} out of 10`}>
+                            <Star className={isActive ? "h-6 w-6 fill-yellow-400 text-yellow-400 sm:h-7 sm:w-7" : "h-6 w-6 text-muted-foreground sm:h-7 sm:w-7"} />
                           </button>
                         );
                       })}
                       <span className="ml-3 text-sm font-medium">
-                        {ratingLoading ? (
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                        ) : userRating ? (
-                          <span className="text-primary">{userRating.rating}/10</span>
-                        ) : (
-                          <span className="text-muted-foreground">Click to rate</span>
-                        )}
+                        {ratingLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : userRating ? <span className="text-primary">{userRating.rating}/10</span> : <span className="text-muted-foreground">Click to rate</span>}
                       </span>
                     </div>
-                    {userRating && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleRate(0)}
-                        className="mt-2 text-xs text-muted-foreground hover:text-destructive"
-                      >
-                        Hapus rating
-                      </Button>
-                    )}
-                  </div>
-
-                  {/* ===================================================== */}
-                  {/* Comments Section (NEW) */}
-                  {/* ===================================================== */}
-                  <div className="mt-6 border-t border-border pt-4">
-                    <h3 className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground sm:text-sm">
-                      <MessageSquare className="h-4 w-4" />
-                      Comments ({comments.length})
-                    </h3>
-
-                    {/* Comment form */}
-                    <div className="mb-4 flex gap-2">
-                      <Avatar className="h-8 w-8 shrink-0">
-                        <AvatarImage src={session?.user?.image || undefined} />
-                        <AvatarFallback className="bg-primary/20 text-xs text-primary">
-                          {session?.user?.name?.[0]?.toUpperCase() || "U"}
-                        </AvatarFallback>
-                      </Avatar>
-                      <div className="flex-1">
-                        <textarea
-                          value={commentText}
-                          onChange={(e) => setCommentText(e.target.value)}
-                          placeholder={status === "authenticated" ? "Tulis komentar..." : "Login untuk berkomentar"}
-                          disabled={status !== "authenticated"}
-                          className="w-full resize-none rounded-lg border border-border bg-transparent px-3 py-2 text-sm outline-none placeholder:text-muted-foreground focus:border-primary disabled:opacity-50"
-                          rows={2}
-                          maxLength={2000}
-                        />
-                        {status === "authenticated" && (
-                          <Button
-                            size="sm"
-                            onClick={handlePostComment}
-                            disabled={!commentText.trim() || commentLoading}
-                            className="mt-2 gap-1.5"
-                          >
-                            {commentLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
-                            Post
-                          </Button>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Comments list */}
-                    <div className="space-y-3">
-                      {comments.length === 0 ? (
-                        <p className="py-4 text-center text-xs text-muted-foreground">
-                          Belum ada komentar. Jadilah yang pertama!
-                        </p>
-                      ) : (
-                        comments.map((comment) => (
-                          <CommentNode
-                            key={comment.id}
-                            comment={comment}
-                            currentUserId={session?.user?.id}
-                            onReply={(id) => { setReplyTo(id); setReplyText(""); }}
-                            replyTo={replyTo}
-                            replyText={replyText}
-                            setReplyText={setReplyText}
-                            onPostReply={handlePostReply}
-                            onDelete={handleDeleteComment}
-                            commentLoading={commentLoading}
-                            level={0}
-                          />
-                        ))
-                      )}
-                    </div>
+                    {userRating && <Button variant="ghost" size="sm" onClick={() => handleRate(0)} className="mt-2 text-xs text-muted-foreground hover:text-destructive">Hapus rating</Button>}
                   </div>
                 </div>
 
-                {/* Right column */}
+                {/* Right column - SIDEBAR INFO - NOW IN RIGHT COLUMN (desktop) / ABOVE RATING (mobile) */}
                 <div className="space-y-3 sm:space-y-4">
                   {(director || creator) && (
                     <div>
-                      <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                        {selectedMedia.type === "tv" ? "Creator" : "Director"}
-                      </h4>
+                      <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{selectedMedia.type === "tv" ? "Creator" : "Director"}</h4>
                       <p className="mt-0.5 text-xs sm:text-sm">{director || creator}</p>
                     </div>
                   )}
                   {selectedMedia.type === "tv" && detail.number_of_seasons && (
                     <div className="flex gap-4">
-                      <div>
-                        <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Seasons</h4>
-                        <p className="mt-0.5 text-xs sm:text-sm">{detail.number_of_seasons}</p>
-                      </div>
-                      <div>
-                        <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Episodes</h4>
-                        <p className="mt-0.5 text-xs sm:text-sm">{detail.number_of_episodes}</p>
-                      </div>
+                      <div><h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Seasons</h4><p className="mt-0.5 text-xs sm:text-sm">{detail.number_of_seasons}</p></div>
+                      <div><h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Episodes</h4><p className="mt-0.5 text-xs sm:text-sm">{detail.number_of_episodes}</p></div>
                     </div>
                   )}
                   {detail.spoken_languages && detail.spoken_languages.length > 0 && (
-                    <div>
-                      <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Languages</h4>
-                      <p className="mt-0.5 text-xs sm:text-sm">{detail.spoken_languages.map((l) => l.english_name).join(", ")}</p>
-                    </div>
+                    <div><h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Languages</h4><p className="mt-0.5 text-xs sm:text-sm">{detail.spoken_languages.map((l) => l.english_name).join(", ")}</p></div>
                   )}
                   {detail.production_companies && detail.production_companies.length > 0 && (
-                    <div>
-                      <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Production</h4>
-                      <p className="mt-0.5 text-xs sm:text-sm">{detail.production_companies.map((c) => c.name).join(", ")}</p>
-                    </div>
+                    <div><h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Production</h4><p className="mt-0.5 text-xs sm:text-sm">{detail.production_companies.map((c) => c.name).join(", ")}</p></div>
                   )}
                 </div>
               </div>
 
-              {/* Similar */}
+              {/* Similar / Recommendations */}
               {similar.length > 0 && (
                 <div className="border-t border-border px-4 py-4 sm:px-6 sm:py-6 md:px-8">
                   <h3 className="mb-3 text-sm font-bold sm:mb-4 sm:text-base">More Like This</h3>
                   <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 sm:gap-3 md:grid-cols-5 lg:grid-cols-6">
-                    {similar.map((movie) => (
-                      <MovieCard key={`sim-${movie.id}`} movie={movie} size="sm" />
-                    ))}
+                    {similar.map((m) => <MovieCard key={`sim-${m.id}`} movie={m} size="sm" />)}
                   </div>
                 </div>
               )}
+
+              {/* Comments Section - NOW AT THE VERY BOTTOM */}
+              <div className="border-t border-border px-4 py-4 sm:px-6 sm:py-6 md:px-8">
+                <h3 className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground sm:text-sm">
+                  <MessageSquare className="h-4 w-4" />Comments ({comments.length})
+                </h3>
+                <div className="mb-4 flex gap-2">
+                  <Avatar className="h-8 w-8 shrink-0">
+                    <AvatarImage src={session?.user?.image || undefined} />
+                    <AvatarFallback className="bg-primary/20 text-xs text-primary">{session?.user?.name?.[0]?.toUpperCase() || "U"}</AvatarFallback>
+                  </Avatar>
+                  <div className="flex-1">
+                    <textarea value={commentText} onChange={(e) => setCommentText(e.target.value)} placeholder={status === "authenticated" ? "Tulis komentar..." : "Login untuk berkomentar"} disabled={status !== "authenticated"} className="w-full resize-none rounded-lg border border-border bg-transparent px-3 py-2 text-sm outline-none placeholder:text-muted-foreground focus:border-primary disabled:opacity-50" rows={2} maxLength={2000} />
+                    {status === "authenticated" && (
+                      <Button size="sm" onClick={handlePostComment} disabled={!commentText.trim() || commentLoading} className="mt-2 gap-1.5">
+                        {commentLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}Post
+                      </Button>
+                    )}
+                  </div>
+                </div>
+                <div className="space-y-3">
+                  {comments.length === 0 ? (
+                    <p className="py-4 text-center text-xs text-muted-foreground">Belum ada komentar. Jadilah yang pertama!</p>
+                  ) : (
+                    comments.map((c) => (
+                      <CommentNode key={c.id} comment={c} currentUserId={session?.user?.id} onReply={(id) => { setReplyTo(id); setReplyText(""); }} replyTo={replyTo} replyText={replyText} setReplyText={setReplyText} onPostReply={handlePostReply} onDelete={handleDeleteComment} commentLoading={commentLoading} level={0} />
+                    ))
+                  )}
+                </div>
+              </div>
             </div>
-          )}
+          ) : null}
         </ScrollArea>
       </DialogContent>
     </Dialog>
@@ -688,13 +532,9 @@ interface CommentNodeProps {
   level: number;
 }
 
-function CommentNode({
-  comment, currentUserId, onReply, replyTo, replyText, setReplyText, onPostReply, onDelete, commentLoading, level,
-}: CommentNodeProps) {
+function CommentNode({ comment, currentUserId, onReply, replyTo, replyText, setReplyText, onPostReply, onDelete, commentLoading, level }: CommentNodeProps) {
   const initial = comment.userName?.[0]?.toUpperCase() || "U";
-  const timeAgo = new Date(comment.createdAt).toLocaleDateString("id-ID", {
-    day: "numeric", month: "short", year: "numeric",
-  });
+  const timeAgo = new Date(comment.createdAt).toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" });
   const isOwner = currentUserId === comment.userId;
 
   return (
@@ -713,61 +553,21 @@ function CommentNode({
             <p className="mt-1 text-xs leading-relaxed sm:text-sm">{comment.content}</p>
           </div>
           <div className="mt-1 flex items-center gap-3 px-1">
-            <button
-              onClick={() => onReply(comment.id)}
-              className="flex items-center gap-1 text-[10px] text-muted-foreground transition-colors hover:text-primary"
-            >
-              <CornerDownRight className="h-3 w-3" />
-              Reply
-            </button>
-            {isOwner && (
-              <button
-                onClick={() => onDelete(comment.id)}
-                className="flex items-center gap-1 text-[10px] text-muted-foreground transition-colors hover:text-destructive"
-              >
-                <Trash2 className="h-3 w-3" />
-                Delete
-              </button>
-            )}
+            <button onClick={() => onReply(comment.id)} className="flex items-center gap-1 text-[10px] text-muted-foreground transition-colors hover:text-primary"><CornerDownRight className="h-3 w-3" />Reply</button>
+            {isOwner && <button onClick={() => onDelete(comment.id)} className="flex items-center gap-1 text-[10px] text-muted-foreground transition-colors hover:text-destructive"><Trash2 className="h-3 w-3" />Delete</button>}
           </div>
-
-          {/* Reply form */}
           {replyTo === comment.id && (
             <div className="mt-2 flex gap-2">
-              <textarea
-                value={replyText}
-                onChange={(e) => setReplyText(e.target.value)}
-                placeholder={`Reply to ${comment.userName || "user"}...`}
-                className="flex-1 resize-none rounded-lg border border-border bg-transparent px-3 py-2 text-xs outline-none placeholder:text-muted-foreground focus:border-primary"
-                rows={2}
-                maxLength={2000}
-                autoFocus
-              />
-              <Button size="sm" onClick={() => onPostReply(comment.id)} disabled={!replyText.trim() || commentLoading} className="gap-1 self-end">
-                {commentLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Send className="h-3 w-3" />}
-              </Button>
+              <textarea value={replyText} onChange={(e) => setReplyText(e.target.value)} placeholder={`Reply to ${comment.userName || "user"}...`} className="flex-1 resize-none rounded-lg border border-border bg-transparent px-3 py-2 text-xs outline-none placeholder:text-muted-foreground focus:border-primary" rows={2} maxLength={2000} autoFocus />
+              <Button size="sm" onClick={() => onPostReply(comment.id)} disabled={!replyText.trim() || commentLoading} className="gap-1 self-end">{commentLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Send className="h-3 w-3" />}</Button>
             </div>
           )}
         </div>
       </div>
-
-      {/* Render replies recursively */}
       {comment.replies && comment.replies.length > 0 && (
         <div className="mt-3 space-y-3">
-          {comment.replies.map((reply) => (
-            <CommentNode
-              key={reply.id}
-              comment={reply}
-              currentUserId={currentUserId}
-              onReply={onReply}
-              replyTo={replyTo}
-              replyText={replyText}
-              setReplyText={setReplyText}
-              onPostReply={onPostReply}
-              onDelete={onDelete}
-              commentLoading={commentLoading}
-              level={level + 1}
-            />
+          {comment.replies.map((r) => (
+            <CommentNode key={r.id} comment={r} currentUserId={currentUserId} onReply={onReply} replyTo={replyTo} replyText={replyText} setReplyText={setReplyText} onPostReply={onPostReply} onDelete={onDelete} commentLoading={commentLoading} level={level + 1} />
           ))}
         </div>
       )}
