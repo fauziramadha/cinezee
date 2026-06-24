@@ -17,6 +17,8 @@ import {
   Send,
   Trash2,
   CornerDownRight,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import {
   Dialog,
@@ -28,6 +30,13 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useAppStore } from "@/lib/store";
 import { getImageUrl, type MovieDetail } from "@/lib/tmdb";
 import { MovieCard } from "./movie-card";
@@ -91,6 +100,10 @@ export function DetailModal() {
   const [replyTo, setReplyTo] = useState<string | null>(null);
   const [replyText, setReplyText] = useState("");
 
+  // Season/Episode state (for TV shows)
+  const [season, setSeason] = useState(1);
+  const [episode, setEpisode] = useState(1);
+
   useEffect(() => {
     if (!selectedMedia) {
       Promise.resolve().then(() => {
@@ -103,6 +116,8 @@ export function DetailModal() {
         setReplyTo(null);
         setReplyText("");
         setCommentText("");
+        setSeason(1);
+        setEpisode(1);
       });
       return;
     }
@@ -165,7 +180,7 @@ export function DetailModal() {
   const handleOpen = () => {
     if (!selectedMedia) return;
     addToHistory({ ...selectedMedia, watchedAt: new Date().toISOString() });
-    openPlayer(selectedMedia);
+    openPlayer(selectedMedia, season, episode);
   };
 
   const handleToggleWatchlist = async () => {
@@ -371,7 +386,41 @@ export function DetailModal() {
                 <Button size="icon" variant="outline" aria-label="Share"><Share2 className="h-4 w-4" /></Button>
               </div>
 
-              {/* Content grid - 1 col mobile, 3 col desktop */}
+              {/* Season/Episode selector - NEW: Below Play Now button */}
+              {selectedMedia.type === "tv" && detail?.seasons && (
+                <div className="flex items-center gap-2 border-b border-border bg-card/30 px-4 py-3 sm:gap-3 sm:px-6 md:px-8">
+                  <Select value={String(season)} onValueChange={(v) => { setSeason(parseInt(v, 10)); setEpisode(1); }}>
+                    <SelectTrigger className="h-8 w-24 text-xs sm:w-28">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {detail.seasons.filter((s) => s.season_number > 0).map((s) => (
+                        <SelectItem key={s.id} value={String(s.season_number)}>Season {s.season_number}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Select value={String(episode)} onValueChange={(v) => setEpisode(parseInt(v, 10))}>
+                    <SelectTrigger className="h-8 w-28 text-xs sm:w-32">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className="max-h-72">
+                      {Array.from({ length: 20 }).map((_, i) => (
+                        <SelectItem key={i + 1} value={String(i + 1)}>Episode {i + 1}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <div className="ml-auto flex gap-1">
+                    <Button size="icon" variant="ghost" className="h-8 w-8" disabled={episode <= 1} onClick={() => setEpisode(Math.max(1, episode - 1))}>
+                      <ChevronLeft className="h-4 w-4" />
+                    </Button>
+                    <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => setEpisode(episode + 1)}>
+                      <ChevronRight className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              {/* Content grid */}
               <div className="grid gap-4 p-4 sm:gap-6 sm:p-6 md:grid-cols-3 md:p-8">
                 {/* Left column */}
                 <div className="md:col-span-2">
@@ -425,7 +474,7 @@ export function DetailModal() {
                     </div>
                   )}
 
-                  {/* Rating Section - NOW AFTER CAST */}
+                  {/* Rating Section */}
                   <div className="mt-6 border-t border-border pt-4">
                     <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground sm:text-sm">Rate This {selectedMedia.type === "tv" ? "Series" : "Movie"}</h3>
                     <div className="flex items-center gap-1">
@@ -446,7 +495,7 @@ export function DetailModal() {
                   </div>
                 </div>
 
-                {/* Right column - SIDEBAR INFO - NOW IN RIGHT COLUMN (desktop) / ABOVE RATING (mobile) */}
+                {/* Right column - Sidebar Info */}
                 <div className="space-y-3 sm:space-y-4">
                   {(director || creator) && (
                     <div>
@@ -469,18 +518,18 @@ export function DetailModal() {
                 </div>
               </div>
 
-              {/* Similar / Recommendations */}
+              {/* Similar / Recommendations - Horizontal Scroll */}
               {similar.length > 0 && (
-                <div className="border-t border-border px-4 py-4 sm:px-6 sm:py-6 md:px-8">
-                  <h3 className="mb-3 text-sm font-bold sm:mb-4 sm:text-base">More Like This</h3>
-                  <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 sm:gap-3 md:grid-cols-5 lg:grid-cols-6">
+                <div className="border-t border-border py-4 sm:py-6">
+                  <h3 className="mb-3 px-4 text-sm font-bold sm:mb-4 sm:px-6 sm:text-base md:px-8">More Like This</h3>
+                  <div className="content-row flex gap-3 overflow-x-auto scroll-smooth px-4 pb-2 sm:px-6 lg:px-8">
                     {similar.map((m) => <MovieCard key={`sim-${m.id}`} movie={m} size="sm" />)}
                   </div>
                 </div>
               )}
 
-              {/* Comments Section - NOW AT THE VERY BOTTOM */}
-              <div className="border-t border-border px-4 py-4 sm:px-6 sm:py-6 md:px-8">
+              {/* Comments Section - Bottom with extra padding */}
+              <div className="border-t border-border px-4 py-4 pb-12 sm:px-6 sm:py-6 md:px-8">
                 <h3 className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground sm:text-sm">
                   <MessageSquare className="h-4 w-4" />Comments ({comments.length})
                 </h3>
