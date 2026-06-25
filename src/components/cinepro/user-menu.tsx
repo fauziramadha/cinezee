@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { useSession, signOut } from "next-auth/react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { LogOut, User as UserIcon, Settings, ChevronDown, Loader2, Bookmark, History, Languages, Check } from "lucide-react";
@@ -20,6 +21,7 @@ const LANGUAGES = [
 ];
 
 export function UserMenu() {
+  const router = useRouter();
   const { data: session, status } = useSession();
   const [menuOpen, setMenuOpen] = useState(false);
   const [langOpen, setLangOpen] = useState(false);
@@ -47,7 +49,6 @@ export function UserMenu() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // Don't render anything if loading or not authenticated
   if (status === "loading") {
     return (
       <div className="flex h-9 w-9 items-center justify-center rounded-full bg-muted">
@@ -86,7 +87,7 @@ export function UserMenu() {
       });
 
       if (res.ok) {
-        setSelectedLang(code); // Update local state immediately
+        setSelectedLang(code);
         toast.success(`Language changed to ${LANGUAGES.find(l => l.code === code)?.name}`);
         setLangOpen(false);
       } else {
@@ -141,21 +142,21 @@ export function UserMenu() {
           {/* Menu items */}
           <div className="p-1">
             <button
-              onClick={() => setMenuOpen(false)}
-              className="flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-sm text-foreground transition-colors hover:bg-muted"
-            >
-              <UserIcon className="h-4 w-4 text-muted-foreground" />
-              Profil Saya
-            </button>
+  onClick={() => { setMenuOpen(false); router.push("/profile"); }}
+  className="flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-sm text-foreground transition-colors hover:bg-muted"
+>
+  <UserIcon className="h-4 w-4 text-muted-foreground" />
+  Profil Saya
+</button>
             <button
-              onClick={() => setMenuOpen(false)}
+              onClick={() => { setMenuOpen(false); router.push("/watchlist"); }}
               className="flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-sm text-foreground transition-colors hover:bg-muted"
             >
               <Bookmark className="h-4 w-4 text-muted-foreground" />
               Watchlist
             </button>
             <button
-              onClick={() => setMenuOpen(false)}
+              onClick={() => { setMenuOpen(false); router.push("/history"); }}
               className="flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-sm text-foreground transition-colors hover:bg-muted"
             >
               <History className="h-4 w-4 text-muted-foreground" />
