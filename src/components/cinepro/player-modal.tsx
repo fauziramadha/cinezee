@@ -208,10 +208,10 @@ export function PlayerModal() {
     >
       <DialogContent
         className={cn(
-          "flex flex-col gap-0 overflow-hidden border-0 bg-black p-0 transition-all duration-300",
+          "flex flex-col gap-0 overflow-hidden border-0 bg-black p-0 transition-all duration-300 !max-w-none !max-h-none",
           isPseudoFullscreen
-            ? "fixed inset-0 z-[9999] h-[100dvh] w-[100dvh] max-h-[100dvh] max-w-[100vw] rounded-none"
-            : "h-[100dvh] max-h-[100dvh] w-full max-w-[100vw] sm:rounded-none md:h-[90vh] md:max-h-[90vh] md:w-[95vw] md:max-w-5xl md:rounded-xl"
+            ? "fixed inset-0 z-[9999] h-screen w-screen !m-0 !rounded-none"
+            : "h-[100dvh] w-full sm:rounded-none md:h-[90vh] md:w-[95vw] md:max-w-5xl md:rounded-xl"
         )}
       >
         <DialogTitle className="sr-only">{playerMedia.title} Player</DialogTitle>
