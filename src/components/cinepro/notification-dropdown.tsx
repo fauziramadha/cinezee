@@ -26,6 +26,7 @@ export function NotificationDropdown() {
   // Fetch notifications
   const fetchNotifications = async () => {
     try {
+      setLoading(true);
       const res = await fetch("/api/notifications");
       if (!res.ok) return;
       const data = await res.json();
@@ -33,13 +34,15 @@ export function NotificationDropdown() {
       setUnreadCount(data.unreadCount || 0);
     } catch (error) {
       // Silent fail
+    } finally {
+      setLoading(false);
     }
   };
 
   // Initial load + polling every 30 seconds
   useEffect(() => {
     fetchNotifications();
-    const interval = setInterval(fetchNotifications, 30000); // Refresh every 30s
+    const interval = setInterval(fetchNotifications, 30000);
     return () => clearInterval(interval);
   }, []);
 
@@ -84,7 +87,6 @@ export function NotificationDropdown() {
     try {
       await fetch(`/api/notifications?id=${id}`, { method: "DELETE" });
       setNotifications((prev) => prev.filter((n) => n.id !== id));
-      // Re-count unread
       const deleted = notifications.find((n) => n.id === id);
       if (deleted && !deleted.read) {
         setUnreadCount((prev) => Math.max(0, prev - 1));
@@ -116,13 +118,12 @@ export function NotificationDropdown() {
       <button
         onClick={() => {
           setOpen(!open);
-          if (!open) fetchNotifications(); // Refresh on open
+          if (!open) fetchNotifications();
         }}
         className="relative flex h-9 w-9 items-center justify-center rounded-full transition-colors hover:bg-muted"
         aria-label="Notifications"
       >
         <Bell className="h-5 w-5 text-muted-foreground" />
-        {/* Unread Badge */}
         {unreadCount > 0 && (
           <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-primary px-1 text-[9px] font-bold text-primary-foreground">
             {unreadCount > 9 ? "9+" : unreadCount}
@@ -130,9 +131,9 @@ export function NotificationDropdown() {
         )}
       </button>
 
-      {/* Dropdown Panel */}
+      {/* Dropdown Panel - FIXED: proper width + overflow */}
       {open && (
-        <div className="absolute right-0 top-full z-50 mt-2 w-80 max-w-[calc(100vw-2rem)] overflow-hidden rounded-lg border border-border bg-popover shadow-xl sm:w-96">
+        <div className="absolute right-0 top-full z-50 mt-2 w-[calc(100vw-2rem)] max-w-sm overflow-hidden rounded-lg border border-border bg-popover shadow-xl sm:w-96">
           {/* Header */}
           <div className="flex items-center justify-between border-b border-border px-4 py-3">
             <h3 className="text-sm font-semibold">Notifikasi</h3>
@@ -148,7 +149,7 @@ export function NotificationDropdown() {
           </div>
 
           {/* List */}
-          <div className="max-h-[60vh] overflow-y-auto scrollbar-thin">
+          <div className="max-h-[60vh] overflow-y-auto">
             {loading ? (
               <div className="p-8 text-center text-xs text-muted-foreground">
                 Memuat...
@@ -166,28 +167,34 @@ export function NotificationDropdown() {
                   <div
                     key={notif.id}
                     className={cn(
-                      "group relative p-3 transition-colors hover:bg-muted/40",
+                      "relative px-4 py-3 transition-colors hover:bg-muted/40",
                       !notif.read && "bg-primary/5",
                     )}
                   >
                     {/* Unread indicator */}
                     {!notif.read && (
-                      <span className="absolute left-1 top-1/2 h-1.5 w-1.5 -translate-y-1/2 rounded-full bg-primary" />
+                      <span className="absolute left-1.5 top-1/2 h-1.5 w-1.5 -translate-y-1/2 rounded-full bg-primary" />
                     )}
 
-                    <div className="pl-3">
+                    {/* Content - FIXED: min-w-0 + break-words to prevent text cutoff */}
+                    <div className="min-w-0">
+                      {/* Title + Time row */}
                       <div className="flex items-start justify-between gap-2">
-                        <p className="text-xs font-semibold">{notif.title}</p>
+                        <p className="min-w-0 flex-1 break-words text-xs font-semibold">
+                          {notif.title}
+                        </p>
                         <span className="shrink-0 text-[9px] text-muted-foreground">
                           {formatTimeAgo(notif.createdAt)}
                         </span>
                       </div>
-                      <p className="mt-0.5 text-[11px] leading-relaxed text-muted-foreground">
+                      
+                      {/* Message - FIXED: break-words + proper line height */}
+                      <p className="mt-0.5 break-words text-[11px] leading-relaxed text-muted-foreground">
                         {notif.message}
                       </p>
 
                       {/* Actions */}
-                      <div className="mt-1.5 flex items-center gap-2 opacity-0 transition-opacity group-hover:opacity-100">
+                      <div className="mt-1.5 flex items-center gap-3">
                         {!notif.read && (
                           <button
                             onClick={() => handleMarkAsRead(notif.id)}
