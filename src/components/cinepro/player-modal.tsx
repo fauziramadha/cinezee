@@ -76,7 +76,6 @@ export function PlayerModal() {
         setIsPseudoFullscreen(false);
       }
     };
-    // Use capture phase to intercept before Radix Dialog's ESC handler
     window.addEventListener("keydown", handleEscape, true);
     return () => window.removeEventListener("keydown", handleEscape, true);
   }, [isPseudoFullscreen]);
@@ -225,19 +224,17 @@ export function PlayerModal() {
 
   const iframeUrl = currentProvider?.url;
   const isTV = playerMedia.type === "tv" && detail?.seasons;
-  // Check if current provider is FilmU (Server 1 or 2)
   const isFilmU = currentProvider?.url.includes("embed.filmu.in");
 
   // ============================================================
-  // KEY FIX: Inline style to KILL the `transform: translate(-50%, -50%)`
-  // that Radix DialogContent applies by default.
-  // Without this, `inset-0` + `h-screen w-screen` will still be
-  // shifted -50% / -50%, making the modal appear in the top-left
-  // corner, partially off-screen.
+  // KEY FIX: Pure inline styles for ALL positioning.
+  // NO `transform: translate(-50%, -50%)` — that has a known bug
+  // on iOS Safari where fixed + transform causes incorrect position.
+  // Instead we use `inset: 0` + FLEX centering on a wrapper.
   // ============================================================
   const dialogContentStyle: React.CSSProperties = isPseudoFullscreen
     ? {
-        // Pseudo-fullscreen: full viewport, NO transform, NO translate
+        // Pseudo-fullscreen: full viewport, no rounding, no transform
         position: "fixed",
         top: "0",
         left: "0",
@@ -252,16 +249,39 @@ export function PlayerModal() {
         maxHeight: "none",
         minWidth: "100vw",
         minHeight: "100vh",
-        // CRITICAL: must be `none`, not `translate(0,0)` — `none`
-        // is the only value that fully kills the default transform.
         transform: "none",
         borderRadius: "0",
         border: "none",
         zIndex: 99999,
       }
     : {
-        // Normal mode: keep Radix defaults but ensure transform is set
-        // so it's predictable. (Don't override if you want Radix centering.)
+        // Normal mode: FLEX-centered, NO transform (Safari-safe)
+        position: "fixed",
+        top: "0",
+        left: "0",
+        right: "0",
+        bottom: "0",
+        inset: "0",
+        width: "100vw",
+        height: "100vh",
+        margin: "0",
+        padding: "0",
+        maxWidth: "none",
+        maxHeight: "none",
+        transform: "none",
+        borderRadius: "0",
+        border: "none",
+        zIndex: 50,
+        // Use flex to center the actual player box inside this wrapper
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        // Safe area padding for iPhones with notch
+        paddingTop: "env(safe-area-inset-top)",
+        paddingBottom: "env(safe-area-inset-bottom)",
+        paddingLeft: "env(safe-area-inset-left)",
+        paddingRight: "env(safe-area-inset-right)",
+        backgroundColor: "rgba(0,0,0,0.9)",
       };
 
   // Controls visibility (auto-hide in pseudo-fullscreen)
@@ -279,252 +299,276 @@ export function PlayerModal() {
     >
       <DialogContent
         style={dialogContentStyle}
-        className={cn(
-          "flex flex-col gap-0 overflow-hidden border-0 bg-black p-0 transition-all duration-300",
-          isPseudoFullscreen
-            ? // Pseudo-fullscreen: full screen, no rounding
-              "!max-w-none !max-h-none h-screen w-screen !m-0 !rounded-none"
-            : // Normal mode
-              "h-[100dvh] w-full sm:rounded-none md:h-[90vh] md:w-[95vw] md:max-w-5xl md:rounded-xl"
-        )}
+        // Strip ALL default shadcn classes that use transform.
+        className="!p-0 !border-0 !bg-transparent !shadow-none !gap-0 !max-w-none !max-h-none !w-auto !h-auto !left-auto !top-auto !translate-x-0 !translate-y-0"
         onMouseMove={handleMouseMove}
-        // Disable Radix's default close-on-ESC when in pseudo-fullscreen
-        // (we handle ESC ourselves above)
         onEscapeKeyDown={(e) => {
           if (isPseudoFullscreen) {
             e.preventDefault();
           }
         }}
-        // Disable Radix's default click-outside-close when in pseudo-fullscreen
         onPointerDownOutside={(e) => {
-          if (isPseudoFullscreen) {
-            e.preventDefault();
-          }
+          e.preventDefault();
         }}
         onInteractOutside={(e) => {
-          if (isPseudoFullscreen) {
-            e.preventDefault();
-          }
+          e.preventDefault();
         }}
       >
         <DialogTitle className="sr-only">{playerMedia.title} Player</DialogTitle>
 
-        {/* Top bar - Auto hide on Pseudo Fullscreen */}
+        {/* ============================================================ */}
+        {/* INNER PLAYER BOX                                              */}
+        {/* In pseudo-fullscreen: fills entire viewport                  */}
+        {/* In normal mode: 95vw x 85vh, max 1100px, rounded corners     */}
+        {/* ============================================================ */}
         <div
-          className={cn(
-            "absolute left-0 right-0 top-0 z-30 flex shrink-0 items-center justify-between gap-2 bg-gradient-to-b from-black/90 to-transparent px-3 py-2 transition-opacity duration-300 sm:px-4 sm:py-3",
-            controlsVisible ? "opacity-100" : "opacity-0"
-          )}
+          style={
+            isPseudoFullscreen
+              ? {
+                  position: "relative",
+                  width: "100%",
+                  height: "100%",
+                  margin: "0",
+                  borderRadius: "0",
+                  backgroundColor: "#000",
+                  display: "flex",
+                  flexDirection: "column",
+                  overflow: "hidden",
+                }
+              : {
+                  position: "relative",
+                  width: "95vw",
+                  maxWidth: "1100px",
+                  height: "85vh",
+                  maxHeight: "700px",
+                  margin: "0",
+                  borderRadius: "12px",
+                  backgroundColor: "#000",
+                  display: "flex",
+                  flexDirection: "column",
+                  overflow: "hidden",
+                  border: "1px solid rgba(255,255,255,0.1)",
+                  boxShadow: "0 25px 50px -12px rgba(0,0,0,0.8)",
+                }
+          }
         >
-          <div className="min-w-0 flex-1">
-            <h2 className="truncate text-xs font-semibold text-white sm:text-sm md:text-base">
-              {playerMedia.title}
-            </h2>
-            <p className="truncate text-[10px] text-white/60 sm:text-xs">
-              {playerMedia.type === "tv"
-                ? `Season ${season} • Episode ${episode}`
-                : "Now Playing"}
-            </p>
+          {/* Top bar - Auto hide on Pseudo Fullscreen */}
+          <div
+            className={cn(
+              "absolute left-0 right-0 top-0 z-30 flex shrink-0 items-center justify-between gap-2 bg-gradient-to-b from-black/90 to-transparent px-3 py-2 transition-opacity duration-300 sm:px-4 sm:py-3",
+              controlsVisible ? "opacity-100" : "opacity-0"
+            )}
+          >
+            <div className="min-w-0 flex-1">
+              <h2 className="truncate text-xs font-semibold text-white sm:text-sm md:text-base">
+                {playerMedia.title}
+              </h2>
+              <p className="truncate text-[10px] text-white/60 sm:text-xs">
+                {playerMedia.type === "tv"
+                  ? `Season ${season} • Episode ${episode}`
+                  : "Now Playing"}
+              </p>
+            </div>
+
+            {providers.length > 0 && (
+              <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
+                {/* Pseudo-Fullscreen Button (Only for FilmU) */}
+                {isFilmU && iframeLoaded && !iframeError && (
+                  <button
+                    onClick={() => setIsPseudoFullscreen(!isPseudoFullscreen)}
+                    className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-white/10 text-white backdrop-blur-sm transition-colors hover:bg-primary sm:h-9 sm:w-9"
+                    aria-label={isPseudoFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
+                  >
+                    {isPseudoFullscreen ? <Minimize className="h-3.5 w-3.5 sm:h-4 sm:w-4" /> : <Maximize className="h-3.5 w-3.5 sm:h-4 sm:w-4" />}
+                  </button>
+                )}
+
+                <Select
+                  value={String(currentIdx)}
+                  onValueChange={(v) => setCurrentIdx(parseInt(v, 10))}
+                >
+                  <SelectTrigger className="h-7 w-24 gap-1 border-white/20 bg-white/10 text-[10px] text-white backdrop-blur-sm sm:h-8 sm:w-32 sm:text-xs md:w-40">
+                    <Server className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {providers.map((p, idx) => (
+                      <SelectItem key={p.name} value={String(idx)}>
+                        <span className="flex items-center gap-2">
+                          {p.name}
+                          <Badge
+                            variant="outline"
+                            className={cn(
+                              "ml-1 px-1 text-[8px] sm:text-[9px]",
+                              p.brutality === 0
+                                ? "border-green-500/40 text-green-400"
+                                : p.brutality <= 2
+                                  ? "border-yellow-500/40 text-yellow-400"
+                                  : "border-red-500/40 text-red-400",
+                            )}
+                          >
+                            {p.brutality === 0
+                              ? "Clean"
+                              : p.brutality <= 2
+                                ? "Low"
+                                : p.brutality <= 4
+                                  ? "Med"
+                                  : "High"}
+                          </Badge>
+                        </span>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+
+                <button
+                  onClick={() => {
+                    setIsPseudoFullscreen(false);
+                    closePlayer();
+                  }}
+                  className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-white/10 text-white backdrop-blur-sm transition-colors hover:bg-primary sm:h-9 sm:w-9"
+                  aria-label="Close player"
+                >
+                  <X className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                </button>
+              </div>
+            )}
           </div>
 
-          {providers.length > 0 && (
-            <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
-              {/* Pseudo-Fullscreen Button (Only for FilmU) */}
-              {isFilmU && iframeLoaded && !iframeError && (
-                <button
-                  onClick={() => setIsPseudoFullscreen(!isPseudoFullscreen)}
-                  className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-white/10 text-white backdrop-blur-sm transition-colors hover:bg-primary sm:h-9 sm:w-9"
-                  aria-label={isPseudoFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
-                >
-                  {isPseudoFullscreen ? <Minimize className="h-3.5 w-3.5 sm:h-4 sm:w-4" /> : <Maximize className="h-3.5 w-3.5 sm:h-4 sm:w-4" />}
-                </button>
-              )}
+          {/* Player area */}
+          <div className="relative flex-1 overflow-hidden bg-black">
+            {loading && (
+              <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-white">
+                <Loader2 className="h-10 w-10 animate-spin text-primary" />
+                <p className="text-sm text-white/70">Loading stream...</p>
+              </div>
+            )}
 
-              <Select
-                value={String(currentIdx)}
-                onValueChange={(v) => setCurrentIdx(parseInt(v, 10))}
-              >
-                <SelectTrigger className="h-7 w-24 gap-1 border-white/20 bg-white/10 text-[10px] text-white backdrop-blur-sm sm:h-8 sm:w-32 sm:text-xs md:w-40">
-                  <Server className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
+            {!loading && iframeUrl && (
+              <>
+                <iframe
+                  key={iframeUrl}
+                  src={iframeUrl}
+                  className={cn(
+                    "h-full w-full transition-opacity duration-500",
+                    iframeLoaded ? "opacity-100" : "opacity-0"
+                  )}
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
+                  allowFullScreen
+                  referrerPolicy="origin"
+                  onLoad={() => setIframeLoaded(true)}
+                  onError={handleIframeError}
+                  title={`${playerMedia.title} Player`}
+                />
+
+                {!iframeLoaded && !iframeError && (
+                  <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black text-white">
+                    <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                    <p className="text-xs text-white/70">
+                      Loading from {currentProvider?.name}...
+                    </p>
+                  </div>
+                )}
+
+                {iframeError && (
+                  <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-black p-6 text-center text-white">
+                    <AlertCircle className="h-12 w-12 text-red-500" />
+                    <div>
+                      <p className="mb-1 text-base font-semibold">
+                        Playback Error
+                      </p>
+                      <p className="text-sm text-white/60">
+                        {currentProvider?.name} couldn&apos;t load this title.
+                        Try another server.
+                      </p>
+                    </div>
+                    <div className="flex gap-2">
+                      <Button
+                        onClick={switchProvider}
+                        size="sm"
+                        className="gap-2"
+                      >
+                        <RotateCcw className="h-3.5 w-3.5" />
+                        Try Next Server
+                      </Button>
+                      <Button
+                        onClick={() => {
+                          setIframeError(false);
+                          setIframeLoaded(false);
+                        }}
+                        variant="outline"
+                        size="sm"
+                      >
+                        Retry
+                      </Button>
+                    </div>
+                    <p className="text-xs text-white/40">
+                      Server {currentIdx + 1} of {providers.length}
+                    </p>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+
+          {/* Bottom controls for TV shows - Auto hide on Pseudo Fullscreen */}
+          {isTV && (
+            <div
+              className={cn(
+                "absolute bottom-0 left-0 right-0 z-30 flex shrink-0 items-center gap-2 bg-gradient-to-t from-black/90 to-transparent px-3 py-2 transition-opacity duration-300 sm:gap-3 sm:px-4 sm:py-3",
+                controlsVisible ? "opacity-100" : "opacity-0"
+              )}
+            >
+              <Select value={String(season)} onValueChange={(v) => setSeason(parseInt(v, 10))}>
+                <SelectTrigger className="h-7 w-20 border-white/20 bg-white/10 text-[10px] text-white backdrop-blur-sm sm:h-8 sm:w-24 sm:text-xs">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {providers.map((p, idx) => (
-                    <SelectItem key={p.name} value={String(idx)}>
-                      <span className="flex items-center gap-2">
-                        {p.name}
-                        <Badge
-                          variant="outline"
-                          className={cn(
-                            "ml-1 px-1 text-[8px] sm:text-[9px]",
-                            p.brutality === 0
-                              ? "border-green-500/40 text-green-400"
-                              : p.brutality <= 2
-                                ? "border-yellow-500/40 text-yellow-400"
-                                : "border-red-500/40 text-red-400",
-                          )}
-                        >
-                          {p.brutality === 0
-                            ? "Clean"
-                            : p.brutality <= 2
-                              ? "Low"
-                              : p.brutality <= 4
-                                ? "Med"
-                                : "High"}
-                        </Badge>
-                      </span>
+                  {detail.seasons
+                    .filter((s) => s.season_number > 0)
+                    .map((s) => (
+                      <SelectItem key={s.id} value={String(s.season_number)}>
+                        Season {s.season_number}
+                      </SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
+
+              <Select value={String(episode)} onValueChange={(v) => setEpisode(parseInt(v, 10))}>
+                <SelectTrigger className="h-7 w-24 border-white/20 bg-white/10 text-[10px] text-white backdrop-blur-sm sm:h-8 sm:w-28 sm:text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="max-h-72">
+                  {Array.from({ length: 20 }).map((_, i) => (
+                    <SelectItem key={i + 1} value={String(i + 1)}>
+                      Episode {i + 1}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
 
-              <button
-                onClick={() => {
-                  setIsPseudoFullscreen(false);
-                  closePlayer();
-                }}
-                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-white/10 text-white backdrop-blur-sm transition-colors hover:bg-primary sm:h-9 sm:w-9"
-                aria-label="Close player"
-              >
-                <X className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-              </button>
+              <div className="ml-auto flex gap-1">
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="h-7 w-7 text-white hover:bg-white/10 sm:h-8 sm:w-8"
+                  disabled={episode <= 1}
+                  onClick={() => setEpisode(Math.max(1, episode - 1))}
+                >
+                  <ChevronLeft className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                </Button>
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="h-7 w-7 text-white hover:bg-white/10 sm:h-8 sm:w-8"
+                  onClick={() => setEpisode(episode + 1)}
+                >
+                  <ChevronRight className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                </Button>
+              </div>
             </div>
           )}
         </div>
-
-        {/* Player area */}
-        <div className="relative flex-1 overflow-hidden bg-black">
-          {loading && (
-            <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-white">
-              <Loader2 className="h-10 w-10 animate-spin text-primary" />
-              <p className="text-sm text-white/70">Loading stream...</p>
-            </div>
-          )}
-
-          {!loading && iframeUrl && (
-            <>
-              <iframe
-                key={iframeUrl}
-                src={iframeUrl}
-                className={cn(
-                  "h-full w-full transition-opacity duration-500",
-                  iframeLoaded ? "opacity-100" : "opacity-0"
-                )}
-                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
-                allowFullScreen
-                referrerPolicy="origin"
-                onLoad={() => setIframeLoaded(true)}
-                onError={handleIframeError}
-                title={`${playerMedia.title} Player`}
-              />
-
-              {!iframeLoaded && !iframeError && (
-                <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black text-white">
-                  <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                  <p className="text-xs text-white/70">
-                    Loading from {currentProvider?.name}...
-                  </p>
-                </div>
-              )}
-
-              {iframeError && (
-                <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-black p-6 text-center text-white">
-                  <AlertCircle className="h-12 w-12 text-red-500" />
-                  <div>
-                    <p className="mb-1 text-base font-semibold">
-                      Playback Error
-                    </p>
-                    <p className="text-sm text-white/60">
-                      {currentProvider?.name} couldn&apos;t load this title.
-                      Try another server.
-                    </p>
-                  </div>
-                  <div className="flex gap-2">
-                    <Button
-                      onClick={switchProvider}
-                      size="sm"
-                      className="gap-2"
-                    >
-                      <RotateCcw className="h-3.5 w-3.5" />
-                      Try Next Server
-                    </Button>
-                    <Button
-                      onClick={() => {
-                        setIframeError(false);
-                        setIframeLoaded(false);
-                      }}
-                      variant="outline"
-                      size="sm"
-                    >
-                      Retry
-                    </Button>
-                  </div>
-                  <p className="text-xs text-white/40">
-                    Server {currentIdx + 1} of {providers.length}
-                  </p>
-                </div>
-              )}
-            </>
-          )}
-        </div>
-
-        {/* Bottom controls for TV shows - Auto hide on Pseudo Fullscreen */}
-        {isTV && (
-          <div
-            className={cn(
-              "absolute bottom-0 left-0 right-0 z-30 flex shrink-0 items-center gap-2 bg-gradient-to-t from-black/90 to-transparent px-3 py-2 transition-opacity duration-300 sm:gap-3 sm:px-4 sm:py-3",
-              controlsVisible ? "opacity-100" : "opacity-0"
-            )}
-          >
-            <Select value={String(season)} onValueChange={(v) => setSeason(parseInt(v, 10))}>
-              <SelectTrigger className="h-7 w-20 border-white/20 bg-white/10 text-[10px] text-white backdrop-blur-sm sm:h-8 sm:w-24 sm:text-xs">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {detail.seasons
-                  .filter((s) => s.season_number > 0)
-                  .map((s) => (
-                    <SelectItem key={s.id} value={String(s.season_number)}>
-                      Season {s.season_number}
-                    </SelectItem>
-                  ))}
-              </SelectContent>
-            </Select>
-
-            <Select value={String(episode)} onValueChange={(v) => setEpisode(parseInt(v, 10))}>
-              <SelectTrigger className="h-7 w-24 border-white/20 bg-white/10 text-[10px] text-white backdrop-blur-sm sm:h-8 sm:w-28 sm:text-xs">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent className="max-h-72">
-                {Array.from({ length: 20 }).map((_, i) => (
-                  <SelectItem key={i + 1} value={String(i + 1)}>
-                    Episode {i + 1}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-
-            <div className="ml-auto flex gap-1">
-              <Button
-                size="icon"
-                variant="ghost"
-                className="h-7 w-7 text-white hover:bg-white/10 sm:h-8 sm:w-8"
-                disabled={episode <= 1}
-                onClick={() => setEpisode(Math.max(1, episode - 1))}
-              >
-                <ChevronLeft className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-              </Button>
-              <Button
-                size="icon"
-                variant="ghost"
-                className="h-7 w-7 text-white hover:bg-white/10 sm:h-8 sm:w-8"
-                onClick={() => setEpisode(episode + 1)}
-              >
-                <ChevronRight className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-              </Button>
-            </div>
-          </div>
-        )}
       </DialogContent>
     </Dialog>
   );
