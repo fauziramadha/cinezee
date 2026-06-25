@@ -61,6 +61,14 @@ export function PlayerModal() {
   const [showControls, setShowControls] = useState(true);
   const hideControlsTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // ============================================================
+  // BUG FIX 2: Track previous media id so we ONLY reset currentIdx
+  // when the actual movie/show changes — NOT when NextAuth refreshes
+  // the session token (which was causing the server selector to
+  // jump back to Server 1 every minute).
+  // ============================================================
+  const prevMediaKey = useRef<string>("");
+
   // KEY FIX: Sync local state when playerSeason/playerEpisode changes in store
   useEffect(() => {
     setSeason(playerSeason || 1);
@@ -130,9 +138,16 @@ export function PlayerModal() {
     }
   }, [playerMedia, session, status, season, episode]);
 
-  // Fetch providers when media changes
+  // ============================================================
+  // BUG FIX 2 (continued): Only reset currentIdx when media
+  // actually changes. Use a ref to track previous media key.
+  // ============================================================
   useEffect(() => {
     if (!playerMedia) return;
+
+    const mediaKey = `${playerMedia.id}-${playerMedia.type}`;
+    const isMediaChanged = mediaKey !== prevMediaKey.current;
+    prevMediaKey.current = mediaKey;
 
     let cancelled = false;
     const params = new URLSearchParams({
@@ -150,7 +165,11 @@ export function PlayerModal() {
       setLoading(true);
       setIframeLoaded(false);
       setIframeError(false);
-      setCurrentIdx(0);
+      // ONLY reset to Server 1 if the movie/show itself changed.
+      // If only season/episode changed, keep the user's server choice.
+      if (isMediaChanged) {
+        setCurrentIdx(0);
+      }
 
       try {
         const res = await fetch(`/api/providers?${params.toString()}`);
@@ -169,18 +188,22 @@ export function PlayerModal() {
 
     loadProviders();
 
-    fetch(`/api/detail/${playerMedia.id}?type=${playerMedia.type}`)
-      .then((res) => res.json())
-      .then((data) => {
-        if (cancelled) return;
-        setDetail(data);
-      })
-      .catch(() => {});
+    // Only re-fetch detail when media actually changes (not on season/episode change)
+    if (isMediaChanged) {
+      fetch(`/api/detail/${playerMedia.id}?type=${playerMedia.type}`)
+        .then((res) => res.json())
+        .then((data) => {
+          if (cancelled) return;
+          setDetail(data);
+        })
+        .catch(() => {});
+    }
 
     return () => {
       cancelled = true;
     };
-  }, [playerMedia, season, episode, saveToHistory]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [playerMedia, season, episode]);
 
   useEffect(() => {
     if (currentIdx === 0 && providers.length === 0) return;
@@ -227,10 +250,9 @@ export function PlayerModal() {
   const isFilmU = currentProvider?.url.includes("embed.filmu.in");
 
   // ============================================================
-  // KEY FIX: Pure inline styles for ALL positioning.
-  // NO `transform: translate(-50%, -50%)` — that has a known bug
-  // on iOS Safari where fixed + transform causes incorrect position.
-  // Instead we use `inset: 0` + FLEX centering on a wrapper.
+  // BUG FIX 1: Pure inline styles for ALL positioning.
+  // DO NOT use !important Tailwind classes for left/top/transform
+  // because they override inline styles and break positioning.
   // ============================================================
   const dialogContentStyle: React.CSSProperties = isPseudoFullscreen
     ? {
@@ -253,6 +275,7 @@ export function PlayerModal() {
         borderRadius: "0",
         border: "none",
         zIndex: 99999,
+        backgroundColor: "#000",
       }
     : {
         // Normal mode: FLEX-centered, NO transform (Safari-safe)
@@ -281,7 +304,8 @@ export function PlayerModal() {
         paddingBottom: "env(safe-area-inset-bottom)",
         paddingLeft: "env(safe-area-inset-left)",
         paddingRight: "env(safe-area-inset-right)",
-        backgroundColor: "rgba(0,0,0,0.9)",
+        // BUG FIX 1: Fully opaque backdrop so underlying app isn't visible
+        backgroundColor: "rgba(0,0,0,1)",
       };
 
   // Controls visibility (auto-hide in pseudo-fullscreen)
@@ -299,8 +323,10 @@ export function PlayerModal() {
     >
       <DialogContent
         style={dialogContentStyle}
-        // Strip ALL default shadcn classes that use transform.
-        className="!p-0 !border-0 !bg-transparent !shadow-none !gap-0 !max-w-none !max-h-none !w-auto !h-auto !left-auto !top-auto !translate-x-0 !translate-y-0"
+        // BUG FIX 1: Only override cosmetic defaults. DO NOT touch
+        // left/top/width/height/transform with !important — those
+        // would override our inline styles and break positioning.
+        className="!p-0 !border-0 !bg-transparent !shadow-none !gap-0 !rounded-none"
         onMouseMove={handleMouseMove}
         onEscapeKeyDown={(e) => {
           if (isPseudoFullscreen) {
