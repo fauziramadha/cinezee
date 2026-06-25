@@ -1,11 +1,12 @@
 /**
- * src/components/user-messages.tsx
+ * src/components/user-messages.tsx (REVISED - Mobile Optimized)
  *
  * Bell icon dropdown untuk user melihat pesan dari admin.
  * - Polling tiap 60 detik untuk unread count
  * - Click bell → open dropdown with message list
  * - Click message → expand body, mark as read
  * - "Mark all as read" button
+ * - Mobile-first: dropdown tidak keluar layar
  *
  * Cara pakai di header:
  *   import { UserMessages } from "@/components/user-messages";
@@ -84,7 +85,7 @@ export function UserMessages() {
   useEffect(() => {
     if (status !== "authenticated") return;
     fetchMessages();
-    const interval = setInterval(() => fetchMessages(true), 60000); // poll every 60s
+    const interval = setInterval(() => fetchMessages(true), 60000);
     return () => clearInterval(interval);
   }, [status, fetchMessages]);
 
@@ -106,7 +107,6 @@ export function UserMessages() {
 
   // === Mark as read ===
   const handleMarkAsRead = async (messageId: number) => {
-    // Optimistic update
     setMessages((prev) =>
       prev.map((m) =>
         m.id === messageId ? { ...m, is_read: true, read_at: new Date().toISOString() } : m
@@ -117,7 +117,6 @@ export function UserMessages() {
     try {
       await fetch(`/api/messages/${messageId}`, { method: "PATCH" });
     } catch {
-      // revert on failure
       fetchMessages(true);
     }
   };
@@ -143,14 +142,12 @@ export function UserMessages() {
       setExpandedId(null);
     } else {
       setExpandedId(msg.id);
-      // Mark as read when expanded
       if (!msg.is_read) {
         handleMarkAsRead(msg.id);
       }
     }
   };
 
-  // === Don't render if not logged in ===
   if (status !== "authenticated") return null;
 
   return (
@@ -171,34 +168,59 @@ export function UserMessages() {
         )}
       </button>
 
-      {/* Dropdown */}
+      {/* ============================================================ */}
+      {/* DROPDOWN — Mobile Optimized                                  */}
+      {/* Width: calc(100vw - 2rem) di mobile, 384px di sm+            */}
+      {/* Max height: 80vh di mobile, 70vh di desktop                 */}
+      {/* Position: right-0 tapi gak keluar layar karena width diatur  */}
+      {/* ============================================================ */}
       {open && (
         <div
-          className="absolute right-0 top-full mt-2 w-80 sm:w-96 rounded-lg border border-border bg-popover shadow-xl z-50 overflow-hidden"
+          className={cn(
+            "absolute right-0 top-full mt-2 rounded-lg border border-border bg-popover shadow-xl z-50 overflow-hidden",
+            // === WIDTH: Mobile-first ===
+            // Mobile: lebar = viewport - 32px (16px margin kiri+kanan)
+            // SM+: lebar 384px (cukup untuk desktop)
+            "w-[calc(100vw-2rem)] sm:w-96",
+            // === MAX WIDTH safety ===
+            // Hard cap kalau viewport sangat lebar
+            "max-w-[384px]",
+            // === MIN WIDTH ===
+            // Minimal 280px biar tidak terlalu sempit
+            "min-w-[260px]"
+          )}
           style={{
-            maxHeight: "70vh",
+            maxHeight: "80vh",
           }}
         >
-          {/* Header */}
-          <div className="flex items-center justify-between gap-2 border-b border-border p-3">
-            <div className="flex items-center gap-2">
-              <h3 className="font-semibold text-sm">Messages</h3>
+          {/* ============================================================ */}
+          {/* HEADER — Compact, sebaris                                    */}
+          {/* ============================================================ */}
+          <div className="flex items-center justify-between gap-1 border-b border-border px-2.5 py-2 sm:px-3 sm:py-3">
+            <div className="flex items-center gap-1.5 min-w-0">
+              <h3 className="font-semibold text-xs sm:text-sm truncate">
+                Messages
+              </h3>
               {unreadCount > 0 && (
-                <Badge variant="outline" className="border-red-500/40 text-red-400 text-[10px]">
-                  {unreadCount} new
+                <Badge
+                  variant="outline"
+                  className="border-red-500/40 text-red-400 text-[9px] px-1 h-4 shrink-0"
+                >
+                  {unreadCount > 9 ? "9+" : unreadCount}
                 </Badge>
               )}
             </div>
-            <div className="flex gap-1">
+            <div className="flex gap-0.5 shrink-0">
               {unreadCount > 0 && (
                 <Button
                   size="sm"
                   variant="ghost"
-                  className="h-7 px-2 text-xs gap-1"
+                  className="h-7 px-1.5 sm:px-2 text-[10px] sm:text-xs gap-1"
                   onClick={handleMarkAllRead}
+                  title="Mark all as read"
                 >
-                  <CheckCheck className="h-3 w-3" />
-                  Mark all read
+                  <CheckCheck className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
+                  <span className="hidden xs:inline sm:inline">Mark all</span>
                 </Button>
               )}
               <Button
@@ -212,8 +234,10 @@ export function UserMessages() {
             </div>
           </div>
 
-          {/* Body */}
-          <div className="overflow-y-auto" style={{ maxHeight: "calc(70vh - 50px)" }}>
+          {/* ============================================================ */}
+          {/* BODY — Scrollable message list                              */}
+          {/* ============================================================ */}
+          <div className="overflow-y-auto" style={{ maxHeight: "calc(80vh - 42px)" }}>
             {loading ? (
               <div className="flex justify-center py-8">
                 <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
@@ -233,7 +257,7 @@ export function UserMessages() {
                     <div
                       key={msg.id}
                       className={cn(
-                        "p-3 cursor-pointer transition-colors hover:bg-accent/50",
+                        "px-2.5 py-2.5 sm:px-3 sm:py-3 cursor-pointer transition-colors hover:bg-accent/50",
                         !msg.is_read && "bg-primary/5"
                       )}
                       onClick={() => handleToggleExpand(msg)}
@@ -243,20 +267,20 @@ export function UserMessages() {
 
                         <div className="flex-1 min-w-0">
                           {/* Top row: type + unread dot */}
-                          <div className="flex items-center justify-between gap-2 mb-1">
-                            <div className="flex items-center gap-1.5">
-                              <span className="text-xs font-medium text-muted-foreground">
+                          <div className="flex items-center justify-between gap-1 mb-1">
+                            <div className="flex items-center gap-1 min-w-0">
+                              <span className="text-[11px] sm:text-xs font-medium text-muted-foreground truncate">
                                 {meta.label}
                               </span>
                               {msg.is_pinned === 1 && (
-                                <Pin className="h-3 w-3 text-yellow-500" />
+                                <Pin className="h-3 w-3 text-yellow-500 shrink-0" />
                               )}
                               {msg.recipient_id === null && (
                                 <Badge
                                   variant="outline"
-                                  className="text-[9px] px-1 h-4 border-purple-500/40 text-purple-400"
+                                  className="text-[9px] px-1 h-4 border-purple-500/40 text-purple-400 shrink-0"
                                 >
-                                  Broadcast
+                                  BC
                                 </Badge>
                               )}
                             </div>
@@ -267,28 +291,28 @@ export function UserMessages() {
 
                           {/* Subject */}
                           {msg.subject && (
-                            <div className="text-sm font-medium truncate">
+                            <div className="text-xs sm:text-sm font-medium truncate">
                               {msg.subject}
                             </div>
                           )}
 
                           {/* Body (or preview) */}
                           {isExpanded ? (
-                            <p className="text-sm text-muted-foreground whitespace-pre-wrap mt-1">
+                            <p className="text-xs sm:text-sm text-muted-foreground whitespace-pre-wrap mt-1 break-words">
                               {msg.body}
                             </p>
                           ) : (
-                            <p className="text-xs text-muted-foreground line-clamp-2 mt-0.5">
+                            <p className="text-[11px] sm:text-xs text-muted-foreground line-clamp-2 mt-0.5 break-words">
                               {msg.body}
                             </p>
                           )}
 
                           {/* Meta */}
                           <div className="flex items-center justify-between gap-2 mt-1.5">
-                            <span className="text-[10px] text-muted-foreground">
+                            <span className="text-[10px] text-muted-foreground truncate min-w-0">
                               From: {msg.sender_name || "Admin"}
                             </span>
-                            <span className="text-[10px] text-muted-foreground">
+                            <span className="text-[10px] text-muted-foreground shrink-0">
                               {formatRelativeTime(msg.created_at)}
                             </span>
                           </div>
