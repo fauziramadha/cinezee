@@ -250,62 +250,38 @@ export function PlayerModal() {
   const isFilmU = currentProvider?.url.includes("embed.filmu.in");
 
   // ============================================================
-  // BUG FIX 1: Pure inline styles for ALL positioning.
-  // DO NOT use !important Tailwind classes for left/top/transform
-  // because they override inline styles and break positioning.
+  // BUG FIX 1: Use !important Tailwind classes to KILL shadcn's
+  // default `left-[50%] top-[50%] -translate-x-1/2 -translate-y-1/2`.
+  // Inline `transform: none` alone is NOT enough because Tailwind's
+  // translate classes set CSS variables that combine into transform.
+  // We MUST use `!translate-x-0 !translate-y-0` to nuke them.
   // ============================================================
+
+  // Inline styles for flex centering + opaque background
   const dialogContentStyle: React.CSSProperties = isPseudoFullscreen
     ? {
-        // Pseudo-fullscreen: full viewport, no rounding, no transform
         position: "fixed",
-        top: "0",
-        left: "0",
-        right: "0",
-        bottom: "0",
-        inset: "0",
-        width: "100vw",
-        height: "100vh",
-        margin: "0",
-        padding: "0",
-        maxWidth: "none",
-        maxHeight: "none",
-        minWidth: "100vw",
-        minHeight: "100vh",
-        transform: "none",
-        borderRadius: "0",
-        border: "none",
         zIndex: 99999,
+        display: "flex",
+        alignItems: "stretch",
+        justifyContent: "stretch",
         backgroundColor: "#000",
+        padding: "0",
+        margin: "0",
       }
     : {
-        // Normal mode: FLEX-centered, NO transform (Safari-safe)
         position: "fixed",
-        top: "0",
-        left: "0",
-        right: "0",
-        bottom: "0",
-        inset: "0",
-        width: "100vw",
-        height: "100vh",
-        margin: "0",
-        padding: "0",
-        maxWidth: "none",
-        maxHeight: "none",
-        transform: "none",
-        borderRadius: "0",
-        border: "none",
         zIndex: 50,
-        // Use flex to center the actual player box inside this wrapper
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
+        // Fully opaque backdrop so underlying app isn't visible
+        backgroundColor: "rgba(0,0,0,1)",
         // Safe area padding for iPhones with notch
         paddingTop: "env(safe-area-inset-top)",
         paddingBottom: "env(safe-area-inset-bottom)",
         paddingLeft: "env(safe-area-inset-left)",
         paddingRight: "env(safe-area-inset-right)",
-        // BUG FIX 1: Fully opaque backdrop so underlying app isn't visible
-        backgroundColor: "rgba(0,0,0,1)",
       };
 
   // Controls visibility (auto-hide in pseudo-fullscreen)
@@ -323,10 +299,18 @@ export function PlayerModal() {
     >
       <DialogContent
         style={dialogContentStyle}
-        // BUG FIX 1: Only override cosmetic defaults. DO NOT touch
-        // left/top/width/height/transform with !important — those
-        // would override our inline styles and break positioning.
-        className="!p-0 !border-0 !bg-transparent !shadow-none !gap-0 !rounded-none"
+        className={cn(
+          // === CRITICAL: Kill shadcn default positioning ===
+          // shadcn DialogContent adds: left-[50%] top-[50%] translate-x-[-50%] translate-y-[-50%]
+          // These !important classes override those defaults.
+          "!left-0 !top-0",
+          "!translate-x-0 !translate-y-0",
+          // Full viewport
+          "!w-screen !h-screen",
+          "!max-w-none !max-h-none !min-w-0 !min-h-0",
+          // Cosmetic cleanup
+          "!p-0 !border-0 !bg-transparent !shadow-none !gap-0 !rounded-none"
+        )}
         onMouseMove={handleMouseMove}
         onEscapeKeyDown={(e) => {
           if (isPseudoFullscreen) {
