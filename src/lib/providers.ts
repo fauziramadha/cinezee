@@ -1,6 +1,7 @@
 /**
  * Multi-provider streaming configuration
- * Based on investigation of 9 providers (Vidking, VidLink, Videasy, VidFast, etc.)
+ * Server 1 & 2: FilmU (Premium API Key + Debug Mode)
+ * Server 3-8: Fallback providers (Vidking, VidLink, etc.)
  */
 
 export type MediaType = "movie" | "tv";
@@ -22,20 +23,34 @@ export interface Provider {
   ) => string;
 }
 
-/**
- * Provider priority list (sorted by brutality, lowest first)
- *
- * Based on real-world testing:
- * - Vidking: 0 ads (verified)
- * - VidLink: 1 ad (pre-roll, verified)
- * - MultiEmbed: 1-2 ads (community-verified)
- * - VidFast: 1-3 ads (verified, click popunder)
- * - VidSrc-embed.ru: 3 ads (verified)
- * - Vidrock: 6 ads (verified, last resort)
- */
 export const PROVIDERS: Provider[] = [
+  // Server 1: FilmU Premium (No ads via API Key)
   {
-    name: "Vidking",
+    name: "Server 1",
+    baseUrl: "https://embed.filmu.in",
+    brutality: 0,
+    supportsSandbox: false,
+    buildUrl: (id, type, season, episode) => {
+      const apiKey = process.env.FILMU_PREMIUM_KEY || "zyflix_premium_9x8c7v6b5n";
+      return type === "movie"
+        ? `https://embed.filmu.in/movie/${id}?apikey=${apiKey}`
+        : `https://embed.filmu.in/tv/${id}/${season}/${episode}?apikey=${apiKey}`;
+    },
+  },
+  // Server 2: FilmU Debug Mode (No ads via debug bypass)
+  {
+    name: "Server 2",
+    baseUrl: "https://embed.filmu.in",
+    brutality: 0,
+    supportsSandbox: false,
+    buildUrl: (id, type, season, episode) =>
+      type === "movie"
+        ? `https://embed.filmu.in/movie/${id}?debug=savu`
+        : `https://embed.filmu.in/tv/${id}/${season}/${episode}?debug=savu`,
+  },
+  // Server 3: Vidking (0 ads, verified)
+  {
+    name: "Server 3",
     baseUrl: "https://www.vidking.net/embed",
     brutality: 0,
     supportsSandbox: false,
@@ -44,8 +59,9 @@ export const PROVIDERS: Provider[] = [
         ? `https://www.vidking.net/embed/movie/${id}`
         : `https://www.vidking.net/embed/tv/${id}/${season}/${episode}`,
   },
+  // Server 4: VidLink (1 ad, customizable)
   {
-    name: "VidLink",
+    name: "Server 4",
     baseUrl: "https://vidlink.pro",
     brutality: 1,
     supportsSandbox: false,
@@ -57,8 +73,9 @@ export const PROVIDERS: Provider[] = [
         : `https://vidlink.pro/tv/${id}/${season}/${episode}?${params}&nextbutton=true`;
     },
   },
+  // Server 5: MultiEmbed (1-2 ads)
   {
-    name: "MultiEmbed",
+    name: "Server 5",
     baseUrl: "https://multiembed.mov",
     brutality: 2,
     supportsSandbox: false,
@@ -67,8 +84,9 @@ export const PROVIDERS: Provider[] = [
         ? `https://multiembed.mov/?video_id=${id}&tmdb=1`
         : `https://multiembed.mov/?video_id=${id}&tmdb=1&s=${season}&e=${episode}`,
   },
+  // Server 6: VidFast (1-3 ads, click popunder)
   {
-    name: "VidFast",
+    name: "Server 6",
     baseUrl: "https://vidfast.pro",
     brutality: 4,
     supportsSandbox: false,
@@ -77,8 +95,9 @@ export const PROVIDERS: Provider[] = [
         ? `https://vidfast.pro/movie/${id}?theme=B20710&autoPlay=false&poster=true&title=true`
         : `https://vidfast.pro/tv/${id}/${season}/${episode}?theme=B20710&autoPlay=false&nextButton=true&poster=true&title=true`,
   },
+  // Server 7: VidSrc (3 ads)
   {
-    name: "VidSrc",
+    name: "Server 7",
     baseUrl: "https://vidsrc-embed.ru",
     brutality: 3,
     supportsSandbox: false,
@@ -89,8 +108,9 @@ export const PROVIDERS: Provider[] = [
         : `https://vidsrc-embed.ru/embed/tv/${videoId}/${season}-${episode}`;
     },
   },
+  // Server 8: Vidrock (6 ads, last resort)
   {
-    name: "Vidrock",
+    name: "Server 8",
     baseUrl: "https://vidrock.ru",
     brutality: 6,
     supportsSandbox: false,
