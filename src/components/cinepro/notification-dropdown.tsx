@@ -22,8 +22,8 @@ export function NotificationDropdown() {
   const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
 
-  // Fetch notifications
   const fetchNotifications = async () => {
     try {
       setLoading(true);
@@ -39,7 +39,6 @@ export function NotificationDropdown() {
     }
   };
 
-  // Initial load + polling every 30 seconds
   useEffect(() => {
     fetchNotifications();
     const interval = setInterval(fetchNotifications, 30000);
@@ -49,7 +48,10 @@ export function NotificationDropdown() {
   // Close when clicking outside
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
-      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+      if (
+        menuRef.current && !menuRef.current.contains(event.target as Node) &&
+        buttonRef.current && !buttonRef.current.contains(event.target as Node)
+      ) {
         setOpen(false);
       }
     }
@@ -57,20 +59,16 @@ export function NotificationDropdown() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // Mark single as read
   const handleMarkAsRead = async (id: string) => {
     try {
       await fetch(`/api/notifications?id=${id}`, { method: "PATCH" });
-      setNotifications((prev) =>
-        prev.map((n) => (n.id === id ? { ...n, read: 1 } : n)),
-      );
+      setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, read: 1 } : n)));
       setUnreadCount((prev) => Math.max(0, prev - 1));
     } catch {
       toast.error("Gagal update notifikasi");
     }
   };
 
-  // Mark all as read
   const handleMarkAllRead = async () => {
     try {
       await fetch("/api/notifications?clear=all", { method: "PATCH" });
@@ -82,7 +80,6 @@ export function NotificationDropdown() {
     }
   };
 
-  // Delete single
   const handleDelete = async (id: string) => {
     try {
       await fetch(`/api/notifications?id=${id}`, { method: "DELETE" });
@@ -96,7 +93,6 @@ export function NotificationDropdown() {
     }
   };
 
-  // Format time ago
   const formatTimeAgo = (dateString: string) => {
     const date = new Date(dateString);
     const now = new Date();
@@ -113,9 +109,10 @@ export function NotificationDropdown() {
   };
 
   return (
-    <div className="relative" ref={menuRef}>
+    <div className="relative">
       {/* Bell Button */}
       <button
+        ref={buttonRef}
         onClick={() => {
           setOpen(!open);
           if (!open) fetchNotifications();
@@ -131,11 +128,15 @@ export function NotificationDropdown() {
         )}
       </button>
 
-      {/* Dropdown Panel - FIXED: proper width + overflow */}
+      {/* Dropdown Panel - FIXED: use fixed positioning to escape header's overflow clip */}
       {open && (
-        <div className="absolute right-0 top-full z-50 mt-2 w-[calc(100vw-2rem)] max-w-sm overflow-hidden rounded-lg border border-border bg-popover shadow-xl sm:w-96">
+        <div
+          ref={menuRef}
+          className="fixed right-2 top-16 z-[100] w-[calc(100vw-1rem)] max-w-sm overflow-hidden rounded-lg border border-border bg-popover shadow-2xl sm:right-4 sm:w-96"
+          style={{ maxHeight: "calc(100vh - 5rem)" }}
+        >
           {/* Header */}
-          <div className="flex items-center justify-between border-b border-border px-4 py-3">
+          <div className="flex shrink-0 items-center justify-between border-b border-border px-4 py-3">
             <h3 className="text-sm font-semibold">Notifikasi</h3>
             {unreadCount > 0 && (
               <button
@@ -148,8 +149,8 @@ export function NotificationDropdown() {
             )}
           </div>
 
-          {/* List */}
-          <div className="max-h-[60vh] overflow-y-auto">
+          {/* List - scrollable */}
+          <div className="overflow-y-auto" style={{ maxHeight: "calc(100vh - 8rem)" }}>
             {loading ? (
               <div className="p-8 text-center text-xs text-muted-foreground">
                 Memuat...
@@ -171,14 +172,11 @@ export function NotificationDropdown() {
                       !notif.read && "bg-primary/5",
                     )}
                   >
-                    {/* Unread indicator */}
                     {!notif.read && (
-                      <span className="absolute left-1.5 top-1/2 h-1.5 w-1.5 -translate-y-1/2 rounded-full bg-primary" />
+                      <span className="absolute left-1.5 top-4 h-1.5 w-1.5 rounded-full bg-primary" />
                     )}
 
-                    {/* Content - FIXED: min-w-0 + break-words to prevent text cutoff */}
-                    <div className="min-w-0">
-                      {/* Title + Time row */}
+                    <div className="min-w-0 pl-2">
                       <div className="flex items-start justify-between gap-2">
                         <p className="min-w-0 flex-1 break-words text-xs font-semibold">
                           {notif.title}
@@ -188,12 +186,10 @@ export function NotificationDropdown() {
                         </span>
                       </div>
                       
-                      {/* Message - FIXED: break-words + proper line height */}
                       <p className="mt-0.5 break-words text-[11px] leading-relaxed text-muted-foreground">
                         {notif.message}
                       </p>
 
-                      {/* Actions */}
                       <div className="mt-1.5 flex items-center gap-3">
                         {!notif.read && (
                           <button
