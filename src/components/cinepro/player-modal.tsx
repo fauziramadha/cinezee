@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { useSession } from "next-auth/react";
 import {
   X,
@@ -57,6 +57,10 @@ export function PlayerModal() {
   const [episode, setEpisode] = useState(playerEpisode || 1);
   const [isPseudoFullscreen, setIsPseudoFullscreen] = useState(false);
 
+  // For auto-hide controls in pseudo-fullscreen
+  const [showControls, setShowControls] = useState(true);
+  const hideControlsTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   // KEY FIX: Sync local state when playerSeason/playerEpisode changes in store
   useEffect(() => {
     setSeason(playerSeason || 1);
@@ -68,11 +72,39 @@ export function PlayerModal() {
     const handleEscape = (e: KeyboardEvent) => {
       if (e.key === "Escape" && isPseudoFullscreen) {
         e.preventDefault();
+        e.stopPropagation();
         setIsPseudoFullscreen(false);
       }
     };
-    window.addEventListener("keydown", handleEscape);
-    return () => window.removeEventListener("keydown", handleEscape);
+    // Use capture phase to intercept before Radix Dialog's ESC handler
+    window.addEventListener("keydown", handleEscape, true);
+    return () => window.removeEventListener("keydown", handleEscape, true);
+  }, [isPseudoFullscreen]);
+
+  // Cleanup hide timeout
+  useEffect(() => {
+    return () => {
+      if (hideControlsTimeout.current) {
+        clearTimeout(hideControlsTimeout.current);
+      }
+    };
+  }, []);
+
+  // Auto-hide controls in pseudo-fullscreen
+  const handleMouseMove = useCallback(() => {
+    if (!isPseudoFullscreen) return;
+    setShowControls(true);
+    if (hideControlsTimeout.current) {
+      clearTimeout(hideControlsTimeout.current);
+    }
+    hideControlsTimeout.current = setTimeout(() => {
+      setShowControls(false);
+    }, 3000);
+  }, [isPseudoFullscreen]);
+
+  // Reset showControls when toggling fullscreen
+  useEffect(() => {
+    setShowControls(true);
   }, [isPseudoFullscreen]);
 
   // Save to watch history (only if logged in)
@@ -196,6 +228,45 @@ export function PlayerModal() {
   // Check if current provider is FilmU (Server 1 or 2)
   const isFilmU = currentProvider?.url.includes("embed.filmu.in");
 
+  // ============================================================
+  // KEY FIX: Inline style to KILL the `transform: translate(-50%, -50%)`
+  // that Radix DialogContent applies by default.
+  // Without this, `inset-0` + `h-screen w-screen` will still be
+  // shifted -50% / -50%, making the modal appear in the top-left
+  // corner, partially off-screen.
+  // ============================================================
+  const dialogContentStyle: React.CSSProperties = isPseudoFullscreen
+    ? {
+        // Pseudo-fullscreen: full viewport, NO transform, NO translate
+        position: "fixed",
+        top: "0",
+        left: "0",
+        right: "0",
+        bottom: "0",
+        inset: "0",
+        width: "100vw",
+        height: "100vh",
+        margin: "0",
+        padding: "0",
+        maxWidth: "none",
+        maxHeight: "none",
+        minWidth: "100vw",
+        minHeight: "100vh",
+        // CRITICAL: must be `none`, not `translate(0,0)` — `none`
+        // is the only value that fully kills the default transform.
+        transform: "none",
+        borderRadius: "0",
+        border: "none",
+        zIndex: 99999,
+      }
+    : {
+        // Normal mode: keep Radix defaults but ensure transform is set
+        // so it's predictable. (Don't override if you want Radix centering.)
+      };
+
+  // Controls visibility (auto-hide in pseudo-fullscreen)
+  const controlsVisible = !isPseudoFullscreen || showControls || iframeError;
+
   return (
     <Dialog
       open={!!playerMedia}
@@ -207,20 +278,44 @@ export function PlayerModal() {
       }}
     >
       <DialogContent
+        style={dialogContentStyle}
         className={cn(
-          "flex flex-col gap-0 overflow-hidden border-0 bg-black p-0 transition-all duration-300 !max-w-none !max-h-none",
+          "flex flex-col gap-0 overflow-hidden border-0 bg-black p-0 transition-all duration-300",
           isPseudoFullscreen
-            ? "fixed inset-0 z-[9999] h-screen w-screen !m-0 !rounded-none"
-            : "h-[100dvh] w-full sm:rounded-none md:h-[90vh] md:w-[95vw] md:max-w-5xl md:rounded-xl"
+            ? // Pseudo-fullscreen: full screen, no rounding
+              "!max-w-none !max-h-none h-screen w-screen !m-0 !rounded-none"
+            : // Normal mode
+              "h-[100dvh] w-full sm:rounded-none md:h-[90vh] md:w-[95vw] md:max-w-5xl md:rounded-xl"
         )}
+        onMouseMove={handleMouseMove}
+        // Disable Radix's default close-on-ESC when in pseudo-fullscreen
+        // (we handle ESC ourselves above)
+        onEscapeKeyDown={(e) => {
+          if (isPseudoFullscreen) {
+            e.preventDefault();
+          }
+        }}
+        // Disable Radix's default click-outside-close when in pseudo-fullscreen
+        onPointerDownOutside={(e) => {
+          if (isPseudoFullscreen) {
+            e.preventDefault();
+          }
+        }}
+        onInteractOutside={(e) => {
+          if (isPseudoFullscreen) {
+            e.preventDefault();
+          }
+        }}
       >
         <DialogTitle className="sr-only">{playerMedia.title} Player</DialogTitle>
 
         {/* Top bar - Auto hide on Pseudo Fullscreen */}
-        <div className={cn(
-          "absolute left-0 right-0 top-0 z-30 flex shrink-0 items-center justify-between gap-2 bg-gradient-to-b from-black/90 to-transparent px-3 py-2 sm:px-4 sm:py-3 transition-opacity duration-300",
-          isPseudoFullscreen && !iframeError ? "opacity-0 hover:opacity-100" : "opacity-100"
-        )}>
+        <div
+          className={cn(
+            "absolute left-0 right-0 top-0 z-30 flex shrink-0 items-center justify-between gap-2 bg-gradient-to-b from-black/90 to-transparent px-3 py-2 transition-opacity duration-300 sm:px-4 sm:py-3",
+            controlsVisible ? "opacity-100" : "opacity-0"
+          )}
+        >
           <div className="min-w-0 flex-1">
             <h2 className="truncate text-xs font-semibold text-white sm:text-sm md:text-base">
               {playerMedia.title}
@@ -375,10 +470,12 @@ export function PlayerModal() {
 
         {/* Bottom controls for TV shows - Auto hide on Pseudo Fullscreen */}
         {isTV && (
-          <div className={cn(
-            "absolute bottom-0 left-0 right-0 z-30 flex shrink-0 items-center gap-2 bg-gradient-to-t from-black/90 to-transparent px-3 py-2 sm:gap-3 sm:px-4 sm:py-3 transition-opacity duration-300",
-            isPseudoFullscreen && !iframeError ? "opacity-0 hover:opacity-100" : "opacity-100"
-          )}>
+          <div
+            className={cn(
+              "absolute bottom-0 left-0 right-0 z-30 flex shrink-0 items-center gap-2 bg-gradient-to-t from-black/90 to-transparent px-3 py-2 transition-opacity duration-300 sm:gap-3 sm:px-4 sm:py-3",
+              controlsVisible ? "opacity-100" : "opacity-0"
+            )}
+          >
             <Select value={String(season)} onValueChange={(v) => setSeason(parseInt(v, 10))}>
               <SelectTrigger className="h-7 w-20 border-white/20 bg-white/10 text-[10px] text-white backdrop-blur-sm sm:h-8 sm:w-24 sm:text-xs">
                 <SelectValue />
