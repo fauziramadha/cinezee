@@ -10,6 +10,8 @@ import {
   Loader2,
   Server,
   RotateCcw,
+  Maximize,
+  Minimize,
 } from "lucide-react";
 import {
   Dialog,
@@ -53,12 +55,25 @@ export function PlayerModal() {
   const [detail, setDetail] = useState<MovieDetail | null>(null);
   const [season, setSeason] = useState(playerSeason || 1);
   const [episode, setEpisode] = useState(playerEpisode || 1);
+  const [isPseudoFullscreen, setIsPseudoFullscreen] = useState(false);
 
   // KEY FIX: Sync local state when playerSeason/playerEpisode changes in store
   useEffect(() => {
     setSeason(playerSeason || 1);
     setEpisode(playerEpisode || 1);
   }, [playerSeason, playerEpisode]);
+
+  // Handle Escape key for Pseudo-Fullscreen
+  useEffect(() => {
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && isPseudoFullscreen) {
+        e.preventDefault();
+        setIsPseudoFullscreen(false);
+      }
+    };
+    window.addEventListener("keydown", handleEscape);
+    return () => window.removeEventListener("keydown", handleEscape);
+  }, [isPseudoFullscreen]);
 
   // Save to watch history (only if logged in)
   const saveToHistory = useCallback(async () => {
@@ -178,21 +193,34 @@ export function PlayerModal() {
 
   const iframeUrl = currentProvider?.url;
   const isTV = playerMedia.type === "tv" && detail?.seasons;
+  // Check if current provider is FilmU (Server 1 or 2)
+  const isFilmU = currentProvider?.url.includes("embed.filmu.in");
 
   return (
     <Dialog
       open={!!playerMedia}
       onOpenChange={(open) => {
-        if (!open) closePlayer();
+        if (!open) {
+          setIsPseudoFullscreen(false);
+          closePlayer();
+        }
       }}
     >
       <DialogContent
-        className="flex h-[100dvh] max-h-[100dvh] w-full max-w-[100vw] flex-col gap-0 overflow-hidden border-0 bg-black p-0 sm:rounded-none md:h-[90vh] md:max-h-[90vh] md:w-[95vw] md:max-w-5xl md:rounded-xl"
+        className={cn(
+          "flex flex-col gap-0 overflow-hidden border-0 bg-black p-0 transition-all duration-300",
+          isPseudoFullscreen
+            ? "fixed inset-0 z-[9999] h-[100dvh] w-[100dvh] max-h-[100dvh] max-w-[100vw] rounded-none"
+            : "h-[100dvh] max-h-[100dvh] w-full max-w-[100vw] sm:rounded-none md:h-[90vh] md:max-h-[90vh] md:w-[95vw] md:max-w-5xl md:rounded-xl"
+        )}
       >
         <DialogTitle className="sr-only">{playerMedia.title} Player</DialogTitle>
 
-        {/* Top bar */}
-        <div className="flex shrink-0 items-center justify-between gap-2 bg-black px-3 py-2 sm:px-4 sm:py-3">
+        {/* Top bar - Auto hide on Pseudo Fullscreen */}
+        <div className={cn(
+          "absolute left-0 right-0 top-0 z-30 flex shrink-0 items-center justify-between gap-2 bg-gradient-to-b from-black/90 to-transparent px-3 py-2 sm:px-4 sm:py-3 transition-opacity duration-300",
+          isPseudoFullscreen && !iframeError ? "opacity-0 hover:opacity-100" : "opacity-100"
+        )}>
           <div className="min-w-0 flex-1">
             <h2 className="truncate text-xs font-semibold text-white sm:text-sm md:text-base">
               {playerMedia.title}
@@ -206,6 +234,17 @@ export function PlayerModal() {
 
           {providers.length > 0 && (
             <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
+              {/* Pseudo-Fullscreen Button (Only for FilmU) */}
+              {isFilmU && iframeLoaded && !iframeError && (
+                <button
+                  onClick={() => setIsPseudoFullscreen(!isPseudoFullscreen)}
+                  className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-white/10 text-white backdrop-blur-sm transition-colors hover:bg-primary sm:h-9 sm:w-9"
+                  aria-label={isPseudoFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
+                >
+                  {isPseudoFullscreen ? <Minimize className="h-3.5 w-3.5 sm:h-4 sm:w-4" /> : <Maximize className="h-3.5 w-3.5 sm:h-4 sm:w-4" />}
+                </button>
+              )}
+
               <Select
                 value={String(currentIdx)}
                 onValueChange={(v) => setCurrentIdx(parseInt(v, 10))}
@@ -245,7 +284,10 @@ export function PlayerModal() {
               </Select>
 
               <button
-                onClick={() => closePlayer()}
+                onClick={() => {
+                  setIsPseudoFullscreen(false);
+                  closePlayer();
+                }}
                 className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-white/10 text-white backdrop-blur-sm transition-colors hover:bg-primary sm:h-9 sm:w-9"
                 aria-label="Close player"
               >
@@ -271,7 +313,7 @@ export function PlayerModal() {
                 src={iframeUrl}
                 className={cn(
                   "h-full w-full transition-opacity duration-500",
-                  iframeLoaded ? "opacity-100" : "opacity-0",
+                  iframeLoaded ? "opacity-100" : "opacity-0"
                 )}
                 allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
                 allowFullScreen
@@ -331,9 +373,12 @@ export function PlayerModal() {
           )}
         </div>
 
-        {/* Bottom controls for TV shows */}
+        {/* Bottom controls for TV shows - Auto hide on Pseudo Fullscreen */}
         {isTV && (
-          <div className="flex shrink-0 items-center gap-2 bg-black px-3 py-2 sm:gap-3 sm:px-4 sm:py-3">
+          <div className={cn(
+            "absolute bottom-0 left-0 right-0 z-30 flex shrink-0 items-center gap-2 bg-gradient-to-t from-black/90 to-transparent px-3 py-2 sm:gap-3 sm:px-4 sm:py-3 transition-opacity duration-300",
+            isPseudoFullscreen && !iframeError ? "opacity-0 hover:opacity-100" : "opacity-100"
+          )}>
             <Select value={String(season)} onValueChange={(v) => setSeason(parseInt(v, 10))}>
               <SelectTrigger className="h-7 w-20 border-white/20 bg-white/10 text-[10px] text-white backdrop-blur-sm sm:h-8 sm:w-24 sm:text-xs">
                 <SelectValue />
