@@ -2,7 +2,7 @@
  * src/app/admin/analytics/page.tsx
  *
  * Halaman admin untuk analytics dashboard.
- * Hanya bisa diakses admin (auth check ada di layout.tsx + page ini).
+ * Hanya bisa diakses admin (auth check ada di layout.tsx + page ini juga).
  *
  * URL: /admin/analytics
  */
