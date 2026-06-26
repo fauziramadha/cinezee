@@ -4,8 +4,22 @@ import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useSession, signOut } from "next-auth/react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { LogOut, User as UserIcon, Settings, ChevronDown, Loader2, Bookmark, History, Languages, Check } from "lucide-react";
-import { useAppStore } from "@/lib/store";
+import {
+  LogOut,
+  User as UserIcon,
+  Settings,
+  ChevronDown,
+  Loader2,
+  Bookmark,
+  History,
+  Languages,
+  Check,
+  LayoutDashboard,
+  Server,
+  Mail,
+  Users,
+  BarChart3,
+} from "lucide-react";
 import { toast } from "sonner";
 
 const LANGUAGES = [
@@ -20,6 +34,15 @@ const LANGUAGES = [
   { code: "zh", name: "中文", flag: "🇨🇳" },
 ];
 
+// === Admin menu items ===
+const ADMIN_ITEMS = [
+  { label: "Dashboard", href: "/admin", icon: LayoutDashboard },
+  { label: "Provider Management", href: "/admin/providers", icon: Server },
+  { label: "Messages", href: "/admin/messages", icon: Mail },
+  { label: "Users", href: "/admin/users", icon: Users },
+  { label: "Analytics", href: "/admin/analytics", icon: BarChart3 },
+];
+
 export function UserMenu() {
   const router = useRouter();
   const { data: session, status } = useSession();
@@ -28,7 +51,6 @@ export function UserMenu() {
   const [langLoading, setLangLoading] = useState(false);
   const [selectedLang, setSelectedLang] = useState<string>("en");
   const menuRef = useRef<HTMLDivElement>(null);
-  const setAdminDashboardOpen = useAppStore((s) => s.setAdminDashboardOpen);
 
   // Sync local state with session when session loads
   useEffect(() => {
@@ -64,6 +86,7 @@ export function UserMenu() {
   const user = session.user;
   const initial = user.name?.[0]?.toUpperCase() || user.email?.[0]?.toUpperCase() || "U";
   const currentLang = LANGUAGES.find(l => l.code === selectedLang) || LANGUAGES[0];
+  const isAdmin = user.role === "admin";
 
   const handleLogout = async () => {
     setMenuOpen(false);
@@ -72,9 +95,9 @@ export function UserMenu() {
     toast.success("Berhasil logout. Sampai jumpa lagi!");
   };
 
-  const handleOpenAdmin = () => {
+  const handleNavigate = (href: string) => {
     setMenuOpen(false);
-    setAdminDashboardOpen(true);
+    router.push(href);
   };
 
   const handleLanguageChange = async (code: string) => {
@@ -118,11 +141,13 @@ export function UserMenu() {
         <ChevronDown className="h-3 w-3 text-muted-foreground" />
       </button>
 
-      {/* Dropdown menu */}
+      {/* ================================================================ */}
+      {/* DROPDOWN MENU                                                    */}
+      {/* ================================================================ */}
       {menuOpen && (
-        <div className="absolute right-0 top-full mt-2 w-56 overflow-hidden rounded-lg border border-border bg-popover shadow-xl z-50">
-          {/* User info header */}
-          <div className="flex items-center gap-3 border-b border-border p-3">
+        <div className="absolute right-0 top-full mt-2 w-56 max-h-[80vh] overflow-y-auto rounded-lg border border-border bg-popover shadow-xl z-50">
+          {/* === User info header === */}
+          <div className="flex items-center gap-3 border-b border-border p-3 sticky top-0 bg-popover z-10">
             <Avatar className="h-10 w-10 border border-border">
               <AvatarImage src={user.image || undefined} alt={user.name || "User"} />
               <AvatarFallback className="bg-primary/20 text-sm font-semibold text-primary">
@@ -139,24 +164,24 @@ export function UserMenu() {
             </div>
           </div>
 
-          {/* Menu items */}
+          {/* === User menu items === */}
           <div className="p-1">
             <button
-  onClick={() => { setMenuOpen(false); router.push("/profile"); }}
-  className="flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-sm text-foreground transition-colors hover:bg-muted"
->
-  <UserIcon className="h-4 w-4 text-muted-foreground" />
-  Profil Saya
-</button>
+              onClick={() => handleNavigate("/profile")}
+              className="flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-sm text-foreground transition-colors hover:bg-muted"
+            >
+              <UserIcon className="h-4 w-4 text-muted-foreground" />
+              Profil Saya
+            </button>
             <button
-              onClick={() => { setMenuOpen(false); router.push("/watchlist"); }}
+              onClick={() => handleNavigate("/watchlist")}
               className="flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-sm text-foreground transition-colors hover:bg-muted"
             >
               <Bookmark className="h-4 w-4 text-muted-foreground" />
               Watchlist
             </button>
             <button
-              onClick={() => { setMenuOpen(false); router.push("/history"); }}
+              onClick={() => handleNavigate("/history")}
               className="flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-sm text-foreground transition-colors hover:bg-muted"
             >
               <History className="h-4 w-4 text-muted-foreground" />
@@ -202,21 +227,45 @@ export function UserMenu() {
                 )}
               </div>
             )}
-            
-            {/* Admin only */}
-            {user.role === "admin" && (
-              <button
-                onClick={handleOpenAdmin}
-                className="mt-1 flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-sm text-foreground transition-colors hover:bg-muted"
-              >
-                <Settings className="h-4 w-4 text-muted-foreground" />
-                Admin Dashboard
-              </button>
-            )}
           </div>
 
-          {/* Logout button */}
-          <div className="border-t border-border p-1">
+          {/* ================================================================ */}
+          {/* ADMIN SECTION (hanya untuk admin)                                */}
+          {/* ================================================================ */}
+          {isAdmin && (
+            <>
+              {/* Separator + Label */}
+              <div className="border-t border-border">
+                <div className="flex items-center gap-2 px-3 py-1.5">
+                  <div className="h-1.5 w-1.5 rounded-full bg-primary" />
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-primary">
+                    Admin
+                  </span>
+                  <div className="flex-1 border-t border-dashed border-primary/20" />
+                </div>
+              </div>
+
+              {/* Admin menu items */}
+              <div className="p-1">
+                {ADMIN_ITEMS.map((item) => {
+                  const Icon = item.icon;
+                  return (
+                    <button
+                      key={item.href}
+                      onClick={() => handleNavigate(item.href)}
+                      className="flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-sm text-foreground transition-colors hover:bg-primary/10 hover:text-primary group"
+                    >
+                      <Icon className="h-4 w-4 text-muted-foreground group-hover:text-primary transition-colors" />
+                      <span className="flex-1 text-left">{item.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </>
+          )}
+
+          {/* === Logout button === */}
+          <div className="border-t border-border p-1 sticky bottom-0 bg-popover">
             <button
               onClick={handleLogout}
               className="flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-sm text-destructive transition-colors hover:bg-destructive/10"
