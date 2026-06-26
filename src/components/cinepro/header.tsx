@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
 import { useSession } from "next-auth/react";
 import {
   Search,
@@ -11,7 +10,6 @@ import {
   Github,
   Heart,
   LogIn,
-  Shield,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -38,8 +36,6 @@ export function Header() {
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
-
-  const isAdmin = session?.user?.role === "admin";
 
   const navItems = [
     { label: "Home", active: true },
@@ -101,19 +97,7 @@ export function Header() {
             </kbd>
           </Button>
 
-          {/* Admin Link (hanya tampil kalau login sebagai admin) */}
-          {status === "authenticated" && isAdmin && (
-            <Link
-              href="/admin"
-              className="hidden items-center gap-1.5 rounded-full bg-primary/10 px-3 py-1.5 text-sm font-medium text-primary transition-colors hover:bg-primary hover:text-primary-foreground sm:flex"
-              title="Admin Dashboard"
-            >
-              <Shield className="h-4 w-4" />
-              <span>Admin</span>
-            </Link>
-          )}
-
-          {/* Message Bell Baru (only if logged in) — File 13 */}
+          {/* Message Bell (only if logged in) */}
           {status === "authenticated" && session?.user && (
             <UserMessages />
           )}
@@ -173,18 +157,6 @@ export function Header() {
                     {item.label}
                   </button>
                 ))}
-
-                {/* Admin Link di Mobile Menu (hanya untuk admin) */}
-                {isAdmin && (
-                  <Link
-                    href="/admin"
-                    onClick={() => setMobileOpen(false)}
-                    className="flex items-center gap-2 rounded-md px-4 py-2.5 text-left text-sm font-medium text-primary transition-colors hover:bg-primary/10"
-                  >
-                    <Shield className="h-4 w-4" />
-                    Admin Dashboard
-                  </Link>
-                )}
               </nav>
 
               {/* Auth section in mobile menu */}
