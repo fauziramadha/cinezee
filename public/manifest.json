@@ -1,0 +1,55 @@
+{
+  "name": "CineStream",
+  "short_name": "CineStream",
+  "description": "Streaming film & TV gratis tanpa iklan berlebihan",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#000000",
+  "theme_color": "#B20710",
+  "categories": ["entertainment", "video", "movies"],
+  "lang": "id",
+  "dir": "ltr",
+  "icons": [
+    {
+      "src": "/icons/AC571102-A8DE-4EB8-9C21-37972F5E3346.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/AC571102-A8DE-4EB8-9C21-37972F5E3346.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/AC571102-A8DE-4EB8-9C21-37972F5E3346.png",
+      "sizes": "any",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Search",
+      "short_name": "Search",
+      "description": "Cari film & TV show",
+      "url": "/?action=search",
+      "icons": [
+        {
+          "src": "/icons/AC571102-A8DE-4EB8-9C21-37972F5E3346.png",
+          "sizes": "any",
+          "type": "image/png"
+        }
+      ]
+    },
+    {
+      "name": "Watchlist",
+      "short_name": "Watchlist",
+      "description": "Daftar tontonan tersimpan",
+      "url": "/watchlist"
+    }
+  ]
+}
