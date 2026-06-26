@@ -1,12 +1,12 @@
 /**
- * src/components/user-messages.tsx (REVISED - Mobile Optimized)
+ * src/components/user-messages.tsx (FINAL v3 - Portal + Inline Styles)
  *
  * Bell icon dropdown untuk user melihat pesan dari admin.
  * - Polling tiap 60 detik untuk unread count
- * - Click bell → open dropdown with message list
+ * - Click bell → open dropdown (render via Portal ke body)
  * - Click message → expand body, mark as read
  * - "Mark all as read" button
- * - Mobile-first: dropdown tidak keluar layar
+ * - Mobile-first: width kecil (280px), compact, pasti muat layar
  *
  * Cara pakai di header:
  *   import { UserMessages } from "@/components/user-messages";
@@ -16,6 +16,7 @@
 "use client";
 
 import { useEffect, useState, useCallback, useRef } from "react";
+import { createPortal } from "react-dom";
 import { useSession } from "next-auth/react";
 import {
   Bell,
@@ -27,9 +28,6 @@ import {
   CheckCheck,
   Loader2,
 } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
 interface UserMessage {
@@ -47,10 +45,10 @@ interface UserMessage {
 }
 
 const TYPE_META: Record<string, { color: string; icon: any; label: string }> = {
-  info: { color: "text-blue-400", icon: Mail, label: "Info" },
-  warning: { color: "text-yellow-400", icon: AlertCircle, label: "Warning" },
-  announcement: { color: "text-purple-400", icon: Megaphone, label: "Announcement" },
-  system: { color: "text-gray-400", icon: AlertCircle, label: "System" },
+  info: { color: "#60a5fa", icon: Mail, label: "Info" },
+  warning: { color: "#facc15", icon: AlertCircle, label: "Warning" },
+  announcement: { color: "#c084fc", icon: Megaphone, label: "Announcement" },
+  system: { color: "#9ca3af", icon: AlertCircle, label: "System" },
 };
 
 export function UserMessages() {
@@ -60,28 +58,33 @@ export function UserMessages() {
   const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(false);
   const [expandedId, setExpandedId] = useState<number | null>(null);
+  const [mounted, setMounted] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const bellRef = useRef<HTMLButtonElement>(null);
+  const [dropdownPos, setDropdownPos] = useState({ top: 0, right: 0 });
+
+  // === Mount check (untuk Portal) ===
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   // === Fetch messages ===
   const fetchMessages = useCallback(async (silent = false) => {
     if (status !== "authenticated") return;
     if (!silent) setLoading(true);
     try {
-      const res = await fetch("/api/messages", {
-        cache: "no-store",
-      });
+      const res = await fetch("/api/messages", { cache: "no-store" });
       if (!res.ok) throw new Error("Failed");
       const data = await res.json();
       setMessages(data.messages || []);
       setUnreadCount(data.unreadCount || 0);
     } catch {
-      // Silent fail on background polling
+      // Silent fail
     } finally {
       if (!silent) setLoading(false);
     }
   }, [status]);
 
-  // Initial fetch + polling
   useEffect(() => {
     if (status !== "authenticated") return;
     fetchMessages();
@@ -89,12 +92,43 @@ export function UserMessages() {
     return () => clearInterval(interval);
   }, [status, fetchMessages]);
 
-  // Close dropdown when clicking outside
+  // === Hitung posisi dropdown saat open ===
+  useEffect(() => {
+    if (!open || !bellRef.current) return;
+
+    const updatePosition = () => {
+      const rect = bellRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      const vw = window.innerWidth;
+      let dropdownWidth = 280;
+      if (vw >= 640) dropdownWidth = 360;
+
+      let right = vw - rect.right;
+      if (right + dropdownWidth > vw - 8) {
+        right = Math.max(8, vw - dropdownWidth - 8);
+      }
+
+      const top = rect.bottom + 8;
+      setDropdownPos({ top, right });
+    };
+
+    updatePosition();
+    window.addEventListener("scroll", updatePosition, true);
+    window.addEventListener("resize", updatePosition);
+    return () => {
+      window.removeEventListener("scroll", updatePosition, true);
+      window.removeEventListener("resize", updatePosition);
+    };
+  }, [open]);
+
+  // === Close dropdown when clicking outside ===
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       if (
         dropdownRef.current &&
-        !dropdownRef.current.contains(e.target as Node)
+        !dropdownRef.current.contains(e.target as Node) &&
+        bellRef.current &&
+        !bellRef.current.contains(e.target as Node)
       ) {
         setOpen(false);
       }
@@ -113,7 +147,6 @@ export function UserMessages() {
       )
     );
     setUnreadCount((prev) => Math.max(0, prev - 1));
-
     try {
       await fetch(`/api/messages/${messageId}`, { method: "PATCH" });
     } catch {
@@ -127,7 +160,6 @@ export function UserMessages() {
       prev.map((m) => ({ ...m, is_read: true, read_at: new Date().toISOString() }))
     );
     setUnreadCount(0);
-
     try {
       await fetch("/api/messages", { method: "PATCH" });
       toast.success("All messages marked as read");
@@ -136,183 +168,455 @@ export function UserMessages() {
     }
   };
 
-  // === Toggle expand message ===
+  // === Toggle expand ===
   const handleToggleExpand = (msg: UserMessage) => {
     if (expandedId === msg.id) {
       setExpandedId(null);
     } else {
       setExpandedId(msg.id);
-      if (!msg.is_read) {
-        handleMarkAsRead(msg.id);
-      }
+      if (!msg.is_read) handleMarkAsRead(msg.id);
     }
+  };
+
+  // === Handle bell click ===
+  const handleBellClick = () => {
+    if (!open && bellRef.current) {
+      const rect = bellRef.current.getBoundingClientRect();
+      const vw = window.innerWidth;
+      let dropdownWidth = 280;
+      if (vw >= 640) dropdownWidth = 360;
+
+      let right = vw - rect.right;
+      if (right + dropdownWidth > vw - 8) {
+        right = Math.max(8, vw - dropdownWidth - 8);
+      }
+
+      setDropdownPos({
+        top: rect.bottom + 8,
+        right,
+      });
+    }
+    setOpen(!open);
   };
 
   if (status !== "authenticated") return null;
 
+  const vw = typeof window !== "undefined" ? window.innerWidth : 375;
+  const dropdownWidth = vw >= 640 ? 360 : 280;
+
   return (
-    <div className="relative" ref={dropdownRef}>
-      {/* Bell button */}
+    <>
+      {/* === BELL BUTTON === */}
       <button
-        onClick={() => setOpen(!open)}
-        className="relative flex h-9 w-9 items-center justify-center rounded-full bg-white/10 text-white transition-colors hover:bg-white/20"
+        ref={bellRef}
+        onClick={handleBellClick}
         aria-label="Messages"
+        style={{
+          position: "relative",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          width: "36px",
+          height: "36px",
+          borderRadius: "9999px",
+          backgroundColor: "rgba(255,255,255,0.1)",
+          border: "none",
+          color: "white",
+          cursor: "pointer",
+          flexShrink: 0,
+          transition: "background-color 0.2s",
+        }}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.2)";
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.1)";
+        }}
       >
-        <Bell className="h-4 w-4" />
+        <Bell style={{ width: "16px", height: "16px" }} />
         {unreadCount > 0 && (
           <span
-            className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white"
+            style={{
+              position: "absolute",
+              top: "-2px",
+              right: "-2px",
+              minWidth: "16px",
+              height: "16px",
+              padding: "0 4px",
+              borderRadius: "9999px",
+              backgroundColor: "#ef4444",
+              color: "white",
+              fontSize: "10px",
+              fontWeight: 700,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              lineHeight: 1,
+            }}
           >
             {unreadCount > 9 ? "9+" : unreadCount}
           </span>
         )}
       </button>
 
-      {/* ============================================================ */}
-      {/* DROPDOWN — Mobile Optimized                                  */}
-      {/* Width: calc(100vw - 2rem) di mobile, 384px di sm+            */}
-      {/* Max height: 80vh di mobile, 70vh di desktop                 */}
-      {/* Position: right-0 tapi gak keluar layar karena width diatur  */}
-      {/* ============================================================ */}
-      {open && (
+      {/* === DROPDOWN via PORTAL === */}
+      {mounted && open && createPortal(
         <div
-          className={cn(
-            "absolute right-0 top-full mt-2 rounded-lg border border-border bg-popover shadow-xl z-50 overflow-hidden",
-            // === WIDTH: Mobile-first ===
-            // Mobile: lebar = viewport - 32px (16px margin kiri+kanan)
-            // SM+: lebar 384px (cukup untuk desktop)
-            "w-[calc(100vw-2rem)] sm:w-96",
-            // === MAX WIDTH safety ===
-            // Hard cap kalau viewport sangat lebar
-            "max-w-[384px]",
-            // === MIN WIDTH ===
-            // Minimal 280px biar tidak terlalu sempit
-            "min-w-[260px]"
-          )}
+          ref={dropdownRef}
           style={{
-            maxHeight: "80vh",
+            position: "fixed",
+            top: `${dropdownPos.top}px`,
+            right: `${dropdownPos.right}px`,
+            width: `${dropdownWidth}px`,
+            maxWidth: "calc(100vw - 16px)",
+            maxHeight: "60vh",
+            backgroundColor: "#0a0a0a",
+            border: "1px solid #262626",
+            borderRadius: "12px",
+            boxShadow: "0 20px 40px -10px rgba(0,0,0,0.6)",
+            zIndex: 99999,
+            overflow: "hidden",
+            display: "flex",
+            flexDirection: "column",
           }}
         >
-          {/* ============================================================ */}
-          {/* HEADER — Compact, sebaris                                    */}
-          {/* ============================================================ */}
-          <div className="flex items-center justify-between gap-1 border-b border-border px-2.5 py-2 sm:px-3 sm:py-3">
-            <div className="flex items-center gap-1.5 min-w-0">
-              <h3 className="font-semibold text-xs sm:text-sm truncate">
+          {/* === HEADER === */}
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: "4px",
+              padding: "8px 10px",
+              borderBottom: "1px solid #262626",
+              flexShrink: 0,
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "6px",
+                minWidth: 0,
+              }}
+            >
+              <h3
+                style={{
+                  fontSize: "12px",
+                  fontWeight: 600,
+                  margin: 0,
+                  color: "#fafafa",
+                }}
+              >
                 Messages
               </h3>
               {unreadCount > 0 && (
-                <Badge
-                  variant="outline"
-                  className="border-red-500/40 text-red-400 text-[9px] px-1 h-4 shrink-0"
+                <span
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    height: "16px",
+                    padding: "0 5px",
+                    borderRadius: "9999px",
+                    border: "1px solid rgba(239,68,68,0.4)",
+                    color: "#f87171",
+                    fontSize: "10px",
+                    fontWeight: 600,
+                    flexShrink: 0,
+                  }}
                 >
                   {unreadCount > 9 ? "9+" : unreadCount}
-                </Badge>
+                </span>
               )}
             </div>
-            <div className="flex gap-0.5 shrink-0">
+            <div style={{ display: "flex", gap: "2px", flexShrink: 0 }}>
               {unreadCount > 0 && (
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="h-7 px-1.5 sm:px-2 text-[10px] sm:text-xs gap-1"
+                <button
                   onClick={handleMarkAllRead}
                   title="Mark all as read"
+                  style={{
+                    height: "26px",
+                    padding: "0 6px",
+                    background: "transparent",
+                    border: "none",
+                    color: "#a3a3a3",
+                    fontSize: "10px",
+                    cursor: "pointer",
+                    borderRadius: "4px",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "3px",
+                  }}
                 >
-                  <CheckCheck className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
-                  <span className="hidden xs:inline sm:inline">Mark all</span>
-                </Button>
+                  <CheckCheck style={{ width: "12px", height: "12px" }} />
+                  <span>Read all</span>
+                </button>
               )}
-              <Button
-                size="icon"
-                variant="ghost"
-                className="h-7 w-7"
+              <button
                 onClick={() => setOpen(false)}
+                style={{
+                  width: "26px",
+                  height: "26px",
+                  background: "transparent",
+                  border: "none",
+                  color: "#a3a3a3",
+                  cursor: "pointer",
+                  borderRadius: "4px",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
               >
-                <X className="h-3.5 w-3.5" />
-              </Button>
+                <X style={{ width: "13px", height: "13px" }} />
+              </button>
             </div>
           </div>
 
-          {/* ============================================================ */}
-          {/* BODY — Scrollable message list                              */}
-          {/* ============================================================ */}
-          <div className="overflow-y-auto" style={{ maxHeight: "calc(80vh - 42px)" }}>
+          {/* === BODY — scrollable === */}
+          <div
+            style={{
+              overflowY: "auto",
+              WebkitOverflowScrolling: "touch",
+              flex: 1,
+              minHeight: 0,
+            }}
+          >
             {loading ? (
-              <div className="flex justify-center py-8">
-                <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "center",
+                  padding: "24px 0",
+                }}
+              >
+                <Loader2
+                  className="animate-spin"
+                  style={{
+                    width: "18px",
+                    height: "18px",
+                    color: "#a3a3a3",
+                  }}
+                />
               </div>
             ) : messages.length === 0 ? (
-              <div className="px-4 py-12 text-center">
-                <Mail className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
-                <p className="text-sm text-muted-foreground">No messages</p>
+              <div style={{ padding: "32px 12px", textAlign: "center" }}>
+                <Mail
+                  style={{
+                    width: "28px",
+                    height: "28px",
+                    margin: "0 auto 6px",
+                    color: "#525252",
+                  }}
+                />
+                <p
+                  style={{
+                    fontSize: "12px",
+                    color: "#737373",
+                    margin: 0,
+                  }}
+                >
+                  No messages
+                </p>
               </div>
             ) : (
-              <div className="divide-y divide-border">
-                {messages.map((msg) => {
+              <div>
+                {messages.map((msg, idx) => {
                   const meta = TYPE_META[msg.type] || TYPE_META.info;
                   const Icon = meta.icon;
                   const isExpanded = expandedId === msg.id;
                   return (
                     <div
                       key={msg.id}
-                      className={cn(
-                        "px-2.5 py-2.5 sm:px-3 sm:py-3 cursor-pointer transition-colors hover:bg-accent/50",
-                        !msg.is_read && "bg-primary/5"
-                      )}
                       onClick={() => handleToggleExpand(msg)}
+                      style={{
+                        padding: "8px 10px",
+                        cursor: "pointer",
+                        transition: "background-color 0.15s",
+                        backgroundColor: !msg.is_read
+                          ? "rgba(239,68,68,0.05)"
+                          : "transparent",
+                        borderBottom:
+                          idx < messages.length - 1
+                            ? "1px solid #1a1a1a"
+                            : "none",
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.05)";
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.backgroundColor = !msg.is_read
+                          ? "rgba(239,68,68,0.05)"
+                          : "transparent";
+                      }}
                     >
-                      <div className="flex items-start gap-2">
-                        <Icon className={cn("h-4 w-4 shrink-0 mt-0.5", meta.color)} />
-
-                        <div className="flex-1 min-w-0">
-                          {/* Top row: type + unread dot */}
-                          <div className="flex items-center justify-between gap-1 mb-1">
-                            <div className="flex items-center gap-1 min-w-0">
-                              <span className="text-[11px] sm:text-xs font-medium text-muted-foreground truncate">
+                      <div
+                        style={{
+                          display: "flex",
+                          gap: "6px",
+                          alignItems: "flex-start",
+                        }}
+                      >
+                        <Icon
+                          style={{
+                            width: "14px",
+                            height: "14px",
+                            color: meta.color,
+                            flexShrink: 0,
+                            marginTop: "2px",
+                          }}
+                        />
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          {/* Top row: type + badges */}
+                          <div
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "space-between",
+                              gap: "4px",
+                              marginBottom: "3px",
+                            }}
+                          >
+                            <div
+                              style={{
+                                display: "flex",
+                                alignItems: "center",
+                                gap: "3px",
+                                minWidth: 0,
+                              }}
+                            >
+                              <span
+                                style={{
+                                  fontSize: "10px",
+                                  fontWeight: 500,
+                                  color: "#737373",
+                                  overflow: "hidden",
+                                  textOverflow: "ellipsis",
+                                  whiteSpace: "nowrap",
+                                }}
+                              >
                                 {meta.label}
                               </span>
                               {msg.is_pinned === 1 && (
-                                <Pin className="h-3 w-3 text-yellow-500 shrink-0" />
+                                <Pin
+                                  style={{
+                                    width: "10px",
+                                    height: "10px",
+                                    color: "#eab308",
+                                    flexShrink: 0,
+                                  }}
+                                />
                               )}
                               {msg.recipient_id === null && (
-                                <Badge
-                                  variant="outline"
-                                  className="text-[9px] px-1 h-4 border-purple-500/40 text-purple-400 shrink-0"
+                                <span
+                                  style={{
+                                    display: "inline-flex",
+                                    alignItems: "center",
+                                    height: "14px",
+                                    padding: "0 4px",
+                                    borderRadius: "9999px",
+                                    border: "1px solid rgba(192,132,252,0.4)",
+                                    color: "#c084fc",
+                                    fontSize: "8px",
+                                    fontWeight: 600,
+                                    flexShrink: 0,
+                                  }}
                                 >
                                   BC
-                                </Badge>
+                                </span>
                               )}
                             </div>
                             {!msg.is_read && (
-                              <span className="h-2 w-2 rounded-full bg-primary shrink-0" />
+                              <span
+                                style={{
+                                  width: "6px",
+                                  height: "6px",
+                                  borderRadius: "9999px",
+                                  backgroundColor: "#dc2626",
+                                  flexShrink: 0,
+                                }}
+                              />
                             )}
                           </div>
 
                           {/* Subject */}
                           {msg.subject && (
-                            <div className="text-xs sm:text-sm font-medium truncate">
+                            <div
+                              style={{
+                                fontSize: "12px",
+                                fontWeight: 500,
+                                color: "#fafafa",
+                                overflow: "hidden",
+                                textOverflow: "ellipsis",
+                                whiteSpace: "nowrap",
+                                marginBottom: "2px",
+                              }}
+                            >
                               {msg.subject}
                             </div>
                           )}
 
-                          {/* Body (or preview) */}
+                          {/* Body */}
                           {isExpanded ? (
-                            <p className="text-xs sm:text-sm text-muted-foreground whitespace-pre-wrap mt-1 break-words">
+                            <p
+                              style={{
+                                fontSize: "12px",
+                                color: "#a3a3a3",
+                                whiteSpace: "pre-wrap",
+                                wordBreak: "break-word",
+                                margin: "3px 0 0 0",
+                                lineHeight: 1.4,
+                              }}
+                            >
                               {msg.body}
                             </p>
                           ) : (
-                            <p className="text-[11px] sm:text-xs text-muted-foreground line-clamp-2 mt-0.5 break-words">
+                            <p
+                              style={{
+                                fontSize: "10px",
+                                color: "#737373",
+                                margin: "1px 0 0 0",
+                                display: "-webkit-box",
+                                WebkitLineClamp: 2,
+                                WebkitBoxOrient: "vertical",
+                                overflow: "hidden",
+                                wordBreak: "break-word",
+                                lineHeight: 1.4,
+                              }}
+                            >
                               {msg.body}
                             </p>
                           )}
 
                           {/* Meta */}
-                          <div className="flex items-center justify-between gap-2 mt-1.5">
-                            <span className="text-[10px] text-muted-foreground truncate min-w-0">
+                          <div
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "space-between",
+                              gap: "6px",
+                              marginTop: "4px",
+                            }}
+                          >
+                            <span
+                              style={{
+                                fontSize: "9px",
+                                color: "#525252",
+                                overflow: "hidden",
+                                textOverflow: "ellipsis",
+                                whiteSpace: "nowrap",
+                                minWidth: 0,
+                                flex: 1,
+                              }}
+                            >
                               From: {msg.sender_name || "Admin"}
                             </span>
-                            <span className="text-[10px] text-muted-foreground shrink-0">
+                            <span
+                              style={{
+                                fontSize: "9px",
+                                color: "#525252",
+                                flexShrink: 0,
+                              }}
+                            >
                               {formatRelativeTime(msg.created_at)}
                             </span>
                           </div>
@@ -324,9 +628,10 @@ export function UserMessages() {
               </div>
             )}
           </div>
-        </div>
+        </div>,
+        document.body
       )}
-    </div>
+    </>
   );
 }
 
