@@ -1,5 +1,5 @@
 /**
- * src/components/admin/analytics-dashboard.tsx
+ * src/components/admin/analytics-dashboard.tsx (REVISED - Fixed Movie icon)
  *
  * Admin Analytics UI:
  * - Range selector (7/14/30/90 days)
@@ -29,7 +29,6 @@ import {
   BarChart3,
   Activity,
   Tv,
-  Movie,
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -382,7 +381,7 @@ export function AnalyticsDashboard() {
         <Card className="p-4">
           <div className="mb-3 flex items-center justify-between">
             <h3 className="text-sm font-semibold flex items-center gap-2">
-              <Movie className="h-4 w-4 text-red-400" />
+              <Film className="h-4 w-4 text-red-400" />
               Top Movies
             </h3>
             <Badge variant="outline" className="text-[10px]">
@@ -594,7 +593,7 @@ export function AnalyticsDashboard() {
                   )}
                 >
                   {a.mediaType === "movie" ? (
-                    <Movie className="h-3.5 w-3.5 text-red-400" />
+                    <Film className="h-3.5 w-3.5 text-red-400" />
                   ) : (
                     <Tv className="h-3.5 w-3.5 text-blue-400" />
                   )}
