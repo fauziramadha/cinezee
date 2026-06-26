@@ -53,8 +53,15 @@ export function Header() {
           ? "glass border-b border-border/40"
           : "bg-gradient-to-b from-black/80 to-transparent",
       )}
+      style={{
+        // === FIX NOTCH iOS ===
+        // Beri padding otomatis sesuai ukuran notch/dynamic island iPhone
+        paddingTop: "env(safe-area-inset-top)",
+        paddingLeft: "env(safe-area-inset-left)",
+        paddingRight: "env(safe-area-inset-right)",
+      }}
     >
-      <div className="mx-auto flex h-16 items-center justify-between px-4 sm:px-6 lg:px-8">
+      <div className="mx-auto flex min-h-[64px] items-center justify-between px-4 sm:px-6 lg:px-8">
         {/* Left: Logo + Nav */}
         <div className="flex items-center gap-8">
           <a href="/" className="flex items-center gap-2">
