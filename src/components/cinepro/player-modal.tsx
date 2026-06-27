@@ -300,8 +300,10 @@ export function PlayerModal() {
           // === CRITICAL: Kill shadcn default positioning ===
           "!left-0 !top-0",
           "!translate-x-0 !translate-y-0",
-          // Full viewport
-          "!w-screen !h-screen",
+          // === FIX: Pakai 100dvh (dynamic viewport) bukan 100vh ===
+          // 100vh di iOS Safari termasuk area di balik browser toolbar
+          // 100dvh hanya area VISIBLE → bottom controls tidak terpotong
+          "!w-screen !h-[100dvh]",
           "!max-w-none !max-h-none !min-w-0 !min-h-0",
           // Cosmetic cleanup
           "!p-0 !border-0 !bg-transparent !shadow-none !gap-0 !rounded-none"
