@@ -22,8 +22,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { useTranslation, setGuestLanguage } from "@/i18n/use-translation";
-import type { TranslationKeys } from "@/i18n/messages";
-import type { Language } from "@/i18n/messages";
+import type { TranslationKeys, Language } from "@/i18n/messages";
 
 const LANGUAGES = [
   { code: "en", name: "English", flag: "🇬🇧" },
@@ -49,10 +48,12 @@ const ADMIN_ITEMS: { labelKey: TranslationKeys; href: string; icon: any }[] = [
 
 export function UserMenu() {
   const router = useRouter();
+
+  // Safe useSession — handle undefined during SSG prerender
   const sessionResult = useSession() as any;
-const data: any = sessionResult?.data ?? null;
-const status: string = sessionResult?.status ?? "unauthenticated";
-const session = data;
+  const session = sessionResult?.data ?? null;
+  const status = sessionResult?.status ?? "unauthenticated";
+
   const { t } = useTranslation();
   const [menuOpen, setMenuOpen] = useState(false);
   const [langOpen, setLangOpen] = useState(false);
@@ -60,18 +61,30 @@ const session = data;
   const [selectedLang, setSelectedLang] = useState<string>("en");
   const menuRef = useRef<HTMLDivElement>(null);
 
-  // Sync local state with session when session loads
+  // ============================================================
+  // SYNC LOCAL STATE WITH SESSION/LOCALSTORAGE
+  // ============================================================
   useEffect(() => {
+    // Priority 1: localStorage (langsung update saat ganti bahasa)
+    if (typeof window !== "undefined") {
+      try {
+        const stored = localStorage.getItem("cinestream_language");
+        if (stored) {
+          setSelectedLang(stored);
+          return;
+        }
+      } catch {}
+    }
+
+    // Priority 2: Session language
     if (session?.user?.language) {
       setSelectedLang(session.user.language);
-    } else if (typeof window !== "undefined") {
-      // Cek localStorage untuk guest user
-      const stored = localStorage.getItem("cinestream_language");
-      if (stored) setSelectedLang(stored);
     }
   }, [session]);
 
-  // Close menu when clicking outside
+  // ============================================================
+  // CLOSE MENU WHEN CLICKING OUTSIDE
+  // ============================================================
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
@@ -83,6 +96,9 @@ const session = data;
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
+  // ============================================================
+  // LOADING STATE
+  // ============================================================
   if (status === "loading") {
     return (
       <div className="flex h-9 w-9 items-center justify-center rounded-full bg-muted">
@@ -97,9 +113,12 @@ const session = data;
 
   const user = session.user;
   const initial = user.name?.[0]?.toUpperCase() || user.email?.[0]?.toUpperCase() || "U";
-  const currentLang = LANGUAGES.find(l => l.code === selectedLang) || LANGUAGES[0];
+  const currentLang = LANGUAGES.find((l) => l.code === selectedLang) || LANGUAGES[0];
   const isAdmin = user.role === "admin";
 
+  // ============================================================
+  // HANDLERS
+  // ============================================================
   const handleLogout = async () => {
     setMenuOpen(false);
     toast.loading(t("loading"));
@@ -115,11 +134,11 @@ const session = data;
   const handleLanguageChange = async (code: string) => {
     setLangLoading(true);
 
-    // Update localStorage untuk guest user (dan sebagai backup)
-    setGuestLanguage(code as Language);
-
     try {
-      // Kalau user login, update ke database
+      // 1. Update localStorage + trigger event (untuk update UI real-time)
+      setGuestLanguage(code as Language);
+
+      // 2. Kalau user login, update ke database
       if (session?.user) {
         const res = await fetch("/api/user/language", {
           method: "PATCH",
@@ -134,15 +153,16 @@ const session = data;
         }
       }
 
+      // 3. Update state lokal
       setSelectedLang(code);
-      const langName = LANGUAGES.find(l => l.code === code)?.name || code;
+      const langName = LANGUAGES.find((l) => l.code === code)?.name || code;
       toast.success(`${t("language")}: ${langName}`);
       setLangOpen(false);
 
-      // Force reload untuk update semua teks di seluruh app
+      // 4. Reload setelah delay singkat (biar toast sempat tampil)
       setTimeout(() => {
         window.location.reload();
-      }, 500);
+      }, 800);
     } catch {
       toast.error(t("error"));
     } finally {
@@ -150,6 +170,9 @@ const session = data;
     }
   };
 
+  // ============================================================
+  // RENDER
+  // ============================================================
   return (
     <div className="relative" ref={menuRef}>
       {/* User button */}
@@ -168,9 +191,9 @@ const session = data;
         <ChevronDown className="h-3 w-3 text-muted-foreground" />
       </button>
 
-      {/* ================================================================ */}
-      {/* DROPDOWN MENU                                                    */}
-      {/* ================================================================ */}
+      {/* ============================================================ */}
+      {/* DROPDOWN MENU                                                */}
+      {/* ============================================================ */}
       {menuOpen && (
         <div className="absolute right-0 top-full mt-2 w-56 max-h-[80vh] overflow-y-auto rounded-lg border border-border bg-popover shadow-xl z-50">
           {/* === User info header === */}
@@ -256,9 +279,9 @@ const session = data;
             )}
           </div>
 
-          {/* ================================================================ */}
-          {/* ADMIN SECTION (hanya untuk admin)                                */}
-          {/* ================================================================ */}
+          {/* ============================================================ */}
+          {/* ADMIN SECTION (hanya untuk admin)                            */}
+          {/* ============================================================ */}
           {isAdmin && (
             <>
               {/* Separator + Label */}
