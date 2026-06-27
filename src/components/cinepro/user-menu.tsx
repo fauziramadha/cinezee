@@ -36,7 +36,7 @@ const LANGUAGES = [
   { code: "zh", name: "中文", flag: "🇨🇳" },
 ];
 
-// === Admin menu items (dengan translation keys) ===
+// === Admin menu items (dengan translations keys) ===
 const ADMIN_ITEMS: { labelKey: TranslationKeys; href: string; icon: any }[] = [
   { labelKey: "admin_dashboard", href: "/admin", icon: LayoutDashboard },
   { labelKey: "admin_providers", href: "/admin/providers", icon: Server },
