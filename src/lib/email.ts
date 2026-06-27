@@ -1,25 +1,21 @@
 /**
- * src/lib/email.ts
+ * src/lib/email.ts (BREVO VERSION)
  *
- * Email service menggunakan Resend API.
- * - Gratis: 100 email/hari, 3000/bulan
+ * Email service menggunakan Brevo API (sebelumnya SendinBlue).
+ * - Gratis: 300 email/hari
+ * - Bisa kirim ke email siapapun (tidak restrict seperti Resend)
  * - HTTP-based (cocok untuk Cloudflare Workers)
- * - Support single & bulk email
  *
  * Setup:
- *   1. Daftar di https://resend.com (gratis)
- *   2. Get API key dari dashboard
- *   3. Set env var: RESEND_API_KEY=re_xxx
- *   4. (Optional) Verify domain untuk custom sender
+ *   1. Daftar di https://www.brevo.com (gratis)
+ *   2. Verify email sender di Brevo Dashboard
+ *   3. Get API key dari SMTP & API settings
+ *   4. Set env var: BREVO_API_KEY=xkeysib-xxx
+ *   5. Set env var: BREVO_SENDER_EMAIL=noreply@yourdomain.com
+ *   6. Set env var: BREVO_SENDER_NAME=CineStream
  *
  * Cara pakai:
  *   import { sendEmail, sendBroadcastEmail } from "@/lib/email";
- *
- *   await sendEmail({
- *     to: "user@example.com",
- *     subject: "Welcome!",
- *     html: "<h1>Hello</h1>"
- *   });
  */
 
 // ============================================================
@@ -29,7 +25,7 @@ interface SendEmailParams {
   to: string | string[];
   subject: string;
   html: string;
-  from?: string;
+  from?: { email: string; name: string };
 }
 
 interface BroadcastEmailParams {
@@ -38,6 +34,11 @@ interface BroadcastEmailParams {
   body: string;
   messageType?: "info" | "warning" | "announcement" | "system";
   senderName?: string | null;
+}
+
+interface EmailSendResult {
+  success: boolean;
+  error?: string;
 }
 
 interface EmailResult {
@@ -50,18 +51,21 @@ interface EmailResult {
 // ============================================================
 // CONFIG
 // ============================================================
-const RESEND_API_KEY = process.env.RESEND_API_KEY;
-const RESEND_API_URL = "https://api.resend.com/emails";
+const BREVO_API_KEY = process.env.BREVO_API_KEY;
+const BREVO_API_URL = "https://api.brevo.com/v3/smtp/email";
 
-// Default sender (pakai Resend default domain dulu)
-// Untuk custom domain, verify di Resend dashboard lalu ganti
-const DEFAULT_FROM = "CineStream <onboarding@resend.dev>";
+// Sender dari env vars (wajib diset di Cloudflare Secrets)
+const SENDER_EMAIL = process.env.BREVO_SENDER_EMAIL || "noreply@cinestream.app";
+const SENDER_NAME = process.env.BREVO_SENDER_NAME || "CineStream";
 
-// Batch size (Resend max 50 per request)
-const BATCH_SIZE = 50;
+// Default sender object
+const DEFAULT_FROM = {
+  email: SENDER_EMAIL,
+  name: SENDER_NAME,
+};
 
 // ============================================================
-// HTML EMAIL TEMPLATE
+// HTML EMAIL TEMPLATE (BROADCAST)
 // ============================================================
 function generateEmailHTML(params: {
   subject: string;
@@ -71,16 +75,14 @@ function generateEmailHTML(params: {
 }): string {
   const { subject, body, messageType = "info", senderName } = params;
 
-  // Type colors
-  const typeColors: Record<string, { bg: string; text: string; label: string }> = {
-    info: { bg: "#3b82f6", text: "Info", label: "Info" },
-    warning: { bg: "#facc15", text: "Warning", label: "Warning" },
-    announcement: { bg: "#a855f7", text: "Announcement", label: "Announcement" },
-    system: { bg: "#6b7280", text: "System", label: "System" },
+  const typeColors: Record<string, { bg: string; label: string }> = {
+    info: { bg: "#3b82f6", label: "Info" },
+    warning: { bg: "#facc15", label: "Warning" },
+    announcement: { bg: "#a855f7", label: "Announcement" },
+    system: { bg: "#6b7280", label: "System" },
   };
   const typeMeta = typeColors[messageType] || typeColors.info;
 
-  // Convert newlines to <br>
   const bodyHtml = body
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
@@ -99,11 +101,9 @@ function generateEmailHTML(params: {
   <title>CineStream Notification</title>
 </head>
 <body style="margin:0;padding:0;background:#0a0a0a;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
-  <!-- Wrapper -->
   <table width="100%" cellpadding="0" cellspacing="0" style="background:#0a0a0a;padding:24px 0;">
     <tr>
       <td align="center">
-        <!-- Container -->
         <table width="600" cellpadding="0" cellspacing="0" style="background:#171717;border-radius:16px;overflow:hidden;max-width:600px;width:100%;">
 
           <!-- Header -->
@@ -124,24 +124,20 @@ function generateEmailHTML(params: {
           <!-- Content -->
           <tr>
             <td style="padding:32px 40px;">
-              <!-- Type Badge -->
               <div style="display:inline-block;background:${typeMeta.bg};color:#000;font-size:11px;font-weight:700;padding:4px 12px;border-radius:999px;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:16px;">
                 ${typeMeta.label}
               </div>
 
-              <!-- Subject -->
               ${subjectHtml ? `
               <h2 style="color:#fafafa;font-size:20px;font-weight:700;margin:0 0 16px 0;line-height:1.3;">
                 ${subjectHtml}
               </h2>
               ` : ''}
 
-              <!-- Body -->
               <div style="color:#d4d4d4;font-size:15px;line-height:1.6;margin:0 0 24px 0;">
                 ${bodyHtml}
               </div>
 
-              <!-- Sender -->
               ${senderName ? `
               <div style="color:#737373;font-size:13px;padding-top:16px;border-top:1px solid #262626;">
                 — ${senderName.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")}
@@ -150,7 +146,7 @@ function generateEmailHTML(params: {
             </td>
           </tr>
 
-          <!-- CTA Button -->
+          <!-- CTA -->
           <tr>
             <td style="padding:0 40px 32px 40px;text-align:center;">
               <a href="https://cinezee.fauziramadhani4321.workers.dev"
@@ -182,44 +178,59 @@ function generateEmailHTML(params: {
 }
 
 // ============================================================
-// SEND SINGLE EMAIL
+// SEND SINGLE EMAIL (Brevo API)
 // ============================================================
-export async function sendEmail(params: SendEmailParams): Promise<boolean> {
-  if (!RESEND_API_KEY) {
-    console.warn("[EMAIL] RESEND_API_KEY not set, skipping email send");
-    return false;
+export async function sendEmail(params: SendEmailParams): Promise<EmailSendResult> {
+  if (!BREVO_API_KEY) {
+    console.warn("[EMAIL] BREVO_API_KEY not set, skipping email send");
+    return { success: false, error: "BREVO_API_KEY not configured" };
   }
 
+  // Format recipients untuk Brevo (array of {email, name})
+  const toArray = Array.isArray(params.to)
+    ? params.to.map((email) => ({ email }))
+    : [{ email: params.to }];
+
   try {
-    const response = await fetch(RESEND_API_URL, {
+    const response = await fetch(BREVO_API_URL, {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${RESEND_API_KEY}`,
-        "Content-Type": "application/json",
+        accept: "application/json",
+        "content-type": "application/json",
+        "api-key": BREVO_API_KEY,
       },
       body: JSON.stringify({
-        from: params.from || DEFAULT_FROM,
-        to: params.to,
+        sender: params.from || DEFAULT_FROM,
+        to: toArray,
         subject: params.subject,
-        html: params.html,
+        htmlContent: params.html,
       }),
     });
 
     if (!response.ok) {
-      const error = await response.text();
-      console.error("[EMAIL] Send failed:", error);
-      return false;
+      const errorText = await response.text();
+      let errorMsg = `HTTP ${response.status}`;
+
+      try {
+        const errorJson = JSON.parse(errorText);
+        errorMsg = errorJson.message || errorJson.error || errorMsg;
+      } catch {
+        errorMsg = errorText || errorMsg;
+      }
+
+      console.error("[EMAIL] Send failed:", response.status, errorMsg);
+      return { success: false, error: errorMsg };
     }
 
-    return true;
-  } catch (error) {
+    return { success: true };
+  } catch (error: any) {
     console.error("[EMAIL] Error:", error);
-    return false;
+    return { success: false, error: error.message || "Network error" };
   }
 }
 
 // ============================================================
-// SEND BROADCAST EMAIL (Bulk)
+// SEND BROADCAST EMAIL (Brevo - satu per satu)
 // ============================================================
 export async function sendBroadcastEmail(
   params: BroadcastEmailParams
@@ -231,10 +242,10 @@ export async function sendBroadcastEmail(
     errors: [],
   };
 
-  if (!RESEND_API_KEY) {
-    console.warn("[EMAIL] RESEND_API_KEY not set, skipping broadcast");
+  if (!BREVO_API_KEY) {
+    console.warn("[EMAIL] BREVO_API_KEY not set, skipping broadcast");
     result.success = false;
-    result.errors.push("RESEND_API_KEY not configured");
+    result.errors.push("BREVO_API_KEY not configured");
     return result;
   }
 
@@ -259,42 +270,38 @@ export async function sendBroadcastEmail(
 
   const subject = `[CineStream] ${params.subject || "Notification"}`;
 
-  // Send in batches
-  for (let i = 0; i < validRecipients.length; i += BATCH_SIZE) {
-    const batch = validRecipients.slice(i, i + BATCH_SIZE);
-    const toEmails = batch.map((r) => r.email);
+  // Brevo tidak punya batch endpoint khusus, kirim satu per satu
+  // Tapi tetap bisa parallel dengan limit (5 concurrent)
+  const CONCURRENT_LIMIT = 5;
+  const chunks: typeof validRecipients[] = [];
 
-    try {
-      const response = await fetch(RESEND_API_URL, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${RESEND_API_KEY}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          from: DEFAULT_FROM,
-          to: toEmails,
-          subject,
-          html,
-        }),
+  for (let i = 0; i < validRecipients.length; i += CONCURRENT_LIMIT) {
+    chunks.push(validRecipients.slice(i, i + CONCURRENT_LIMIT));
+  }
+
+  for (const chunk of chunks) {
+    const promises = chunk.map(async (recipient) => {
+      const sendResult = await sendEmail({
+        to: recipient.email,
+        subject,
+        html,
       });
 
-      if (response.ok) {
-        result.sent += batch.length;
+      if (sendResult.success) {
+        result.sent++;
       } else {
-        const error = await response.text();
-        result.failed += batch.length;
-        result.errors.push(`Batch ${i / BATCH_SIZE + 1}: ${error}`);
+        result.failed++;
+        // Hanya simpan 3 error pertama untuk avoid spam
+        if (result.errors.length < 3) {
+          result.errors.push(`${recipient.email}: ${sendResult.error}`);
+        }
       }
-    } catch (error: any) {
-      result.failed += batch.length;
-      result.errors.push(`Batch ${i / BATCH_SIZE + 1}: ${error.message}`);
-    }
+    });
 
-    // Small delay between batches (avoid rate limit)
-    if (i + BATCH_SIZE < validRecipients.length) {
-      await new Promise((resolve) => setTimeout(resolve, 500));
-    }
+    await Promise.all(promises);
+
+    // Small delay antar chunk (avoid rate limit)
+    await new Promise((resolve) => setTimeout(resolve, 200));
   }
 
   result.success = result.failed === 0;
@@ -305,5 +312,5 @@ export async function sendBroadcastEmail(
 // HELPER: Check if email is configured
 // ============================================================
 export function isEmailConfigured(): boolean {
-  return !!RESEND_API_KEY;
+  return !!BREVO_API_KEY;
 }
