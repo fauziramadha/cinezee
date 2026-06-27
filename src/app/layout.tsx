@@ -17,6 +17,7 @@ const geistSans = Geist({
 // METADATA — SEO + PWA + Social Sharing
 // ============================================================
 export const metadata: Metadata = {
+  metadataBase: new URL("https://cinezee.fauziramadhani4321.workers.dev"),
   title: "CineStream — Watch Movies & TV Shows Free",
   description:
     "Modern, open-source streaming app for browsing and watching movies and TV shows. Built with Next.js, deployed on Cloudflare Workers.",
