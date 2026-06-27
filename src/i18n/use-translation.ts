@@ -3,7 +3,7 @@
  *
  * Hook useTranslation() sekarang pakai Context dari TranslationProvider.
  * - Jika di dalam Provider → pakai context (re-render otomatis saat bahasa berubah)
- * - Jika di luar Provider → fallback ke localStorage + session
+ * - Jika di luar Provider → fallback ke localStorage + session.
  */
 
 "use client";
