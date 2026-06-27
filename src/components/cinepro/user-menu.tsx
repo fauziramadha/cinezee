@@ -49,7 +49,10 @@ const ADMIN_ITEMS: { labelKey: TranslationKeys; href: string; icon: any }[] = [
 
 export function UserMenu() {
   const router = useRouter();
-  const { data: session, status } = useSession();
+  const sessionResult = useSession() as any;
+const data: any = sessionResult?.data ?? null;
+const status: string = sessionResult?.status ?? "unauthenticated";
+const session = data;
   const { t } = useTranslation();
   const [menuOpen, setMenuOpen] = useState(false);
   const [langOpen, setLangOpen] = useState(false);
