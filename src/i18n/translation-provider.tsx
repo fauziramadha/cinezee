@@ -1,9 +1,10 @@
 /**
- * src/i18n/translation-provider.tsx (FINAL - Fix hydration & sync)
+ * src/i18n/translation-provider.tsx
  *
- * - Lazy init dari localStorage (cegah flash "en" → "id")
- * - Hapus dependency status (langsung baca localStorage saat mount)
- * - suppressHydrationWarning untuk avoid mismatch warning
+ * Context Provider untuk translasi.
+ * - Wrap sekali di root layout
+ * - Share instance bahasa aktif ke semua komponen
+ * - Lebih efficient daripada setiap komponen call useSession()
  */
 
 "use client";
@@ -28,8 +29,10 @@ interface TranslationContextType {
   isLoading: boolean;
 }
 
-// Default null agar bisa detect apakah di dalam Provider atau tidak
-const TranslationContext = createContext<TranslationContextType | null>(null);
+// ============================================================
+// CONTEXT (EXPORT agar bisa dipakai di use-translation.ts)
+// ============================================================
+export const TranslationContext = createContext<TranslationContextType | null>(null);
 
 // ============================================================
 // HELPER: Baca localStorage dengan aman
@@ -57,7 +60,7 @@ export function TranslationProvider({ children }: { children: React.ReactNode })
   const [lang, setLangState] = useState<Language>(() => {
     return getStoredLang() || "en";
   });
-  const [isLoading, setIsLoading] = useState(false); // Tidak loading lagi karena lazy init
+  const [isLoading, setIsLoading] = useState(false);
 
   // ============================================================
   // SYNC: Update dari session kalau localStorage kosong
