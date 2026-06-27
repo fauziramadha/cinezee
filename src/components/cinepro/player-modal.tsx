@@ -252,9 +252,6 @@ export function PlayerModal() {
   // ============================================================
   // BUG FIX 1: Use !important Tailwind classes to KILL shadcn's
   // default `left-[50%] top-[50%] -translate-x-1/2 -translate-y-1/2`.
-  // Inline `transform: none` alone is NOT enough because Tailwind's
-  // translate classes set CSS variables that combine into transform.
-  // We MUST use `!translate-x-0 !translate-y-0` to nuke them.
   // ============================================================
 
   // Inline styles for flex centering + opaque background
@@ -301,8 +298,6 @@ export function PlayerModal() {
         style={dialogContentStyle}
         className={cn(
           // === CRITICAL: Kill shadcn default positioning ===
-          // shadcn DialogContent adds: left-[50%] top-[50%] translate-x-[-50%] translate-y-[-50%]
-          // These !important classes override those defaults.
           "!left-0 !top-0",
           "!translate-x-0 !translate-y-0",
           // Full viewport
@@ -328,8 +323,8 @@ export function PlayerModal() {
 
         {/* ============================================================ */}
         {/* INNER PLAYER BOX                                              */}
-        {/* In pseudo-fullscreen: fills entire viewport                  */}
-        {/* In normal mode: 95vw x 85vh, max 1100px, rounded corners     */}
+        {/* FIX: Use 100dvh (dynamic viewport) instead of 85vh           */}
+        {/*       so bottom controls are NOT cut off by browser navbar    */}
         {/* ============================================================ */}
         <div
           style={
@@ -349,8 +344,11 @@ export function PlayerModal() {
                   position: "relative",
                   width: "95vw",
                   maxWidth: "1100px",
-                  height: "85vh",
-                  maxHeight: "700px",
+                  // FIX: pakai 100dvh (dynamic viewport height) bukan 85vh
+                  // dvh = visible viewport (exclude browser address bar)
+                  // sehingga bottom controls tidak terpotong
+                  height: "calc(100dvh - 1.5rem)",
+                  maxHeight: "calc(100dvh - 1.5rem)",
                   margin: "0",
                   borderRadius: "12px",
                   backgroundColor: "#000",
@@ -366,7 +364,7 @@ export function PlayerModal() {
           <div
             className={cn(
               "absolute left-0 right-0 top-0 z-30 flex shrink-0 items-center justify-between gap-2 bg-gradient-to-b from-black/90 to-transparent px-3 py-2 transition-opacity duration-300 sm:px-4 sm:py-3",
-              controlsVisible ? "opacity-100" : "opacity-0"
+              controlsVisible ? "opacity-100" : "opacity-0 pointer-events-none"
             )}
           >
             <div className="min-w-0 flex-1">
@@ -397,8 +395,8 @@ export function PlayerModal() {
                   value={String(currentIdx)}
                   onValueChange={(v) => setCurrentIdx(parseInt(v, 10))}
                 >
-                  <SelectTrigger className="h-7 w-24 gap-1 border-white/20 bg-white/10 text-[10px] text-white backdrop-blur-sm sm:h-8 sm:w-32 sm:text-xs md:w-40">
-                    <Server className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
+                  <SelectTrigger className="h-7 w-24 shrink-0 gap-1 border-white/20 bg-white/10 text-[10px] text-white backdrop-blur-sm sm:h-8 sm:w-32 sm:text-xs md:w-40">
+                    <Server className="h-3 w-3 shrink-0 sm:h-3.5 sm:w-3.5" />
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -521,16 +519,22 @@ export function PlayerModal() {
             )}
           </div>
 
-          {/* Bottom controls for TV shows - Auto hide on Pseudo Fullscreen */}
+          {/* ============================================================ */}
+          {/* BOTTOM CONTROLS (TV shows only)                               */}
+          {/* FIX #5: justify-between agar tidak menimpa                   */}
+          {/* FIX: safe-area-inset-bottom agar tidak terpotong home bar    */}
+          {/* ============================================================ */}
           {isTV && (
             <div
               className={cn(
-                "absolute bottom-0 left-0 right-0 z-30 flex shrink-0 items-center gap-2 bg-gradient-to-t from-black/90 to-transparent px-3 py-2 transition-opacity duration-300 sm:gap-3 sm:px-4 sm:py-3",
-                controlsVisible ? "opacity-100" : "opacity-0"
+                "absolute bottom-0 left-0 right-0 z-30 flex items-center justify-between gap-2 bg-gradient-to-t from-black/95 via-black/80 to-transparent px-3 pt-6 pb-[calc(env(safe-area-inset-bottom)+0.5rem)] transition-opacity duration-300 sm:px-4",
+                controlsVisible ? "opacity-100" : "opacity-0 pointer-events-none"
               )}
             >
+              {/* === LEFT: Season + Episode selects === */}
+            <div className="flex min-w-0 items-center gap-2">
               <Select value={String(season)} onValueChange={(v) => setSeason(parseInt(v, 10))}>
-                <SelectTrigger className="h-7 w-20 border-white/20 bg-white/10 text-[10px] text-white backdrop-blur-sm sm:h-8 sm:w-24 sm:text-xs">
+                <SelectTrigger className="h-8 w-[4.5rem] shrink-0 border-white/20 bg-white/10 text-[11px] text-white backdrop-blur-sm sm:h-9 sm:w-24 sm:text-xs">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -545,7 +549,7 @@ export function PlayerModal() {
               </Select>
 
               <Select value={String(episode)} onValueChange={(v) => setEpisode(parseInt(v, 10))}>
-                <SelectTrigger className="h-7 w-24 border-white/20 bg-white/10 text-[10px] text-white backdrop-blur-sm sm:h-8 sm:w-28 sm:text-xs">
+                <SelectTrigger className="h-8 w-[5.5rem] shrink-0 border-white/20 bg-white/10 text-[11px] text-white backdrop-blur-sm sm:h-9 sm:w-28 sm:text-xs">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent className="max-h-72">
@@ -556,29 +560,33 @@ export function PlayerModal() {
                   ))}
                 </SelectContent>
               </Select>
-
-              <div className="ml-auto flex gap-1">
-                <Button
-                  size="icon"
-                  variant="ghost"
-                  className="h-7 w-7 text-white hover:bg-white/10 sm:h-8 sm:w-8"
-                  disabled={episode <= 1}
-                  onClick={() => setEpisode(Math.max(1, episode - 1))}
-                >
-                  <ChevronLeft className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-                </Button>
-                <Button
-                  size="icon"
-                  variant="ghost"
-                  className="h-7 w-7 text-white hover:bg-white/10 sm:h-8 sm:w-8"
-                  onClick={() => setEpisode(episode + 1)}
-                >
-                  <ChevronRight className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-                </Button>
-              </div>
             </div>
-          )}
-        </div>
+
+            {/* === RIGHT: Prev/Next buttons === */}
+            <div className="flex shrink-0 items-center gap-1">
+              <Button
+                size="icon"
+                variant="ghost"
+                className="h-8 w-8 shrink-0 text-white hover:bg-white/20 sm:h-9 sm:w-9"
+                disabled={episode <= 1}
+                onClick={() => setEpisode(Math.max(1, episode - 1))}
+                aria-label="Previous episode"
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+              <Button
+                size="icon"
+                variant="ghost"
+                className="h-8 w-8 shrink-0 text-white hover:bg-white/20 sm:h-9 sm:w-9"
+                onClick={() => setEpisode(episode + 1)}
+                aria-label="Next episode"
+              >
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+        )}
+      </div>
       </DialogContent>
     </Dialog>
   );
