@@ -13,12 +13,15 @@ interface HeroCarouselProps {
   movies: Movie[];
 }
 
+const SLIDE_DURATION = 8000; // 8 detik per slide
+
 export function HeroCarousel({ movies }: HeroCarouselProps) {
   const [emblaRef, emblaApi] = useEmblaCarousel({
     loop: true,
     align: "start",
   });
   const [selected, setSelected] = useState(0);
+  const [logos, setLogos] = useState<Record<number, string | null>>({});
   const setSelectedMedia = useAppStore((s) => s.setSelectedMedia);
   const openPlayer = useAppStore((s) => s.openPlayer);
 
@@ -35,13 +38,48 @@ export function HeroCarousel({ movies }: HeroCarouselProps) {
     };
   }, [emblaApi, onSelect]);
 
-  // Auto-rotate every 8 seconds
+  // ============================================================
+  // FIX #6: Fetch logos untuk semua hero movies (parallel)
+  // ============================================================
   useEffect(() => {
-    if (!emblaApi) return;
-    const interval = setInterval(() => {
-      emblaApi.scrollNext();
-    }, 8000);
-    return () => clearInterval(interval);
+    if (!movies.length) return;
+    const heroMovies = movies.slice(0, 5);
+    let cancelled = false;
+
+    Promise.all(
+      heroMovies.map((movie) => {
+        const type = movie.media_type || (movie.title ? "movie" : "tv");
+        return fetch(`/api/detail/${movie.id}?type=${type}`)
+          .then((res) => res.json())
+          .then((data) => {
+            // Priority: English logo > any logo
+            const logo =
+              data.images?.logos?.find((l: any) => l.iso_639_1 === "en") ||
+              data.images?.logos?.[0];
+            return { id: movie.id, logoPath: logo?.file_path || null };
+          })
+          .catch(() => ({ id: movie.id, logoPath: null }));
+      })
+    ).then((results) => {
+      if (cancelled) return;
+      const logoMap: Record<number, string | null> = {};
+      results.forEach((r) => {
+        logoMap[r.id] = r.logoPath;
+      });
+      setLogos(logoMap);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [movies]);
+
+  // ============================================================
+  // ANIMASI PROGRESS BAR: Saat animation selesai → next slide
+  // (Hapus setInterval lama, pakai onAnimationEnd sebagai trigger)
+  // ============================================================
+  const handleProgressEnd = useCallback(() => {
+    emblaApi?.scrollNext();
   }, [emblaApi]);
 
   const scrollPrev = useCallback(() => emblaApi?.scrollPrev(), [emblaApi]);
@@ -49,11 +87,11 @@ export function HeroCarousel({ movies }: HeroCarouselProps) {
 
   if (!movies.length) return null;
 
-  // Take first 5 for hero
   const heroMovies = movies.slice(0, 5);
 
   const handlePlay = (movie: Movie) => {
-    const mediaType: "movie" | "tv" = movie.media_type || (movie.title ? "movie" : "tv");
+    const mediaType: "movie" | "tv" =
+      movie.media_type || (movie.title ? "movie" : "tv");
     const title = movie.title || movie.name || "Untitled";
     openPlayer({
       id: movie.id,
@@ -65,7 +103,8 @@ export function HeroCarousel({ movies }: HeroCarouselProps) {
   };
 
   const handleInfo = (movie: Movie) => {
-    const mediaType: "movie" | "tv" = movie.media_type || (movie.title ? "movie" : "tv");
+    const mediaType: "movie" | "tv" =
+      movie.media_type || (movie.title ? "movie" : "tv");
     const title = movie.title || movie.name || "Untitled";
     const selectedMedia: SelectedMedia = {
       id: movie.id,
@@ -84,10 +123,15 @@ export function HeroCarousel({ movies }: HeroCarouselProps) {
         <div className="flex h-full">
           {heroMovies.map((movie, idx) => {
             const title = movie.title || movie.name || "Untitled";
-            const year = (movie.release_date || movie.first_air_date || "").split("-")[0];
+            const year = (
+              movie.release_date ||
+              movie.first_air_date ||
+              ""
+            ).split("-")[0];
             const rating = movie.vote_average?.toFixed(1) || "N/A";
             const mediaType: "movie" | "tv" =
               movie.media_type || (movie.title ? "movie" : "tv");
+            const logoPath = logos[movie.id];
 
             return (
               <div
@@ -134,20 +178,38 @@ export function HeroCarousel({ movies }: HeroCarouselProps) {
                       )}
                     </div>
 
-                    {/* Title - smaller on mobile */}
-                    <h1
-                      className="slide-in text-2xl font-extrabold tracking-tight text-white drop-shadow-lg sm:text-3xl md:text-5xl lg:text-6xl"
-                      key={`title-${selected}`}
-                    >
-                      {title}
-                    </h1>
+                    {/* ============================================================ */}
+                    {/* FIX #6: Judul pakai logo TMDB (fallback ke text)            */}
+                    {/* ============================================================ */}
+                    {logoPath ? (
+                      <div
+                        key={`logo-${selected}`}
+                        className="slide-in relative h-12 w-auto max-w-[80%] sm:h-16 md:h-24 lg:h-28"
+                      >
+                        <Image
+                          src={getImageUrl(logoPath, "w500")}
+                          alt={title}
+                          fill
+                          className="object-contain object-left drop-shadow-2xl"
+                          unoptimized
+                          sizes="(max-width: 768px) 80vw, 500px"
+                        />
+                      </div>
+                    ) : (
+                      <h1
+                        className="slide-in text-2xl font-extrabold tracking-tight text-white drop-shadow-lg sm:text-3xl md:text-5xl lg:text-6xl"
+                        key={`title-${selected}`}
+                      >
+                        {title}
+                      </h1>
+                    )}
 
-                    {/* Overview - 2 lines mobile, 4 lines desktop */}
+                    {/* Overview */}
                     <p className="mt-2 line-clamp-2 max-w-xl text-xs text-white/80 drop-shadow sm:mt-3 sm:text-sm md:line-clamp-4 md:text-lg">
                       {movie.overview}
                     </p>
 
-                    {/* Buttons - touch-friendly, smaller on mobile */}
+                    {/* Buttons */}
                     <div className="mt-3 flex flex-wrap gap-2 sm:mt-6 sm:gap-3">
                       <Button
                         size="lg"
@@ -191,22 +253,40 @@ export function HeroCarousel({ movies }: HeroCarouselProps) {
         <ChevronRight className="h-5 w-5" />
       </button>
 
-      {/* Dots indicator - positioned above content row */}
-      <div className="absolute bottom-3 left-1/2 z-20 flex -translate-x-1/2 gap-1.5 sm:bottom-4 md:bottom-6">
+      {/* ============================================================ */}
+      {/* ANIMATED PROGRESS BARS                                        */}
+      {/* Bar aktif: fill 0→100% selama SLIDE_DURATION                 */}
+      {/* Saat penuh → onAnimationEnd → scrollNext() → reset            */}
+      {/* ============================================================ */}
+      <div className="absolute bottom-3 left-1/2 z-20 flex -translate-x-1/2 items-center gap-1.5 sm:bottom-4 md:bottom-6">
         {heroMovies.map((_, idx) => (
-          <button
+          <div
             key={idx}
-            onClick={() => emblaApi?.scrollTo(idx)}
-            className={cn(
-              "h-1.5 rounded-full transition-all duration-300",
-              idx === selected
-                ? "w-6 bg-primary"
-                : "w-1.5 bg-white/40 hover:bg-white/60",
+            className="h-1 w-8 overflow-hidden rounded-full bg-white/30 sm:w-10"
+          >
+            {/* Hanya slide aktif yang animasi */}
+            {idx === selected && (
+              <div
+                key={`progress-${selected}`}
+                className="h-full rounded-full bg-primary"
+                style={{
+                  width: "0%",
+                  animation: `heroProgress ${SLIDE_DURATION}ms linear forwards`,
+                }}
+                onAnimationEnd={handleProgressEnd}
+              />
             )}
-            aria-label={`Go to slide ${idx + 1}`}
-          />
+          </div>
         ))}
       </div>
+
+      {/* CSS Keyframes untuk progress animation */}
+      <style>{`
+        @keyframes heroProgress {
+          from { width: 0%; }
+          to { width: 100%; }
+        }
+      `}</style>
     </section>
   );
 }
