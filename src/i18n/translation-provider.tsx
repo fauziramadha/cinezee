@@ -49,7 +49,10 @@ const TranslationContext = createContext<TranslationContextType>({
 // PROVIDER
 // ============================================================
 export function TranslationProvider({ children }: { children: React.ReactNode }) {
-  const { data: session, status } = useSession();
+  // Safe useSession — handle undefined during SSG prerender
+  const sessionResult = useSession() as any;
+  const session = sessionResult?.data ?? null;
+  const status = sessionResult?.status ?? "unauthenticated";
   const [lang, setLangState] = useState<Language>("en");
   const [isLoading, setIsLoading] = useState(true);
 
