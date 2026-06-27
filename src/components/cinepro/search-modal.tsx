@@ -19,19 +19,11 @@ interface Genre {
   name: string;
 }
 
-// ============================================================
-// FIX #9: Network list dengan logo TMDB
-// ============================================================
-const NETWORKS = [
-  { id: 213, name: "Netflix", logo_path: "/wwemzKWzjKYJFfCeiB57q3r4Vcm.png" },
-  { id: 1024, name: "Prime Video", logo_path: "/hwqYUQmqiyA6tLnqj8MP9ey6ePh.png" },
-  { id: 2739, name: "Disney+", logo_path: "/gJ8VX6JSu3ci8HuqfVfGggHgz9m.png" },
-  { id: 2552, name: "Apple TV+", logo_path: "/4ec1mK0kCjQzdQ8jyDjsLnQR5Ip.png" },
-  { id: 49, name: "HBO", logo_path: "/tuomPhY2UtuPTqqFnKMVHvSgf7K.png" },
-  { id: 283, name: "Hulu", logo_path: "/pqUTCyXDRTmCxHa1RfFtB6S9t8O.png" },
-  { id: 3353, name: "Peacock", logo_path: "/qZNmL9QV3ijn3sHg5jPqYy7jPrc.png" },
-  { id: 4330, name: "Paramount+", logo_path: "/dhfmsl5LCpsHEyAhuJoCqMAdN9b.png" },
-];
+interface Network {
+  id: number;
+  name: string;
+  logo_path: string | null;
+}
 
 type TabView = "results" | "genres" | "networks";
 
@@ -52,6 +44,12 @@ export function SearchModal() {
   const [movieGenres, setMovieGenres] = useState<Genre[]>([]);
   const [tvGenres, setTvGenres] = useState<Genre[]>([]);
 
+  // ============================================================
+  // FIX #9: Networks state (fetch dari API, bukan hardcode)
+  // ============================================================
+  const [networks, setNetworks] = useState<Network[]>([]);
+  const [networksLoading, setNetworksLoading] = useState(false);
+
   // Fetch genres on mount
   useEffect(() => {
     fetch("/api/genres")
@@ -61,6 +59,20 @@ export function SearchModal() {
         if (data.tv) setTvGenres(data.tv);
       })
       .catch(() => {});
+  }, []);
+
+  // ============================================================
+  // FIX #9: Fetch networks dari TMDB API (logo asli, bukan hardcode)
+  // ============================================================
+  useEffect(() => {
+    setNetworksLoading(true);
+    fetch("/api/networks")
+      .then((res) => res.json())
+      .then((data) => {
+        setNetworks(data.networks || []);
+      })
+      .catch(() => {})
+      .finally(() => setNetworksLoading(false));
   }, []);
 
   // Fetch results (debounced) - hanya jika di tab results & ada query
@@ -221,9 +233,11 @@ export function SearchModal() {
           )}
         </div>
 
-        {/* Content Area */}
-        <div className="flex max-h-[60vh] flex-col overflow-y-auto scrollbar-thin">
-          
+        {/* ============================================================ */}
+        {/* FIX: Content area lebih tinggi + scroll yang benar            */}
+        {/* ============================================================ */}
+        <div className="flex max-h-[70vh] flex-col overflow-y-auto overflow-x-hidden">
+
           {/* === TAB: RESULTS === */}
           {activeTab === "results" && (
             <>
@@ -291,15 +305,16 @@ export function SearchModal() {
           )}
 
           {/* === TAB: GENRES === */}
+          {/* FIX: pb-20 agar genre terakhir tidak ketutup */}
           {activeTab === "genres" && (
-            <div className="p-4">
+            <div className="p-4 pb-20">
               <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
                 {availableGenres.map((g) => (
                   <button
                     key={g.id}
                     onClick={() => handleGenreSelect(g)}
                     className={cn(
-                      "flex items-center gap-2 rounded-lg border p-2 text-left text-xs font-medium transition-all",
+                      "flex items-center gap-2 rounded-lg border p-2.5 text-left text-xs font-medium transition-all",
                       selectedGenre?.id === g.id
                         ? "border-primary bg-primary/10 text-primary"
                         : "border-border bg-card text-foreground hover:bg-muted"
@@ -310,50 +325,66 @@ export function SearchModal() {
                   </button>
                 ))}
               </div>
-
-              {/* FIX #7: Tombol "Browse..." muncul di bawah setelah pilih genre */}
-              {selectedGenre && (
-                <div className="sticky bottom-0 mt-4 -mx-4 -mb-4 border-t border-border bg-background p-3">
-                  <button
-                    onClick={handleBrowseGenre}
-                    className="flex w-full items-center justify-center gap-2 rounded-lg bg-primary py-2.5 text-sm font-semibold text-primary-foreground hover:bg-primary/90"
-                  >
-                    Browse {selectedGenre.name} {type === "tv" ? "TV Shows" : "Movies"}
-                    <ArrowRight className="h-4 w-4" />
-                  </button>
-                </div>
-              )}
             </div>
           )}
 
           {/* === TAB: NETWORKS === */}
+          {/* FIX: pb-20 + fetch logo dari API */}
           {activeTab === "networks" && (
-            <div className="p-4">
+            <div className="p-4 pb-20">
               <p className="mb-3 text-xs text-muted-foreground">Browse TV shows by network:</p>
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                {NETWORKS.map((n) => (
-                  <button
-                    key={n.id}
-                    onClick={() => handleNetworkSelect(n.id)}
-                    className="flex flex-col items-center justify-center gap-2 rounded-lg border border-border bg-card p-4 transition-all hover:border-primary hover:bg-muted"
-                  >
-                    <div className="relative h-8 w-full">
-                      <Image
-                        src={getImageUrl(n.logo_path, "w154")}
-                        alt={n.name}
-                        fill
-                        className="object-contain"
-                        unoptimized
-                        sizes="100px"
-                      />
-                    </div>
-                    <span className="text-[10px] font-medium text-muted-foreground">{n.name}</span>
-                  </button>
-                ))}
-              </div>
+              {networksLoading ? (
+                <div className="flex h-32 items-center justify-center">
+                  <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                  {networks.map((n) => (
+                    <button
+                      key={n.id}
+                      onClick={() => handleNetworkSelect(n.id)}
+                      className="flex flex-col items-center justify-center gap-2 rounded-lg border border-border bg-card p-4 transition-all hover:border-primary hover:bg-muted"
+                    >
+                      {n.logo_path ? (
+                        <div className="relative h-8 w-full">
+                          <Image
+                            src={getImageUrl(n.logo_path, "w154")}
+                            alt={n.name}
+                            fill
+                            className="object-contain"
+                            unoptimized
+                            sizes="100px"
+                          />
+                        </div>
+                      ) : (
+                        <div className="flex h-8 items-center justify-center">
+                          <Radio className="h-6 w-6 text-muted-foreground" />
+                        </div>
+                      )}
+                      <span className="text-[10px] font-medium text-muted-foreground">{n.name}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           )}
         </div>
+
+        {/* ============================================================ */}
+        {/* FIX: Browse button di LUAR scroll area                        */}
+        {/* (selalu visible di bawah modal, tidak menutupi genre)        */}
+        {/* ============================================================ */}
+        {activeTab === "genres" && selectedGenre && (
+          <div className="border-t border-border bg-background p-3">
+            <button
+              onClick={handleBrowseGenre}
+              className="flex w-full items-center justify-center gap-2 rounded-lg bg-primary py-2.5 text-sm font-semibold text-primary-foreground hover:bg-primary/90"
+            >
+              Browse {selectedGenre.name} {type === "tv" ? "TV Shows" : "Movies"}
+              <ArrowRight className="h-4 w-4" />
+            </button>
+          </div>
+        )}
       </DialogContent>
     </Dialog>
   );
