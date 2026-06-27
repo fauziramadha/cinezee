@@ -1,10 +1,10 @@
 /**
- * src/components/admin/admin-nav.tsx
+ * src/components/admin/admin-nav.tsx (REVISED - Added Logs)
  *
  * Navigasi untuk admin pages.
- * Letakkan di layout admin (File 14 nanti).
+ * Letakkan di layout admin.
  *
- * Tab: Dashboard, Providers, Messages, Users, Analytics
+ * Tab: Dashboard, Providers, Messages, Users, Analytics, Logs
  * - Highlight tab yang sedang aktif berdasarkan URL pathname
  * - Responsive: scroll horizontal di mobile
  */
@@ -13,7 +13,14 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, Server, Mail, Users, BarChart3 } from "lucide-react";
+import {
+  LayoutDashboard,
+  Server,
+  Mail,
+  Users,
+  BarChart3,
+  ScrollText,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const NAV_ITEMS = [
@@ -22,6 +29,7 @@ const NAV_ITEMS = [
   { href: "/admin/messages", label: "Messages", icon: Mail },
   { href: "/admin/users", label: "Users", icon: Users },
   { href: "/admin/analytics", label: "Analytics", icon: BarChart3 },
+  { href: "/admin/logs", label: "Logs", icon: ScrollText },
 ];
 
 export function AdminNav() {
