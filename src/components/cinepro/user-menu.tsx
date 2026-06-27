@@ -7,7 +7,6 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   LogOut,
   User as UserIcon,
-  Settings,
   ChevronDown,
   Loader2,
   Bookmark,
@@ -19,8 +18,12 @@ import {
   Mail,
   Users,
   BarChart3,
+  ScrollText,
 } from "lucide-react";
 import { toast } from "sonner";
+import { useTranslation, setGuestLanguage } from "@/i18n/use-translation";
+import type { TranslationKeys } from "@/i18n/messages";
+import type { Language } from "@/i18n/messages";
 
 const LANGUAGES = [
   { code: "en", name: "English", flag: "🇬🇧" },
@@ -34,18 +37,20 @@ const LANGUAGES = [
   { code: "zh", name: "中文", flag: "🇨🇳" },
 ];
 
-// === Admin menu items ===
-const ADMIN_ITEMS = [
-  { label: "Dashboard", href: "/admin", icon: LayoutDashboard },
-  { label: "Provider Management", href: "/admin/providers", icon: Server },
-  { label: "Messages", href: "/admin/messages", icon: Mail },
-  { label: "Users", href: "/admin/users", icon: Users },
-  { label: "Analytics", href: "/admin/analytics", icon: BarChart3 },
+// === Admin menu items (dengan translation keys) ===
+const ADMIN_ITEMS: { labelKey: TranslationKeys; href: string; icon: any }[] = [
+  { labelKey: "admin_dashboard", href: "/admin", icon: LayoutDashboard },
+  { labelKey: "admin_providers", href: "/admin/providers", icon: Server },
+  { labelKey: "admin_messages", href: "/admin/messages", icon: Mail },
+  { labelKey: "admin_users", href: "/admin/users", icon: Users },
+  { labelKey: "admin_analytics", href: "/admin/analytics", icon: BarChart3 },
+  { labelKey: "admin_logs", href: "/admin/logs", icon: ScrollText },
 ];
 
 export function UserMenu() {
   const router = useRouter();
   const { data: session, status } = useSession();
+  const { t } = useTranslation();
   const [menuOpen, setMenuOpen] = useState(false);
   const [langOpen, setLangOpen] = useState(false);
   const [langLoading, setLangLoading] = useState(false);
@@ -56,6 +61,10 @@ export function UserMenu() {
   useEffect(() => {
     if (session?.user?.language) {
       setSelectedLang(session.user.language);
+    } else if (typeof window !== "undefined") {
+      // Cek localStorage untuk guest user
+      const stored = localStorage.getItem("cinestream_language");
+      if (stored) setSelectedLang(stored);
     }
   }, [session]);
 
@@ -90,9 +99,9 @@ export function UserMenu() {
 
   const handleLogout = async () => {
     setMenuOpen(false);
-    toast.loading("Logging out...");
+    toast.loading(t("loading"));
     await signOut({ redirect: false });
-    toast.success("Berhasil logout. Sampai jumpa lagi!");
+    toast.success(t("logout") + " ✓");
   };
 
   const handleNavigate = (href: string) => {
@@ -102,22 +111,37 @@ export function UserMenu() {
 
   const handleLanguageChange = async (code: string) => {
     setLangLoading(true);
-    try {
-      const res = await fetch("/api/user/language", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ language: code }),
-      });
 
-      if (res.ok) {
-        setSelectedLang(code);
-        toast.success(`Language changed to ${LANGUAGES.find(l => l.code === code)?.name}`);
-        setLangOpen(false);
-      } else {
-        toast.error("Failed to change language");
+    // Update localStorage untuk guest user (dan sebagai backup)
+    setGuestLanguage(code as Language);
+
+    try {
+      // Kalau user login, update ke database
+      if (session?.user) {
+        const res = await fetch("/api/user/language", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ language: code }),
+        });
+
+        if (!res.ok) {
+          toast.error(t("error"));
+          setLangLoading(false);
+          return;
+        }
       }
+
+      setSelectedLang(code);
+      const langName = LANGUAGES.find(l => l.code === code)?.name || code;
+      toast.success(`${t("language")}: ${langName}`);
+      setLangOpen(false);
+
+      // Force reload untuk update semua teks di seluruh app
+      setTimeout(() => {
+        window.location.reload();
+      }, 500);
     } catch {
-      toast.error("Failed to change language");
+      toast.error(t("error"));
     } finally {
       setLangLoading(false);
     }
@@ -171,21 +195,21 @@ export function UserMenu() {
               className="flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-sm text-foreground transition-colors hover:bg-muted"
             >
               <UserIcon className="h-4 w-4 text-muted-foreground" />
-              Profil Saya
+              {t("profile")}
             </button>
             <button
               onClick={() => handleNavigate("/watchlist")}
               className="flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-sm text-foreground transition-colors hover:bg-muted"
             >
               <Bookmark className="h-4 w-4 text-muted-foreground" />
-              Watchlist
+              {t("watchlist")}
             </button>
             <button
               onClick={() => handleNavigate("/history")}
               className="flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-sm text-foreground transition-colors hover:bg-muted"
             >
               <History className="h-4 w-4 text-muted-foreground" />
-              Riwayat Tonton
+              {t("history")}
             </button>
 
             {/* Language Switcher */}
@@ -194,7 +218,7 @@ export function UserMenu() {
               className="flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-sm text-foreground transition-colors hover:bg-muted"
             >
               <Languages className="h-4 w-4 text-muted-foreground" />
-              <span className="flex-1 text-left">Language</span>
+              <span className="flex-1 text-left">{t("language")}</span>
               <span className="text-xs text-muted-foreground">
                 {currentLang.flag} {currentLang.code.toUpperCase()}
               </span>
@@ -239,7 +263,7 @@ export function UserMenu() {
                 <div className="flex items-center gap-2 px-3 py-1.5">
                   <div className="h-1.5 w-1.5 rounded-full bg-primary" />
                   <span className="text-[10px] font-bold uppercase tracking-wider text-primary">
-                    Admin
+                    {t("admin_section")}
                   </span>
                   <div className="flex-1 border-t border-dashed border-primary/20" />
                 </div>
@@ -256,7 +280,7 @@ export function UserMenu() {
                       className="flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-sm text-foreground transition-colors hover:bg-primary/10 hover:text-primary group"
                     >
                       <Icon className="h-4 w-4 text-muted-foreground group-hover:text-primary transition-colors" />
-                      <span className="flex-1 text-left">{item.label}</span>
+                      <span className="flex-1 text-left">{t(item.labelKey)}</span>
                     </button>
                   );
                 })}
@@ -271,7 +295,7 @@ export function UserMenu() {
               className="flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-sm text-destructive transition-colors hover:bg-destructive/10"
             >
               <LogOut className="h-4 w-4" />
-              Logout
+              {t("logout")}
             </button>
           </div>
         </div>
