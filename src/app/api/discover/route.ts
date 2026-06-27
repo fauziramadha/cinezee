@@ -5,13 +5,15 @@ import { TMDB_BASE } from "@/lib/tmdb";
  * Discover API - Browse movies/TV with filters
  *
  * GET /api/discover?type=movie&genre=28&year=2024&sort=popularity.desc&page=1
+ * GET /api/discover?type=tv&network=213  (Netflix)
  *
  * Query params:
- *   type   - "movie" | "tv" (default: movie)
- *   genre  - Genre ID (e.g., 28 for Action)
- *   year   - Release year (e.g., 2024)
- *   sort   - Sort by: popularity.desc, vote_average.desc, release_date.desc, revenue.desc
- *   page   - Page number (default: 1)
+ *   type    - "movie" | "tv" (default: movie)
+ *   genre   - Genre ID (e.g., 28 for Action)
+ *   year    - Release year (e.g., 2024)
+ *   sort    - Sort by: popularity.desc, vote_average.desc, release_date.desc, revenue.desc
+ *   page    - Page number (default: 1)
+ *   network - Network ID (e.g., 213 for Netflix) — TV only
  */
 
 const API_KEY = process.env.TMDB_API_KEY || process.env.NEXT_PUBLIC_TMDB_API_KEY;
@@ -24,6 +26,7 @@ export async function GET(request: NextRequest) {
     const year = searchParams.get("year");
     const sort = searchParams.get("sort") || "popularity.desc";
     const page = parseInt(searchParams.get("page") || "1", 10);
+    const network = searchParams.get("network"); // ← NEW: Network ID
 
     if (!API_KEY) {
       return NextResponse.json(
@@ -38,7 +41,7 @@ export async function GET(request: NextRequest) {
       language: "en-US",
       sort_by: sort,
       page: String(page),
-      "vote_count.gte": "50", // Minimum 50 votes to avoid low-quality entries
+      "vote_count.gte": "50",
       include_adult: "false",
     });
 
@@ -47,7 +50,6 @@ export async function GET(request: NextRequest) {
     }
 
     if (year) {
-      // TMDB uses different param names for movie vs tv
       if (type === "movie") {
         params.set("primary_release_year", year);
       } else {
@@ -55,10 +57,15 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    // === NEW: Network filter (TV only) ===
+    if (network) {
+      params.set("with_networks", network);
+    }
+
     const url = `${TMDB_BASE}/discover/${type}?${params.toString()}`;
     const res = await fetch(url, {
       headers: { Accept: "application/json" },
-      next: { revalidate: 3600 }, // Cache 1 hour
+      next: { revalidate: 3600 },
     });
 
     if (!res.ok) {
