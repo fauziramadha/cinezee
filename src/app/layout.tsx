@@ -5,6 +5,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as SonnerToaster } from "@/components/ui/sonner";
 import { SessionProviderWrapper } from "@/components/providers/session-provider";
 import { SplashOverlay } from "@/components/pwa/splash-screen";
+import { TranslationProvider } from "@/i18n/translation-provider";
 import Script from "next/script";
 
 const geistSans = Geist({
@@ -158,7 +159,11 @@ export default function RootLayout({
         {/* === Splash Screen Overlay === */}
         <SplashOverlay />
 
-        <SessionProviderWrapper>{children}</SessionProviderWrapper>
+        {/* === Translation Provider (i18n) === */}
+        <TranslationProvider>
+          <SessionProviderWrapper>{children}</SessionProviderWrapper>
+        </TranslationProvider>
+
         <Toaster />
         <SonnerToaster position="bottom-right" />
       </body>
