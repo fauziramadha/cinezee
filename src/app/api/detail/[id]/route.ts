@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDetail } from "@/lib/tmdb";
+import { withCache, CACHE_KEYS, CACHE_TTL } from "@/lib/cache";
 
-export const revalidate = 3600;
+export const revalidate = 86400; // 1 hari (Next.js layer)
 
 export async function GET(
   request: NextRequest,
@@ -24,10 +25,15 @@ export async function GET(
       return NextResponse.json({ error: "Invalid id" }, { status: 400 });
     }
 
-    const data = await getDetail(id, type);
+    const data = await withCache(
+      CACHE_KEYS.detail(type, idStr),
+      () => getDetail(id, type),
+      CACHE_TTL.DAY // 1 hari (Workers Cache API layer)
+    );
+
     return NextResponse.json(data, {
       headers: {
-        "Cache-Control": "public, s-maxage=3600, stale-while-revalidate=86400",
+        "Cache-Control": "public, s-maxage=86400, stale-while-revalidate=604800",
       },
     });
   } catch (error) {
