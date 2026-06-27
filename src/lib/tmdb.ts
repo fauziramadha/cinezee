@@ -67,6 +67,18 @@ export interface MovieDetail extends Movie {
     air_date: string;
   }[];
   created_by?: { id: number; name: string; profile_path: string | null }[];
+
+  // === TAMBAHAN: Untuk logo judul (Fix #4) ===
+  images?: {
+    logos: Array<{
+      file_path: string;
+      iso_639_1: string | null;
+      vote_average: number;
+      vote_count: number;
+    }>;
+    posters?: Array<any>;
+    backdrops?: Array<any>;
+  };
 }
 
 export interface TMDBResponse<T> {
@@ -538,6 +550,20 @@ function mockDetail(id: number, type: MediaType): MovieDetail {
         }))
       : undefined,
     created_by: type === "tv" ? [{ id: 200, name: "Creator Name", profile_path: null }] : undefined,
+
+    // === TAMBAHAN: Mock logos untuk testing tanpa API key ===
+    images: {
+      logos: [
+        {
+          file_path: "/sF5Ung9pxmP7vufj4Q7jYpYqHfP.png",
+          iso_639_1: "en",
+          vote_average: 5.5,
+          vote_count: 1,
+        },
+      ],
+      posters: [],
+      backdrops: [],
+    },
   };
 }
 
@@ -575,19 +601,21 @@ export async function getTopRated(page = 1): Promise<TMDBResponse<Movie>> {
   return mockList("top_rated", page);
 }
 
+// === UPDATED: Tambah images & include_image_language ===
 export async function getMovieDetail(id: number): Promise<MovieDetail> {
   if (API_KEY) {
     return tmdbFetch(
-      `/movie/${id}?append_to_response=credits,videos,similar,recommendations`,
+      `/movie/${id}?append_to_response=credits,videos,similar,recommendations,images&include_image_language=en,null`,
     );
   }
   return mockDetail(id, "movie");
 }
 
+// === UPDATED: Tambah images & include_image_language ===
 export async function getTVDetail(id: number): Promise<MovieDetail> {
   if (API_KEY) {
     return tmdbFetch(
-      `/tv/${id}?append_to_response=credits,videos,similar,recommendations`,
+      `/tv/${id}?append_to_response=credits,videos,similar,recommendations,images&include_image_language=en,null`,
     );
   }
   return mockDetail(id, "tv");
