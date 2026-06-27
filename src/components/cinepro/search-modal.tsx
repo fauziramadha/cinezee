@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { Search, X, Film, Tv, Loader2, SlidersHorizontal, ArrowRight, Clapperboard, Radio } from "lucide-react";
+import { Search, X, Film, Tv, Loader2, ArrowRight, Clapperboard, Radio } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -14,17 +14,8 @@ import { useAppStore, type SelectedMedia } from "@/lib/store";
 import { getImageUrl, type Movie } from "@/lib/tmdb";
 import { cn } from "@/lib/utils";
 
-interface Genre {
-  id: number;
-  name: string;
-}
-
-interface Network {
-  id: number;
-  name: string;
-  logo_path: string | null;
-}
-
+interface Genre { id: number; name: string; }
+interface Network { id: number; name: string; logo_path: string | null; }
 type TabView = "results" | "genres" | "networks";
 
 export function SearchModal() {
@@ -35,22 +26,15 @@ export function SearchModal() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // State untuk tabs
   const [activeTab, setActiveTab] = useState<TabView>("results");
   const [type, setType] = useState<"movie" | "tv">("movie");
   const [selectedGenre, setSelectedGenre] = useState<Genre | null>(null);
 
-  // Genres state
   const [movieGenres, setMovieGenres] = useState<Genre[]>([]);
   const [tvGenres, setTvGenres] = useState<Genre[]>([]);
-
-  // ============================================================
-  // FIX #9: Networks state (fetch dari API, bukan hardcode)
-  // ============================================================
   const [networks, setNetworks] = useState<Network[]>([]);
   const [networksLoading, setNetworksLoading] = useState(false);
 
-  // Fetch genres on mount
   useEffect(() => {
     fetch("/api/genres")
       .then((res) => res.json())
@@ -61,27 +45,20 @@ export function SearchModal() {
       .catch(() => {});
   }, []);
 
-  // ============================================================
-  // FIX #9: Fetch networks dari TMDB API (logo asli, bukan hardcode)
-  // ============================================================
   useEffect(() => {
     setNetworksLoading(true);
     fetch("/api/networks")
       .then((res) => res.json())
-      .then((data) => {
-        setNetworks(data.networks || []);
-      })
+      .then((data) => setNetworks(data.networks || []))
       .catch(() => {})
       .finally(() => setNetworksLoading(false));
   }, []);
 
-  // Fetch results (debounced) - hanya jika di tab results & ada query
   useEffect(() => {
     if (activeTab !== "results" || !query.trim()) {
       setResults([]);
       return;
     }
-
     setLoading(true);
     const timer = setTimeout(async () => {
       try {
@@ -95,11 +72,9 @@ export function SearchModal() {
         setLoading(false);
       }
     }, 400);
-
     return () => clearTimeout(timer);
   }, [query, activeTab]);
 
-  // Reset when modal closes
   useEffect(() => {
     if (!searchOpen) {
       setQuery("");
@@ -110,7 +85,6 @@ export function SearchModal() {
     }
   }, [searchOpen]);
 
-  // FIX #8: Enter pada search input -> redirect ke halaman search
   const handleSearchSubmit = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter" && query.trim()) {
       router.push(`/search?q=${encodeURIComponent(query.trim())}`);
@@ -120,31 +94,22 @@ export function SearchModal() {
 
   const handleSelect = (movie: Movie) => {
     const mediaType: "movie" | "tv" = movie.media_type || (movie.title ? "movie" : "tv");
-    const title = movie.title || movie.name || "Untitled";
-    const selected: SelectedMedia = {
+    setSelectedMedia({
       id: movie.id,
       type: mediaType,
-      title,
+      title: movie.title || movie.name || "Untitled",
       posterPath: movie.poster_path,
       backdropPath: movie.backdrop_path,
-    };
-    setSelectedMedia(selected);
+    });
     setSearchOpen(false);
   };
 
-  // FIX #7: Klik genre -> set selectedGenre -> tombol muncul di bawah
-  const handleGenreSelect = (genre: Genre) => {
-    setSelectedGenre(genre);
-  };
-
-  // FIX #7: Tombol "Browse..." -> redirect ke halaman search dengan filter genre
   const handleBrowseGenre = () => {
     if (!selectedGenre) return;
     router.push(`/search?type=${type}&genre=${selectedGenre.id}`);
     setSearchOpen(false);
   };
 
-  // FIX #9: Klik network -> redirect ke halaman search dengan filter network
   const handleNetworkSelect = (networkId: number) => {
     router.push(`/search?type=tv&network=${networkId}`);
     setSearchOpen(false);
@@ -154,102 +119,73 @@ export function SearchModal() {
 
   return (
     <Dialog open={searchOpen} onOpenChange={setSearchOpen}>
-      <DialogContent className="max-h-[90vh] max-w-[95vw] gap-0 overflow-hidden p-0 sm:max-w-2xl md:max-w-3xl">
+      {/* ============================================================ */}
+      {/* FIX: Tambah w-full, min-w-0, dan w-[95vw] agar modal pas     */}
+      {/* ============================================================ */}
+      <DialogContent className="flex max-h-[90vh] w-full max-w-[95vw] min-w-0 flex-col gap-0 overflow-hidden p-0 sm:max-w-2xl md:max-w-3xl">
         <DialogHeader className="sr-only">
           <DialogTitle>Search Movies and TV Shows</DialogTitle>
         </DialogHeader>
 
         {/* Search Input */}
-        <div className="flex items-center gap-3 border-b border-border px-4 py-3">
+        <div className="flex shrink-0 items-center gap-3 border-b border-border px-4 py-3">
           <Search className="h-5 w-5 shrink-0 text-muted-foreground" />
           <input
             autoFocus
             type="text"
             value={query}
-            onChange={(e) => {
-              setQuery(e.target.value);
-              setActiveTab("results");
-            }}
+            onChange={(e) => { setQuery(e.target.value); setActiveTab("results"); }}
             onKeyDown={handleSearchSubmit}
-            placeholder="Search movies, TV shows... (Press Enter)"
-            className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground sm:text-base"
+            placeholder="Search... (Press Enter)"
+            className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground sm:text-base"
           />
-          {loading && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
-          <button
-            onClick={() => setSearchOpen(false)}
-            className="rounded-md p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
-            aria-label="Close search"
-          >
+          {loading && <Loader2 className="h-4 w-4 shrink-0 animate-spin text-muted-foreground" />}
+          <button onClick={() => setSearchOpen(false)} className="shrink-0 rounded-md p-1 text-muted-foreground hover:bg-muted hover:text-foreground" aria-label="Close search">
             <X className="h-4 w-4" />
           </button>
         </div>
 
         {/* Tabs Filter */}
-        <div className="flex items-center gap-2 border-b border-border px-4 py-2">
-          <button
-            onClick={() => setActiveTab("results")}
-            className={cn(
-              "flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium transition-colors",
-              activeTab === "results" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted"
-            )}
-          >
+        <div className="flex shrink-0 items-center gap-2 overflow-x-auto border-b border-border px-4 py-2">
+          <button onClick={() => setActiveTab("results")} className={cn("flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium transition-colors", activeTab === "results" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted")}>
             <Search className="h-3.5 w-3.5" /> Results
           </button>
-          <button
-            onClick={() => setActiveTab("genres")}
-            className={cn(
-              "flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium transition-colors",
-              activeTab === "genres" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted"
-            )}
-          >
+          <button onClick={() => setActiveTab("genres")} className={cn("flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium transition-colors", activeTab === "genres" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted")}>
             <Clapperboard className="h-3.5 w-3.5" /> Genres
           </button>
-          <button
-            onClick={() => setActiveTab("networks")}
-            className={cn(
-              "flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium transition-colors",
-              activeTab === "networks" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted"
-            )}
-          >
+          <button onClick={() => setActiveTab("networks")} className={cn("flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium transition-colors", activeTab === "networks" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted")}>
             <Radio className="h-3.5 w-3.5" /> Networks
           </button>
 
-          {/* Type Switcher (untuk Genres) */}
           {activeTab === "genres" && (
-            <div className="ml-auto flex items-center gap-1 rounded-full bg-muted p-0.5">
-              <button
-                onClick={() => { setType("movie"); setSelectedGenre(null); }}
-                className={cn("rounded-full px-2 py-0.5 text-[10px] font-semibold", type === "movie" ? "bg-background text-foreground" : "text-muted-foreground")}
-              >
-                Movies
-              </button>
-              <button
-                onClick={() => { setType("tv"); setSelectedGenre(null); }}
-                className={cn("rounded-full px-2 py-0.5 text-[10px] font-semibold", type === "tv" ? "bg-background text-foreground" : "text-muted-foreground")}
-              >
-                TV
-              </button>
+            <div className="ml-auto flex shrink-0 items-center gap-1 rounded-full bg-muted p-0.5">
+              <button onClick={() => { setType("movie"); setSelectedGenre(null); }} className={cn("rounded-full px-2 py-0.5 text-[10px] font-semibold", type === "movie" ? "bg-background text-foreground" : "text-muted-foreground")}>Movies</button>
+              <button onClick={() => { setType("tv"); setSelectedGenre(null); }} className={cn("rounded-full px-2 py-0.5 text-[10px] font-semibold", type === "tv" ? "bg-background text-foreground" : "text-muted-foreground")}>TV</button>
             </div>
           )}
         </div>
 
         {/* ============================================================ */}
-        {/* FIX: Content area lebih tinggi + scroll yang benar            */}
+        {/* FIX: min-w-0 + scrollbar-style none agar tidak terpotong     */}
         {/* ============================================================ */}
-        <div className="flex max-h-[70vh] flex-col overflow-y-auto overflow-x-hidden">
+        <div className="flex min-w-0 flex-1 flex-col overflow-y-auto overflow-x-hidden" style={{ maxHeight: "70vh", scrollbarWidth: "thin", WebkitOverflowScrolling: "touch" }}>
+          <style>{`
+            /* Hide scrollbar for Chrome, Safari and Opera */
+            .search-scroll::-webkit-scrollbar { display: none; }
+          `}</style>
 
           {/* === TAB: RESULTS === */}
           {activeTab === "results" && (
             <>
               {!query.trim() && (
-                <div className="flex h-full flex-col items-center justify-center p-6 text-center text-sm text-muted-foreground">
+                <div className="flex flex-1 flex-col items-center justify-center p-6 text-center text-sm text-muted-foreground">
                   <Search className="mb-2 h-8 w-8 opacity-30" />
                   Start typing or press Enter to search
                 </div>
               )}
 
               {loading && (
-                <div className="flex h-full items-center justify-center p-6">
+                <div className="flex flex-1 items-center justify-center p-6">
                   <Loader2 className="h-6 w-6 animate-spin text-primary" />
                 </div>
               )}
@@ -260,13 +196,8 @@ export function SearchModal() {
                     const title = movie.title || movie.name || "Untitled";
                     const mediaType: "movie" | "tv" = movie.media_type || (movie.title ? "movie" : "tv");
                     const rating = movie.vote_average?.toFixed(1) || "N/A";
-
                     return (
-                      <button
-                        key={`${movie.id}-${mediaType}`}
-                        onClick={() => handleSelect(movie)}
-                        className="group relative aspect-[2/3] overflow-hidden rounded-lg bg-card text-left transition-all hover:ring-2 hover:ring-primary"
-                      >
+                      <button key={`${movie.id}-${mediaType}`} onClick={() => handleSelect(movie)} className="group relative aspect-[2/3] overflow-hidden rounded-lg bg-card text-left transition-all hover:ring-2 hover:ring-primary">
                         {movie.poster_path ? (
                           <Image src={getImageUrl(movie.poster_path, "w500")} alt={title} fill sizes="(max-width: 768px) 30vw, 150px" className="object-cover" unoptimized />
                         ) : (
@@ -286,16 +217,9 @@ export function SearchModal() {
                 </div>
               )}
 
-              {/* FIX #8: Tombol "See all results" */}
               {!loading && query.trim() && (
-                <div className="border-t border-border p-3">
-                  <button
-                    onClick={() => {
-                      router.push(`/search?q=${encodeURIComponent(query.trim())}`);
-                      setSearchOpen(false);
-                    }}
-                    className="flex w-full items-center justify-center gap-2 rounded-lg bg-muted/50 py-2 text-xs font-semibold text-primary hover:bg-muted"
-                  >
+                <div className="shrink-0 border-t border-border p-3">
+                  <button onClick={() => { router.push(`/search?q=${encodeURIComponent(query.trim())}`); setSearchOpen(false); }} className="flex w-full items-center justify-center gap-2 rounded-lg bg-muted/50 py-2 text-xs font-semibold text-primary hover:bg-muted">
                     See all results for &quot;{query}&quot;
                     <ArrowRight className="h-3.5 w-3.5" />
                   </button>
@@ -305,23 +229,26 @@ export function SearchModal() {
           )}
 
           {/* === TAB: GENRES === */}
-          {/* FIX: pb-20 agar genre terakhir tidak ketutup */}
+          {/* ============================================================ */}
+          {/* FIX: min-w-0 + truncate text + gap-2.5                       */}
+          {/* ============================================================ */}
           {activeTab === "genres" && (
-            <div className="p-4 pb-20">
-              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+            <div className="min-w-0 p-4 pb-20">
+              <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3">
                 {availableGenres.map((g) => (
                   <button
                     key={g.id}
-                    onClick={() => handleGenreSelect(g)}
+                    onClick={() => setSelectedGenre(g)}
                     className={cn(
-                      "flex items-center gap-2 rounded-lg border p-2.5 text-left text-xs font-medium transition-all",
+                      "flex min-w-0 items-center gap-2 rounded-lg border p-2.5 text-left text-xs font-medium transition-all",
                       selectedGenre?.id === g.id
                         ? "border-primary bg-primary/10 text-primary"
                         : "border-border bg-card text-foreground hover:bg-muted"
                     )}
                   >
                     <Clapperboard className="h-4 w-4 shrink-0 text-muted-foreground" />
-                    {g.name}
+                    {/* FIX: truncate agar teks panjang tidak mendorong width */}
+                    <span className="truncate">{g.name}</span>
                   </button>
                 ))}
               </div>
@@ -329,9 +256,8 @@ export function SearchModal() {
           )}
 
           {/* === TAB: NETWORKS === */}
-          {/* FIX: pb-20 + fetch logo dari API */}
           {activeTab === "networks" && (
-            <div className="p-4 pb-20">
+            <div className="min-w-0 p-4 pb-20">
               <p className="mb-3 text-xs text-muted-foreground">Browse TV shows by network:</p>
               {networksLoading ? (
                 <div className="flex h-32 items-center justify-center">
@@ -340,21 +266,10 @@ export function SearchModal() {
               ) : (
                 <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                   {networks.map((n) => (
-                    <button
-                      key={n.id}
-                      onClick={() => handleNetworkSelect(n.id)}
-                      className="flex flex-col items-center justify-center gap-2 rounded-lg border border-border bg-card p-4 transition-all hover:border-primary hover:bg-muted"
-                    >
+                    <button key={n.id} onClick={() => handleNetworkSelect(n.id)} className="flex flex-col items-center justify-center gap-2 rounded-lg border border-border bg-card p-4 transition-all hover:border-primary hover:bg-muted">
                       {n.logo_path ? (
                         <div className="relative h-8 w-full">
-                          <Image
-                            src={getImageUrl(n.logo_path, "w154")}
-                            alt={n.name}
-                            fill
-                            className="object-contain"
-                            unoptimized
-                            sizes="100px"
-                          />
+                          <Image src={getImageUrl(n.logo_path, "w154")} alt={n.name} fill className="object-contain" unoptimized sizes="100px" />
                         </div>
                       ) : (
                         <div className="flex h-8 items-center justify-center">
@@ -370,16 +285,10 @@ export function SearchModal() {
           )}
         </div>
 
-        {/* ============================================================ */}
-        {/* FIX: Browse button di LUAR scroll area                        */}
-        {/* (selalu visible di bawah modal, tidak menutupi genre)        */}
-        {/* ============================================================ */}
+        {/* Browse button di LUAR scroll area */}
         {activeTab === "genres" && selectedGenre && (
-          <div className="border-t border-border bg-background p-3">
-            <button
-              onClick={handleBrowseGenre}
-              className="flex w-full items-center justify-center gap-2 rounded-lg bg-primary py-2.5 text-sm font-semibold text-primary-foreground hover:bg-primary/90"
-            >
+          <div className="shrink-0 border-t border-border bg-background p-3">
+            <button onClick={handleBrowseGenre} className="flex w-full items-center justify-center gap-2 rounded-lg bg-primary py-2.5 text-sm font-semibold text-primary-foreground hover:bg-primary/90">
               Browse {selectedGenre.name} {type === "tv" ? "TV Shows" : "Movies"}
               <ArrowRight className="h-4 w-4" />
             </button>
