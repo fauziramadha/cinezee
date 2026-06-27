@@ -2,8 +2,8 @@
  * src/i18n/use-translation.ts
  *
  * Hook useTranslation() untuk akses translasi.
- * - Membaca bahasa aktif dari session (NextAuth)
- * - Fallback ke localStorage atau 'en' kalau belum login
+ * - Membaca bahasa aktif dari localStorage (priority 1)
+ * - Fallback ke session atau 'en' kalau localStorage kosong
  * - Return function t(key) untuk translate
  *
  * Cara pakai:
@@ -20,6 +20,8 @@
 import { useSession } from "next-auth/react";
 import { getTranslation, type Language, type TranslationKeys } from "./messages";
 
+const VALID_LANGS: Language[] = ["en", "id", "es", "fr", "de", "pt", "ja", "ko", "zh"];
+
 interface UseTranslationReturn {
   lang: Language;
   t: (key: TranslationKeys) => string;
@@ -34,18 +36,22 @@ export function useTranslation(): UseTranslationReturn {
   const sessionResult = useSession() as any;
   const session = sessionResult?.data ?? null;
 
-  // Determine language: session → localStorage → 'en'
+  // Determine language: localStorage (1) → session (2) → 'en' default
   let lang: Language = "en";
 
-  // Priority 1: Session language (if logged in)
-  const sessionLang = (session?.user as any)?.language as Language | undefined;
-  if (sessionLang) {
-    lang = sessionLang;
-  } else if (typeof window !== "undefined") {
-    // Priority 2: localStorage (for non-logged-in users)
+  // Priority 1: localStorage (langsung update saat ganti bahasa, survive reload)
+  if (typeof window !== "undefined") {
     const stored = localStorage.getItem("cinestream_language") as Language | null;
-    if (stored && ["en", "id", "es", "fr", "de", "pt", "ja", "ko", "zh"].includes(stored)) {
+    if (stored && VALID_LANGS.includes(stored)) {
       lang = stored;
+    }
+  }
+
+  // Priority 2: Session language (fallback kalau localStorage kosong)
+  if (lang === "en") {
+    const sessionLang = (session?.user as any)?.language as Language | undefined;
+    if (sessionLang && VALID_LANGS.includes(sessionLang)) {
+      lang = sessionLang;
     }
   }
 
@@ -73,6 +79,10 @@ export function useTranslation(): UseTranslationReturn {
 export function setGuestLanguage(lang: Language): void {
   if (typeof window !== "undefined") {
     localStorage.setItem("cinestream_language", lang);
+    // Trigger event agar TranslationProvider tau & update state
+    window.dispatchEvent(
+      new CustomEvent("cinestream-language-change", { detail: lang })
+    );
   }
 }
 
@@ -81,6 +91,5 @@ export function setGuestLanguage(lang: Language): void {
 // ============================================================
 export function getLanguage(lang?: string): Language {
   if (!lang) return "en";
-  const validLangs: Language[] = ["en", "id", "es", "fr", "de", "pt", "ja", "ko", "zh"];
-  return validLangs.includes(lang as Language) ? (lang as Language) : "en";
+  return VALID_LANGS.includes(lang as Language) ? (lang as Language) : "en";
 }
