@@ -198,15 +198,15 @@ export function DetailModal() {
       {/* FIX #2: Safe-area untuk notch iPhone                         */}
       {/* Modal diposisikan di bawah notch, stretch ke bawah           */}
       {/* ============================================================ */}
-      <DialogContent
+            <DialogContent
         className="flex flex-col gap-0 overflow-hidden p-0 max-w-[95vw] sm:max-w-2xl md:max-w-4xl lg:max-w-6xl"
         style={{
-          position: "fixed",
-          top: "calc(env(safe-area-inset-top) + 8px)",
-          left: "50%",
-          transform: "translateX(-50%)",
-          height: "calc(100vh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 16px)",
-          maxHeight: "calc(100vh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 16px)",
+          // HANYA constrain size + safe-area, JANGAN override position/transform
+          // (shadcn handle centering via translate: -50% -50%)
+          height: "calc(100dvh - 2rem)",
+          maxHeight: "calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 1rem)",
+          marginTop: "env(safe-area-inset-top)",
+          marginBottom: "env(safe-area-inset-bottom)",
           borderRadius: "12px",
         }}
       >
