@@ -30,7 +30,9 @@ interface UseTranslationReturn {
 // MAIN HOOK
 // ============================================================
 export function useTranslation(): UseTranslationReturn {
-  const { data: session } = useSession();
+  // Safe useSession — handle undefined during SSG prerender
+  const sessionResult = useSession() as any;
+  const session = sessionResult?.data ?? null;
 
   // Determine language: session → localStorage → 'en'
   let lang: Language = "en";
