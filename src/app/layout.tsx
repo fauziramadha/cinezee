@@ -4,6 +4,7 @@ import "./globals.css";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as SonnerToaster } from "@/components/ui/sonner";
 import { SessionProviderWrapper } from "@/components/providers/session-provider";
+import { SplashOverlay } from "@/components/pwa/splash-screen";
 import Script from "next/script";
 
 const geistSans = Geist({
@@ -87,12 +88,12 @@ export const metadata: Metadata = {
 // VIEWPORT — Mobile optimization
 // ============================================================
 export const viewport: Viewport = {
-  themeColor: "#B20710", // Merah CineStream (match manifest)
+  themeColor: "#B20710",
   width: "device-width",
   initialScale: 1,
   maximumScale: 1,
-  userScalable: false, // Cegah zoom tidak sengaja
-  viewportFit: "cover", // Support notch/dynamic island
+  userScalable: false,
+  viewportFit: "cover",
 };
 
 // ============================================================
@@ -154,6 +155,9 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} antialiased bg-background text-foreground min-h-screen`}
       >
+        {/* === Splash Screen Overlay === */}
+        <SplashOverlay />
+
         <SessionProviderWrapper>{children}</SessionProviderWrapper>
         <Toaster />
         <SonnerToaster position="bottom-right" />
