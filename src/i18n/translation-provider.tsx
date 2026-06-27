@@ -1,21 +1,9 @@
 /**
- * src/i18n/translation-provider.tsx
+ * src/i18n/translation-provider.tsx (FINAL - Fix hydration & sync)
  *
- * Context Provider untuk translasi.
- * - Wrap sekali di root layout
- * - Share instance bahasa aktif ke semua komponen
- * - Lebih efficient daripada setiap komponen call useSession()
- *
- * Cara pakai di layout.tsx:
- *   import { TranslationProvider } from "@/i18n/translation-provider";
- *
- *   <TranslationProvider>
- *     {children}
- *   </TranslationProvider>
- *
- * Lalu di komponen apapun:
- *   import { useTranslation } from "@/i18n/use-translation";
- *   const { t, lang } = useTranslation();
+ * - Lazy init dari localStorage (cegah flash "en" → "id")
+ * - Hapus dependency status (langsung baca localStorage saat mount)
+ * - suppressHydrationWarning untuk avoid mismatch warning
  */
 
 "use client";
@@ -40,56 +28,62 @@ interface TranslationContextType {
   isLoading: boolean;
 }
 
-const TranslationContext = createContext<TranslationContextType>({
-  lang: "en",
-  t: (key) => String(key),
-  setLang: () => {},
-  isLoading: true,
-});
+// Default null agar bisa detect apakah di dalam Provider atau tidak
+const TranslationContext = createContext<TranslationContextType | null>(null);
+
+// ============================================================
+// HELPER: Baca localStorage dengan aman
+// ============================================================
+function getStoredLang(): Language | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const stored = localStorage.getItem("cinestream_language") as Language | null;
+    if (stored && VALID_LANGS.includes(stored)) {
+      return stored;
+    }
+  } catch {}
+  return null;
+}
 
 // ============================================================
 // PROVIDER
 // ============================================================
 export function TranslationProvider({ children }: { children: React.ReactNode }) {
-  // Safe useSession — handle undefined during SSG prerender
+  // Safe useSession
   const sessionResult = useSession() as any;
   const session = sessionResult?.data ?? null;
-  const status = sessionResult?.status ?? "unauthenticated";
-  const [lang, setLangState] = useState<Language>("en");
-  const [isLoading, setIsLoading] = useState(true);
+
+  // Lazy init: baca localStorage saat pertama init (client only)
+  const [lang, setLangState] = useState<Language>(() => {
+    return getStoredLang() || "en";
+  });
+  const [isLoading, setIsLoading] = useState(false); // Tidak loading lagi karena lazy init
 
   // ============================================================
-  // SYNC LANGUAGE
-  // Priority: localStorage (1) → Session (2) → 'en' default
+  // SYNC: Update dari session kalau localStorage kosong
   // ============================================================
   useEffect(() => {
-    if (status === "loading") return;
+    const stored = getStoredLang();
 
-    // Priority 1: localStorage (langsung update saat ganti bahasa, survive reload)
-    if (typeof window !== "undefined") {
-      const stored = localStorage.getItem("cinestream_language") as Language | null;
-      if (stored && VALID_LANGS.includes(stored)) {
-        setLangState(stored);
-        setIsLoading(false);
-        return;
-      }
+    // Kalau localStorage ada, pakai itu (priority 1)
+    if (stored) {
+      setLangState(stored);
+      return;
     }
 
-    // Priority 2: Session language (untuk login di device baru)
+    // Kalau localStorage kosong, coba pakai session (priority 2)
     const sessionLang = (session?.user as any)?.language as Language | undefined;
     if (sessionLang && VALID_LANGS.includes(sessionLang)) {
       setLangState(sessionLang);
-      // Sync localStorage dengan session (untuk consistency)
-      if (typeof window !== "undefined") {
+      // Sync localStorage dengan session
+      try {
         localStorage.setItem("cinestream_language", sessionLang);
-      }
+      } catch {}
     }
-    setIsLoading(false);
-  }, [session, status]);
+  }, [session]);
 
   // ============================================================
   // LISTEN FOR LANGUAGE CHANGE EVENTS
-  // (dari user-menu.tsx saat user ganti bahasa)
   // ============================================================
   useEffect(() => {
     const handleLanguageChange = (e: Event) => {
@@ -111,15 +105,16 @@ export function TranslationProvider({ children }: { children: React.ReactNode })
   const setLang = (newLang: Language) => {
     setLangState(newLang);
     if (typeof window !== "undefined") {
-      localStorage.setItem("cinestream_language", newLang);
-      // Trigger event agar komponen lain tau
+      try {
+        localStorage.setItem("cinestream_language", newLang);
+      } catch {}
       window.dispatchEvent(
         new CustomEvent("cinestream-language-change", { detail: newLang })
       );
     }
   };
 
-  // Memoize translation function untuk performance
+  // Memoize value
   const value = useMemo<TranslationContextType>(
     () => ({
       lang,
@@ -131,7 +126,7 @@ export function TranslationProvider({ children }: { children: React.ReactNode })
   );
 
   return (
-    <TranslationContext.Provider value={value}>
+    <TranslationContext.Provider value={value} suppressHydrationWarning>
       {children}
     </TranslationContext.Provider>
   );
