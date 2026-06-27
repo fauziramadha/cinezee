@@ -1,5 +1,5 @@
 /**
- * src/app/api/admin/messages/route.ts (REVISED - Email Notification)
+ * src/app/api/admin/messages/route.ts (REVISED - Brevo Compatible)
  *
  * GET  /api/admin/messages        - List all messages sent (admin only)
  * POST /api/admin/messages        - Send message (to user or broadcast)
@@ -65,7 +65,7 @@ export async function GET() {
 //     type?: "info" | "warning" | "announcement" | "system",
 //     isPinned?: boolean,
 //     expiresAt?: string | null,
-//     sendEmail?: boolean  // ← NEW: set true untuk kirim email
+//     sendEmail?: boolean  // ← Set true untuk kirim email
 //   }
 export async function POST(request: NextRequest) {
   const adminCheck = await requireAdmin();
@@ -136,7 +136,6 @@ export async function POST(request: NextRequest) {
           }
         } else {
           // === DIRECT MESSAGE: kirim ke 1 user ===
-          // Ambil email penerima dari DB
           const users = await dbMessage.listUsers(500);
           const recipient = users.find((u) => u.id === body.recipientId);
 
@@ -149,17 +148,23 @@ export async function POST(request: NextRequest) {
               recipientName: recipient.name,
             });
 
-            const success = await sendEmail({
+            // ============================================================
+            // UPDATED: sendEmail sekarang return object { success, error }
+            // (Bukan boolean lagi — kompatibel dengan Brevo)
+            // ============================================================
+            const sendResult = await sendEmail({
               to: recipient.email,
               subject: `[CineStream] ${body.subject || "Notification"}`,
               html,
             });
 
             emailResult = {
-              success,
-              sent: success ? 1 : 0,
-              failed: success ? 0 : 1,
-              errors: success ? [] : ["Failed to send email"],
+              success: sendResult.success,
+              sent: sendResult.success ? 1 : 0,
+              failed: sendResult.success ? 0 : 1,
+              errors: sendResult.success
+                ? []
+                : [sendResult.error || "Failed to send email"],
             };
           } else {
             emailResult = {
