@@ -1,8 +1,9 @@
 /**
- * src/components/admin/message-composer.tsx
+ * src/components/admin/message-composer.tsx (REVISED - Email Notifications)
  *
  * Admin UI untuk:
  * - Compose & send message (broadcast or to specific user)
+ * - Optional: kirim email notifikasi ke penerima
  * - View sent messages with read stats
  * - Delete / pin messages
  */
@@ -22,6 +23,8 @@ import {
   Mail,
   Megaphone,
   Search,
+  MailCheck,
+  MailX,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -59,6 +62,13 @@ interface AdminMessage {
   expires_at: string | null;
   read_count?: number;
   recipient_count?: number;
+}
+
+interface EmailResult {
+  success: boolean;
+  sent: number;
+  failed: number;
+  errors: string[];
 }
 
 const TYPE_META: Record<string, { label: string; color: string; icon: any }> = {
@@ -99,6 +109,10 @@ export function MessageComposer() {
   const [body, setBody] = useState("");
   const [type, setType] = useState<string>("info");
   const [isPinned, setIsPinned] = useState(false);
+  const [sendEmail, setSendEmail] = useState(false); // ← NEW
+
+  // Email stats terakhir (untuk display)
+  const [lastEmailResult, setLastEmailResult] = useState<EmailResult | null>(null);
 
   // === Fetch users ===
   const fetchUsers = useCallback(async () => {
@@ -148,6 +162,8 @@ export function MessageComposer() {
     }
 
     setSending(true);
+    setLastEmailResult(null);
+
     try {
       const selectedUser = users.find((u) => u.id === selectedUserId);
 
@@ -161,15 +177,43 @@ export function MessageComposer() {
           body,
           type,
           isPinned,
+          sendEmail, // ← NEW: kirim flag email
         }),
       });
 
       if (!res.ok) throw new Error("Failed to send");
-      toast.success(
-        recipientType === "all"
-          ? "Broadcast sent to all users"
-          : `Message sent to ${selectedUser?.name || selectedUser?.email}`
-      );
+      const data = await res.json();
+
+      // === Tampilkan toast berdasarkan hasil ===
+      if (sendEmail && data.email) {
+        // Pesan + Email
+        const emailResult = data.email as EmailResult;
+        setLastEmailResult(emailResult);
+
+        if (emailResult.success) {
+          toast.success(
+            `Message sent + ${emailResult.sent} email delivered ✅`,
+            { duration: 5000 }
+          );
+        } else if (emailResult.sent > 0) {
+          toast.warning(
+            `Message sent + ${emailResult.sent} emails delivered, ${emailResult.failed} failed`,
+            { duration: 5000 }
+          );
+        } else {
+          toast.warning(
+            `Message sent (in-app), but email failed: ${emailResult.errors[0] || "Unknown error"}`,
+            { duration: 6000 }
+          );
+        }
+      } else {
+        // Pesan saja (tanpa email)
+        toast.success(
+          recipientType === "all"
+            ? "Broadcast sent to all users"
+            : `Message sent to ${selectedUser?.name || selectedUser?.email}`
+        );
+      }
 
       // Reset form
       setSubject("");
@@ -177,6 +221,7 @@ export function MessageComposer() {
       setType("info");
       setIsPinned(false);
       setSelectedUserId("");
+      setSendEmail(false);
 
       fetchMessages();
     } catch (e: any) {
@@ -230,6 +275,9 @@ export function MessageComposer() {
       (m.recipient_name?.toLowerCase().includes(q) ?? false)
     );
   });
+
+  // Hitung user dengan email (untuk info di UI)
+  const usersWithEmail = users.filter((u) => u.email && u.email.includes("@")).length;
 
   return (
     <div className="space-y-6">
@@ -365,6 +413,71 @@ export function MessageComposer() {
             </Label>
           </div>
 
+          {/* ============================================================ */}
+          {/* NEW: SEND EMAIL CHECKBOX                                     */}
+          {/* ============================================================ */}
+          <div className="rounded-lg border border-border bg-muted/30 p-3 space-y-2">
+            <div className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                id="sendEmail"
+                checked={sendEmail}
+                onChange={(e) => setSendEmail(e.target.checked)}
+                className="h-4 w-4 rounded border-border"
+              />
+              <Label htmlFor="sendEmail" className="cursor-pointer flex items-center gap-1.5">
+                <Mail className="h-3.5 w-3.5" />
+                Kirim juga via Email
+              </Label>
+            </div>
+            <p className="text-[11px] text-muted-foreground pl-6">
+              {recipientType === "all"
+                ? `Email akan dikirim ke ${usersWithEmail} user yang punya email`
+                : "Email akan dikirim langsung ke user terpilih"}
+            </p>
+          </div>
+
+          {/* ============================================================ */}
+          {/* EMAIL RESULT (muncul setelah kirim, kalau email aktif)      */}
+          {/* ============================================================ */}
+          {lastEmailResult && (
+            <div
+              className={`rounded-lg border p-3 space-y-2 ${
+                lastEmailResult.success
+                  ? "border-green-500/40 bg-green-500/10"
+                  : lastEmailResult.sent > 0
+                  ? "border-yellow-500/40 bg-yellow-500/10"
+                  : "border-red-500/40 bg-red-500/10"
+              }`}
+            >
+              <div className="flex items-center gap-2">
+                {lastEmailResult.success ? (
+                  <MailCheck className="h-4 w-4 text-green-500" />
+                ) : (
+                  <MailX className="h-4 w-4 text-red-500" />
+                )}
+                <span className="text-sm font-medium">
+                  Email Status
+                </span>
+              </div>
+              <div className="text-xs text-muted-foreground space-y-1 pl-6">
+                <p>
+                  ✅ Berhasil dikirim: <strong>{lastEmailResult.sent}</strong> email
+                </p>
+                {lastEmailResult.failed > 0 && (
+                  <p>
+                    ❌ Gagal: <strong>{lastEmailResult.failed}</strong> email
+                  </p>
+                )}
+                {lastEmailResult.errors.length > 0 && (
+                  <p className="text-red-500">
+                    Error: {lastEmailResult.errors[0]}
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* Send button */}
           <Button onClick={handleSend} disabled={sending} className="w-full gap-2">
             {sending ? (
@@ -372,7 +485,7 @@ export function MessageComposer() {
             ) : (
               <Send className="h-4 w-4" />
             )}
-            Send Message
+            {sendEmail ? "Send Message + Email" : "Send Message"}
           </Button>
         </Card>
 
