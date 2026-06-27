@@ -13,18 +13,18 @@ import { useTranslation } from "@/i18n/use-translation";
 import { cn } from "@/lib/utils";
 
 // ============================================================
-// NETWORK DATA (sama dengan di search-modal)
+// FIX: Import modals yang hilang
 // ============================================================
-const NETWORKS: Record<number, { name: string; logo_path: string }> = {
-  213: { name: "Netflix", logo_path: "/wwemzKWzjKYJFfCeiB57q3r4Vcm.png" },
-  1024: { name: "Prime Video", logo_path: "/hwqYUQmqiyA6tLnqj8MP9ey6ePh.png" },
-  2739: { name: "Disney+", logo_path: "/gJ8VX6JSu3ci8HuqfVfGggHgz9m.png" },
-  2552: { name: "Apple TV+", logo_path: "/4ec1mK0kCjQzdQ8jyDjsLnQR5Ip.png" },
-  49: { name: "HBO", logo_path: "/tuomPhY2UtuPTqqFnqfVfGggHgz9m.png" },
-  283: { name: "Hulu", logo_path: "/pqUTCyXDRTmCxHa1RfFtB6S9t8O.png" },
-  3353: { name: "Peacock", logo_path: "/qZNmL9QV3ijn3sHg5jPqYy7jPrc.png" },
-  4330: { name: "Paramount+", logo_path: "/dhfmsl5LCpsHEyAhuJoCqMAdN9b.png" },
-};
+import { DetailModal } from "@/components/cinepro/detail-modal";
+import { PlayerModal } from "@/components/cinepro/player-modal";
+import { SearchModal } from "@/components/cinepro/search-modal";
+import { AuthModal } from "@/components/cinepro/auth-modal";
+
+interface NetworkInfo {
+  id: number;
+  name: string;
+  logo_path: string | null;
+}
 
 // ============================================================
 // MAIN SEARCH PAGE COMPONENT
@@ -41,6 +41,11 @@ function SearchContent() {
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [genres, setGenres] = useState<Record<number, string>>({});
+
+  // ============================================================
+  // FIX: Fetch network info dari API (bukan hardcode)
+  // ============================================================
+  const [networkInfo, setNetworkInfo] = useState<NetworkInfo | null>(null);
 
   // Parse URL params
   const query = searchParams.get("q") || "";
@@ -69,6 +74,26 @@ function SearchContent() {
       })
       .catch(() => {});
   }, []);
+
+  // ============================================================
+  // FIX: Fetch network info dari API kalau isNetworkSearch
+  // ============================================================
+  useEffect(() => {
+    if (!isNetworkSearch) {
+      setNetworkInfo(null);
+      return;
+    }
+
+    fetch("/api/networks")
+      .then((res) => res.json())
+      .then((data) => {
+        const found = (data.networks || []).find(
+          (n: NetworkInfo) => n.id === parseInt(networkId, 10)
+        );
+        setNetworkInfo(found || null);
+      })
+      .catch(() => setNetworkInfo(null));
+  }, [networkId, isNetworkSearch]);
 
   // Fetch results
   useEffect(() => {
@@ -140,8 +165,7 @@ function SearchContent() {
   const getPageTitle = () => {
     if (isTextSearch) return `"${query}"`;
     if (isNetworkSearch) {
-      const network = NETWORKS[parseInt(networkId, 10)];
-      return network ? network.name : "Network";
+      return networkInfo?.name || "Network";
     }
     if (isGenreSearch) {
       const genreName = genres[parseInt(genreId, 10)] || "Genre";
@@ -186,20 +210,26 @@ function SearchContent() {
                 {type === "tv" ? "TV Shows" : "Movies"}
               </span>
 
-              {/* Network badge with logo */}
-              {isNetworkSearch && (
+              {/* ============================================================ */}
+              {/* FIX: Network badge pakai logo dari API (bukan hardcode)     */}
+              {/* ============================================================ */}
+              {isNetworkSearch && networkInfo && (
                 <span className="flex items-center gap-1.5 rounded-full bg-muted px-3 py-1 text-xs font-medium">
-                  <div className="relative h-3 w-8">
-                    <Image
-                      src={getImageUrl(NETWORKS[parseInt(networkId, 10)]?.logo_path, "w92")}
-                      alt="Network"
-                      fill
-                      className="object-contain"
-                      unoptimized
-                      sizes="32px"
-                    />
-                  </div>
-                  {NETWORKS[parseInt(networkId, 10)]?.name}
+                  {networkInfo.logo_path ? (
+                    <div className="relative h-3 w-8">
+                      <Image
+                        src={getImageUrl(networkInfo.logo_path, "w92")}
+                        alt={networkInfo.name}
+                        fill
+                        className="object-contain"
+                        unoptimized
+                        sizes="32px"
+                      />
+                    </div>
+                  ) : (
+                    <Tv className="h-3 w-3" />
+                  )}
+                  {networkInfo.name}
                 </span>
               )}
 
@@ -367,6 +397,15 @@ function SearchContent() {
       </div>
 
       <Footer />
+
+      {/* ============================================================ */}
+      {/* FIX: Render modals (DetailModal, PlayerModal, dll)           */}
+      {/* Tanpa ini, klik film tidak akan buka detail modal           */}
+      {/* ============================================================ */}
+      <SearchModal />
+      <DetailModal />
+      <PlayerModal />
+      <AuthModal />
     </main>
   );
 }
