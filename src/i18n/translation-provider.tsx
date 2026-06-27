@@ -28,6 +28,8 @@ import {
   type TranslationKeys,
 } from "./messages";
 
+const VALID_LANGS: Language[] = ["en", "id", "es", "fr", "de", "pt", "ja", "ko", "zh"];
+
 // ============================================================
 // CONTEXT TYPE
 // ============================================================
@@ -56,34 +58,43 @@ export function TranslationProvider({ children }: { children: React.ReactNode })
   const [lang, setLangState] = useState<Language>("en");
   const [isLoading, setIsLoading] = useState(true);
 
-  // Sync language dari session atau localStorage
+  // ============================================================
+  // SYNC LANGUAGE
+  // Priority: localStorage (1) → Session (2) → 'en' default
+  // ============================================================
   useEffect(() => {
     if (status === "loading") return;
 
-    // Priority 1: Session language (logged in user)
-    const sessionLang = (session?.user as any)?.language as Language | undefined;
-    if (sessionLang) {
-      setLangState(sessionLang);
-      setIsLoading(false);
-      return;
-    }
-
-    // Priority 2: localStorage (guest user)
+    // Priority 1: localStorage (langsung update saat ganti bahasa, survive reload)
     if (typeof window !== "undefined") {
       const stored = localStorage.getItem("cinestream_language") as Language | null;
-      if (stored && ["en", "id", "es", "fr", "de", "pt", "ja", "ko", "zh"].includes(stored)) {
+      if (stored && VALID_LANGS.includes(stored)) {
         setLangState(stored);
+        setIsLoading(false);
+        return;
+      }
+    }
+
+    // Priority 2: Session language (untuk login di device baru)
+    const sessionLang = (session?.user as any)?.language as Language | undefined;
+    if (sessionLang && VALID_LANGS.includes(sessionLang)) {
+      setLangState(sessionLang);
+      // Sync localStorage dengan session (untuk consistency)
+      if (typeof window !== "undefined") {
+        localStorage.setItem("cinestream_language", sessionLang);
       }
     }
     setIsLoading(false);
   }, [session, status]);
 
-  // Listen untuk perubahan language dari komponen lain
-  // (misal: user-menu.tsx update localStorage lalu trigger event)
+  // ============================================================
+  // LISTEN FOR LANGUAGE CHANGE EVENTS
+  // (dari user-menu.tsx saat user ganti bahasa)
+  // ============================================================
   useEffect(() => {
     const handleLanguageChange = (e: Event) => {
       const customEvent = e as CustomEvent<Language>;
-      if (customEvent.detail) {
+      if (customEvent.detail && VALID_LANGS.includes(customEvent.detail)) {
         setLangState(customEvent.detail);
       }
     };
@@ -94,7 +105,9 @@ export function TranslationProvider({ children }: { children: React.ReactNode })
     };
   }, []);
 
-  // Set language function (untuk update dari komponen lain)
+  // ============================================================
+  // SET LANGUAGE FUNCTION
+  // ============================================================
   const setLang = (newLang: Language) => {
     setLangState(newLang);
     if (typeof window !== "undefined") {
