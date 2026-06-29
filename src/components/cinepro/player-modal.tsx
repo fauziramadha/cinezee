@@ -248,6 +248,12 @@ export function PlayerModal() {
   const iframeUrl = currentProvider?.url;
   const isTV = playerMedia.type === "tv" && detail?.seasons;
   const isFilmU = currentProvider?.url.includes("embed.filmu.in");
+  
+  // ============================================================
+  // FIX #2: Bottom controls HANYA untuk vidking.net
+  // ============================================================
+  const isVidking = currentProvider?.url.includes("vidking.net");
+  const showBottomControls = isTV && isVidking;
 
   // ============================================================
   // BUG FIX 1: Use !important Tailwind classes to KILL shadcn's
@@ -301,8 +307,6 @@ export function PlayerModal() {
           "!left-0 !top-0",
           "!translate-x-0 !translate-y-0",
           // === FIX: Pakai 100dvh (dynamic viewport) bukan 100vh ===
-          // 100vh di iOS Safari termasuk area di balik browser toolbar
-          // 100dvh hanya area VISIBLE → bottom controls tidak terpotong
           "!w-screen !h-[100dvh]",
           "!max-w-none !max-h-none !min-w-0 !min-h-0",
           // Cosmetic cleanup
@@ -325,8 +329,6 @@ export function PlayerModal() {
 
         {/* ============================================================ */}
         {/* INNER PLAYER BOX                                              */}
-        {/* FIX: Use 100dvh (dynamic viewport) instead of 85vh           */}
-        {/*       so bottom controls are NOT cut off by browser navbar    */}
         {/* ============================================================ */}
         <div
           style={
@@ -346,9 +348,6 @@ export function PlayerModal() {
                   position: "relative",
                   width: "95vw",
                   maxWidth: "1100px",
-                  // FIX: pakai 100dvh (dynamic viewport height) bukan 85vh
-                  // dvh = visible viewport (exclude browser address bar)
-                  // sehingga bottom controls tidak terpotong
                   height: "calc(100dvh - 1.5rem)",
                   maxHeight: "calc(100dvh - 1.5rem)",
                   margin: "0",
@@ -522,73 +521,73 @@ export function PlayerModal() {
           </div>
 
           {/* ============================================================ */}
-          {/* BOTTOM CONTROLS (TV shows only)                               */}
-          {/* FIX #5: justify-between agar tidak menimpa                   */}
-          {/* FIX: safe-area-inset-bottom agar tidak terpotong home bar    */}
+          {/* BOTTOM CONTROLS (TV shows + vidking.net ONLY)                 */}
+          {/* FIX #1: z-[60] + shrink-0 + text pendek agar tidak menimpa    */}
+          {/* FIX #2: Hanya muncul untuk vidking.net embed                 */}
           {/* ============================================================ */}
-          {isTV && (
+          {showBottomControls && (
             <div
               className={cn(
-                "absolute bottom-0 left-0 right-0 z-30 flex items-center justify-between gap-2 bg-gradient-to-t from-black/95 via-black/80 to-transparent px-3 pt-6 pb-[calc(env(safe-area-inset-bottom)+0.5rem)] transition-opacity duration-300 sm:px-4",
+                "absolute bottom-0 left-0 right-0 z-[60] flex items-center justify-between gap-2 overflow-hidden bg-gradient-to-t from-black/95 via-black/80 to-transparent px-3 pt-8 pb-[calc(env(safe-area-inset-bottom)+0.5rem)] transition-opacity duration-300 sm:px-4",
                 controlsVisible ? "opacity-100" : "opacity-0 pointer-events-none"
               )}
             >
               {/* === LEFT: Season + Episode selects === */}
-            <div className="flex min-w-0 items-center gap-2">
-              <Select value={String(season)} onValueChange={(v) => setSeason(parseInt(v, 10))}>
-                <SelectTrigger className="h-8 w-[4.5rem] shrink-0 border-white/20 bg-white/10 text-[11px] text-white backdrop-blur-sm sm:h-9 sm:w-24 sm:text-xs">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {detail.seasons
-                    .filter((s) => s.season_number > 0)
-                    .map((s) => (
-                      <SelectItem key={s.id} value={String(s.season_number)}>
-                        Season {s.season_number}
+              <div className="flex shrink-0 items-center gap-2">
+                <Select value={String(season)} onValueChange={(v) => setSeason(parseInt(v, 10))}>
+                  <SelectTrigger className="h-9 w-20 shrink-0 border-white/20 bg-white/10 text-xs text-white backdrop-blur-sm">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {detail.seasons
+                      .filter((s) => s.season_number > 0)
+                      .map((s) => (
+                        <SelectItem key={s.id} value={String(s.season_number)}>
+                          S{s.season_number}
+                        </SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
+
+                <Select value={String(episode)} onValueChange={(v) => setEpisode(parseInt(v, 10))}>
+                  <SelectTrigger className="h-9 w-24 shrink-0 border-white/20 bg-white/10 text-xs text-white backdrop-blur-sm">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="max-h-72">
+                    {Array.from({ length: 20 }).map((_, i) => (
+                      <SelectItem key={i + 1} value={String(i + 1)}>
+                        EP {i + 1}
                       </SelectItem>
                     ))}
-                </SelectContent>
-              </Select>
+                  </SelectContent>
+                </Select>
+              </div>
 
-              <Select value={String(episode)} onValueChange={(v) => setEpisode(parseInt(v, 10))}>
-                <SelectTrigger className="h-8 w-[5.5rem] shrink-0 border-white/20 bg-white/10 text-[11px] text-white backdrop-blur-sm sm:h-9 sm:w-28 sm:text-xs">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent className="max-h-72">
-                  {Array.from({ length: 20 }).map((_, i) => (
-                    <SelectItem key={i + 1} value={String(i + 1)}>
-                      Episode {i + 1}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              {/* === RIGHT: Prev/Next buttons === */}
+              <div className="flex shrink-0 items-center gap-1">
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="h-9 w-9 shrink-0 text-white hover:bg-white/20"
+                  disabled={episode <= 1}
+                  onClick={() => setEpisode(Math.max(1, episode - 1))}
+                  aria-label="Previous episode"
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </Button>
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="h-9 w-9 shrink-0 text-white hover:bg-white/20"
+                  onClick={() => setEpisode(episode + 1)}
+                  aria-label="Next episode"
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              </div>
             </div>
-
-            {/* === RIGHT: Prev/Next buttons === */}
-            <div className="flex shrink-0 items-center gap-1">
-              <Button
-                size="icon"
-                variant="ghost"
-                className="h-8 w-8 shrink-0 text-white hover:bg-white/20 sm:h-9 sm:w-9"
-                disabled={episode <= 1}
-                onClick={() => setEpisode(Math.max(1, episode - 1))}
-                aria-label="Previous episode"
-              >
-                <ChevronLeft className="h-4 w-4" />
-              </Button>
-              <Button
-                size="icon"
-                variant="ghost"
-                className="h-8 w-8 shrink-0 text-white hover:bg-white/20 sm:h-9 sm:w-9"
-                onClick={() => setEpisode(episode + 1)}
-                aria-label="Next episode"
-              >
-                <ChevronRight className="h-4 w-4" />
-              </Button>
-            </div>
-          </div>
-        )}
-      </div>
+          )}
+        </div>
       </DialogContent>
     </Dialog>
   );
