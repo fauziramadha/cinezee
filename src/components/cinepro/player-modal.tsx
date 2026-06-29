@@ -57,25 +57,16 @@ export function PlayerModal() {
   const [episode, setEpisode] = useState(playerEpisode || 1);
   const [isPseudoFullscreen, setIsPseudoFullscreen] = useState(false);
 
-  // For auto-hide controls in pseudo-fullscreen
   const [showControls, setShowControls] = useState(true);
   const hideControlsTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // ============================================================
-  // BUG FIX 2: Track previous media id so we ONLY reset currentIdx
-  // when the actual movie/show changes — NOT when NextAuth refreshes
-  // the session token (which was causing the server selector to
-  // jump back to Server 1 every minute).
-  // ============================================================
   const prevMediaKey = useRef<string>("");
 
-  // KEY FIX: Sync local state when playerSeason/playerEpisode changes in store
   useEffect(() => {
     setSeason(playerSeason || 1);
     setEpisode(playerEpisode || 1);
   }, [playerSeason, playerEpisode]);
 
-  // Handle Escape key for Pseudo-Fullscreen
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
       if (e.key === "Escape" && isPseudoFullscreen) {
@@ -88,7 +79,6 @@ export function PlayerModal() {
     return () => window.removeEventListener("keydown", handleEscape, true);
   }, [isPseudoFullscreen]);
 
-  // Cleanup hide timeout
   useEffect(() => {
     return () => {
       if (hideControlsTimeout.current) {
@@ -97,7 +87,6 @@ export function PlayerModal() {
     };
   }, []);
 
-  // Auto-hide controls in pseudo-fullscreen
   const handleMouseMove = useCallback(() => {
     if (!isPseudoFullscreen) return;
     setShowControls(true);
@@ -109,15 +98,12 @@ export function PlayerModal() {
     }, 3000);
   }, [isPseudoFullscreen]);
 
-  // Reset showControls when toggling fullscreen
   useEffect(() => {
     setShowControls(true);
   }, [isPseudoFullscreen]);
 
-  // Save to watch history (only if logged in)
   const saveToHistory = useCallback(async () => {
     if (!playerMedia || status !== "authenticated" || !session?.user) return;
-
     try {
       await fetch("/api/history", {
         method: "POST",
@@ -138,10 +124,6 @@ export function PlayerModal() {
     }
   }, [playerMedia, session, status, season, episode]);
 
-  // ============================================================
-  // BUG FIX 2 (continued): Only reset currentIdx when media
-  // actually changes. Use a ref to track previous media key.
-  // ============================================================
   useEffect(() => {
     if (!playerMedia) return;
 
@@ -165,12 +147,9 @@ export function PlayerModal() {
       setLoading(true);
       setIframeLoaded(false);
       setIframeError(false);
-      // ONLY reset to Server 1 if the movie/show itself changed.
-      // If only season/episode changed, keep the user's server choice.
       if (isMediaChanged) {
         setCurrentIdx(0);
       }
-
       try {
         const res = await fetch(`/api/providers?${params.toString()}`);
         const data = await res.json();
@@ -188,7 +167,6 @@ export function PlayerModal() {
 
     loadProviders();
 
-    // Only re-fetch detail when media actually changes (not on season/episode change)
     if (isMediaChanged) {
       fetch(`/api/detail/${playerMedia.id}?type=${playerMedia.type}`)
         .then((res) => res.json())
@@ -248,19 +226,14 @@ export function PlayerModal() {
   const iframeUrl = currentProvider?.url;
   const isTV = playerMedia.type === "tv" && detail?.seasons;
   const isFilmU = currentProvider?.url.includes("embed.filmu.in");
+  const isVidking = currentProvider?.url.includes("vidking.net");
   
   // ============================================================
-  // FIX #2: Bottom controls HANYA untuk vidking.net
+  // FIX: Bottom controls hanya untuk VidKing + TV Show
   // ============================================================
-  const isVidking = currentProvider?.url.includes("vidking.net");
   const showBottomControls = isTV && isVidking;
 
-  // ============================================================
-  // BUG FIX 1: Use !important Tailwind classes to KILL shadcn's
-  // default `left-[50%] top-[50%] -translate-x-1/2 -translate-y-1/2`.
-  // ============================================================
-
-  // Inline styles for flex centering + opaque background
+  // Dialog styling
   const dialogContentStyle: React.CSSProperties = isPseudoFullscreen
     ? {
         position: "fixed",
@@ -278,16 +251,13 @@ export function PlayerModal() {
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        // Fully opaque backdrop so underlying app isn't visible
         backgroundColor: "rgba(0,0,0,1)",
-        // Safe area padding for iPhones with notch
         paddingTop: "env(safe-area-inset-top)",
         paddingBottom: "env(safe-area-inset-bottom)",
         paddingLeft: "env(safe-area-inset-left)",
         paddingRight: "env(safe-area-inset-right)",
       };
 
-  // Controls visibility (auto-hide in pseudo-fullscreen)
   const controlsVisible = !isPseudoFullscreen || showControls || iframeError;
 
   return (
@@ -303,33 +273,21 @@ export function PlayerModal() {
       <DialogContent
         style={dialogContentStyle}
         className={cn(
-          // === CRITICAL: Kill shadcn default positioning ===
           "!left-0 !top-0",
           "!translate-x-0 !translate-y-0",
-          // === FIX: Pakai 100dvh (dynamic viewport) bukan 100vh ===
           "!w-screen !h-[100dvh]",
           "!max-w-none !max-h-none !min-w-0 !min-h-0",
-          // Cosmetic cleanup
           "!p-0 !border-0 !bg-transparent !shadow-none !gap-0 !rounded-none"
         )}
         onMouseMove={handleMouseMove}
         onEscapeKeyDown={(e) => {
-          if (isPseudoFullscreen) {
-            e.preventDefault();
-          }
+          if (isPseudoFullscreen) e.preventDefault();
         }}
-        onPointerDownOutside={(e) => {
-          e.preventDefault();
-        }}
-        onInteractOutside={(e) => {
-          e.preventDefault();
-        }}
+        onPointerDownOutside={(e) => e.preventDefault()}
+        onInteractOutside={(e) => e.preventDefault()}
       >
         <DialogTitle className="sr-only">{playerMedia.title} Player</DialogTitle>
 
-        {/* ============================================================ */}
-        {/* INNER PLAYER BOX                                              */}
-        {/* ============================================================ */}
         <div
           style={
             isPseudoFullscreen
@@ -361,10 +319,15 @@ export function PlayerModal() {
                 }
           }
         >
-          {/* Top bar - Auto hide on Pseudo Fullscreen */}
+          {/* ============================================================ */}
+          {/* TOP BAR                                                       */}
+          {/* Pseudo-fullscreen: absolute overlay (auto-hide)              */}
+          {/* Normal mode: flex child (tidak nimpa video)                  */}
+          {/* ============================================================ */}
           <div
             className={cn(
-              "absolute left-0 right-0 top-0 z-30 flex shrink-0 items-center justify-between gap-2 bg-gradient-to-b from-black/90 to-transparent px-3 py-2 transition-opacity duration-300 sm:px-4 sm:py-3",
+              "flex shrink-0 items-center justify-between gap-2 bg-gradient-to-b from-black/90 to-black/40 px-3 py-2 transition-opacity duration-300 sm:px-4 sm:py-3",
+              isPseudoFullscreen && "absolute left-0 right-0 top-0 z-30",
               controlsVisible ? "opacity-100" : "opacity-0 pointer-events-none"
             )}
           >
@@ -381,7 +344,6 @@ export function PlayerModal() {
 
             {providers.length > 0 && (
               <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
-                {/* Pseudo-Fullscreen Button (Only for FilmU) */}
                 {isFilmU && iframeLoaded && !iframeError && (
                   <button
                     onClick={() => setIsPseudoFullscreen(!isPseudoFullscreen)}
@@ -483,28 +445,18 @@ export function PlayerModal() {
                   <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-black p-6 text-center text-white">
                     <AlertCircle className="h-12 w-12 text-red-500" />
                     <div>
-                      <p className="mb-1 text-base font-semibold">
-                        Playback Error
-                      </p>
+                      <p className="mb-1 text-base font-semibold">Playback Error</p>
                       <p className="text-sm text-white/60">
                         {currentProvider?.name} couldn&apos;t load this title.
-                        Try another server.
                       </p>
                     </div>
                     <div className="flex gap-2">
-                      <Button
-                        onClick={switchProvider}
-                        size="sm"
-                        className="gap-2"
-                      >
+                      <Button onClick={switchProvider} size="sm" className="gap-2">
                         <RotateCcw className="h-3.5 w-3.5" />
                         Try Next Server
                       </Button>
                       <Button
-                        onClick={() => {
-                          setIframeError(false);
-                          setIframeLoaded(false);
-                        }}
+                        onClick={() => { setIframeError(false); setIframeLoaded(false); }}
                         variant="outline"
                         size="sm"
                       >
@@ -521,18 +473,19 @@ export function PlayerModal() {
           </div>
 
           {/* ============================================================ */}
-          {/* BOTTOM CONTROLS (TV shows + vidking.net ONLY)                 */}
-          {/* FIX #1: z-[60] + shrink-0 + text pendek agar tidak menimpa    */}
-          {/* FIX #2: Hanya muncul untuk vidking.net embed                 */}
+          {/* BOTTOM CONTROLS (TV + VidKing ONLY)                           */}
+          {/* FIX: Flex child (bukan absolute overlay) → tidak nimpa video */}
+          {/* Pseudo-fullscreen: absolute overlay (auto-hide)              */}
           {/* ============================================================ */}
           {showBottomControls && (
             <div
               className={cn(
-                "absolute bottom-0 left-0 right-0 z-[60] flex items-center justify-between gap-2 overflow-hidden bg-gradient-to-t from-black/95 via-black/80 to-transparent px-3 pt-8 pb-[calc(env(safe-area-inset-bottom)+0.5rem)] transition-opacity duration-300 sm:px-4",
+                "flex shrink-0 items-center justify-between gap-2 bg-gradient-to-t from-black/95 to-black/70 px-3 pt-2 pb-[calc(env(safe-area-inset-bottom)+0.5rem)] transition-opacity duration-300 sm:px-4",
+                isPseudoFullscreen && "absolute bottom-0 left-0 right-0 z-30 pt-8",
                 controlsVisible ? "opacity-100" : "opacity-0 pointer-events-none"
               )}
             >
-              {/* === LEFT: Season + Episode selects === */}
+              {/* LEFT: Season + Episode selects */}
               <div className="flex shrink-0 items-center gap-2">
                 <Select value={String(season)} onValueChange={(v) => setSeason(parseInt(v, 10))}>
                   <SelectTrigger className="h-9 w-20 shrink-0 border-white/20 bg-white/10 text-xs text-white backdrop-blur-sm">
@@ -563,7 +516,7 @@ export function PlayerModal() {
                 </Select>
               </div>
 
-              {/* === RIGHT: Prev/Next buttons === */}
+              {/* RIGHT: Prev/Next buttons */}
               <div className="flex shrink-0 items-center gap-1">
                 <Button
                   size="icon"
