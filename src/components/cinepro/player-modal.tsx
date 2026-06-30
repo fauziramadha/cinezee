@@ -1,5 +1,31 @@
 "use client";
 
+import { PreRollAd } from "@/components/ads/pre-roll-ad";
+
+// Di dalam komponen PlayerModal(), tambahkan state:
+const [showPreRoll, setShowPreRoll] = useState(false);
+const [adConfig, setAdConfig] = useState<{
+  preroll_url: string;
+  duration: number;
+  skip_delay: number;
+} | null>(null);
+
+// Fetch ad config saat modal buka
+useEffect(() => {
+  if (playerMedia) {
+    fetch("/api/ads/config")
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.hilltopads?.preroll_url) {
+          setAdConfig(data.hilltopads);
+          setShowPreRoll(true);
+        }
+      })
+      .catch(() => {});
+  } else {
+    setShowPreRoll(false);
+  }
+}, [playerMedia]);
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useSession } from "next-auth/react";
 import {
