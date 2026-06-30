@@ -1,5 +1,6 @@
 "use client";
 
+import { AdBanner } from "@/components/cinepro/ad-banner";
 import { useEffect, useState, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { Header } from "@/components/cinepro/header";
