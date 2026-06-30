@@ -118,13 +118,6 @@ export default function RootLayout({
         <meta name="msapplication-TileColor" content="#B20710" />
         <meta name="msapplication-tap-highlight" content="no" />
 
-        {/* === Monetag Verification === */}
-        <meta name="monetag" content="40ef5979e82f1efbad540bec3ca1213b" />
-        {/* === META TAG HILLTOPADS === */}
-        <meta name="5cbaa3d4424f23be9f26eaa65e45e28a372fc8f2" content="5cbaa3d4424f23be9f26eaa65e45e28a372fc8f2" />
-        {/* === META TAG BOOST PENDAPATAN (Opsional +20%) === */}
-        <meta name="referrer" content="no-referrer-when-downgrade" />
-
         {/* === Service Worker Registration === */}
         <Script
           id="sw-register"
@@ -177,10 +170,6 @@ export default function RootLayout({
 
         <Toaster />
         <SonnerToaster position="bottom-right" />
-
-        {/* === MONETAG POPUNDER (Lazy Load) === */}
-        {/* URL akan diisi setelah Monetag approved. strategy="lazyOnload" aman dari error build */}
-        <Script id="monetag-popunder" strategy="lazyOnload" src="" />
       </body>
     </html>
   );
