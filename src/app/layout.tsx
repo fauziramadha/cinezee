@@ -6,7 +6,6 @@ import { Toaster as SonnerToaster } from "@/components/ui/sonner";
 import { SessionProviderWrapper } from "@/components/providers/session-provider";
 import { SplashOverlay } from "@/components/pwa/splash-screen";
 import { TranslationProvider } from "@/i18n/translation-provider";
-import { MonetagLoader } from "@/components/ads/monetag-loader";
 import Script from "next/script";
 
 const geistSans = Geist({
@@ -168,9 +167,6 @@ export default function RootLayout({
         {/* === Splash Screen Overlay === */}
         <SplashOverlay />
 
-        {/* === Monetag Popunder Loader (1x per session) === */}
-        <MonetagLoader />
-
         {/* === Session Provider (Auth) - WAJIB di luar === */}
         <SessionProviderWrapper>
           {/* === Translation Provider (i18n) - butuh session, jadi di dalam === */}
@@ -181,6 +177,10 @@ export default function RootLayout({
 
         <Toaster />
         <SonnerToaster position="bottom-right" />
+
+        {/* === MONETAG POPUNDER (Lazy Load) === */}
+        {/* URL akan diisi setelah Monetag approved. strategy="lazyOnload" aman dari error build */}
+        <Script id="monetag-popunder" strategy="lazyOnload" src="" />
       </body>
     </html>
   );
