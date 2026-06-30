@@ -25,10 +25,13 @@ interface UseTranslationReturn {
 // MAIN HOOK
 // ============================================================
 export function useTranslation(): UseTranslationReturn {
-  // Coba pakai context dari TranslationProvider
+  // 1. Hooks WAJIB dipanggil di paling atas, TIDAK BOLEH di dalam if/else
+  // Ini untuk mencegah error "Invalid hook call" saat SSG/prerender
   const context = useContext(TranslationContext);
+  const sessionResult = useSession() as any;
+  const session = sessionResult?.data ?? null;
 
-  // Jika context tersedia (di dalam Provider), pakai context
+  // 2. Jika context tersedia (di dalam Provider), pakai context
   if (context) {
     const t = (key: TranslationKeys): string => getTranslation(context.lang, key);
     const tArray = (key: TranslationKeys): string[] => {
@@ -43,11 +46,8 @@ export function useTranslation(): UseTranslationReturn {
   }
 
   // ============================================================
-  // FALLBACK: Untuk komponen di luar Provider
+  // 3. FALLBACK: Untuk komponen di luar Provider
   // ============================================================
-  const sessionResult = useSession() as any;
-  const session = sessionResult?.data ?? null;
-
   let lang: Language = "en";
 
   // Priority 1: localStorage
