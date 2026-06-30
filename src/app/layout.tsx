@@ -6,6 +6,7 @@ import { Toaster as SonnerToaster } from "@/components/ui/sonner";
 import { SessionProviderWrapper } from "@/components/providers/session-provider";
 import { SplashOverlay } from "@/components/pwa/splash-screen";
 import { TranslationProvider } from "@/i18n/translation-provider";
+import { MonetagLoader } from "@/components/ads/monetag-loader";
 import Script from "next/script";
 
 const geistSans = Geist({
@@ -118,6 +119,9 @@ export default function RootLayout({
         <meta name="msapplication-TileColor" content="#B20710" />
         <meta name="msapplication-tap-highlight" content="no" />
 
+        {/* === Monetag Verification === */}
+        <meta name="monetag" content="40ef5979e82f1efbad540bec3ca1213b" />
+
         {/* === Service Worker Registration === */}
         <Script
           id="sw-register"
@@ -159,6 +163,9 @@ export default function RootLayout({
       >
         {/* === Splash Screen Overlay === */}
         <SplashOverlay />
+
+        {/* === Monetag Popunder Loader (1x per session) === */}
+        <MonetagLoader />
 
         {/* === Translation Provider (i18n) === */}
         <TranslationProvider>
