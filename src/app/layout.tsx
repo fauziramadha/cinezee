@@ -121,11 +121,10 @@ export default function RootLayout({
 
         {/* === Monetag Verification === */}
         <meta name="monetag" content="40ef5979e82f1efbad540bec3ca1213b" />
-        {/* === TAMBAHKAN META TAG HILLTOPADS DI SINI === */}
+        {/* === META TAG HILLTOPADS === */}
         <meta name="5cbaa3d4424f23be9f26eaa65e45e28a372fc8f2" content="5cbaa3d4424f23be9f26eaa65e45e28a372fc8f2" />
-        {/* === TAMBAHKAN META TAG BOOST PENDAPATAN (Opsional +20%) === */}
+        {/* === META TAG BOOST PENDAPATAN (Opsional +20%) === */}
         <meta name="referrer" content="no-referrer-when-downgrade" />
-
 
         {/* === Service Worker Registration === */}
         <Script
@@ -172,10 +171,13 @@ export default function RootLayout({
         {/* === Monetag Popunder Loader (1x per session) === */}
         <MonetagLoader />
 
-        {/* === Translation Provider (i18n) === */}
-        <TranslationProvider>
-          <SessionProviderWrapper>{children}</SessionProviderWrapper>
-        </TranslationProvider>
+        {/* === Session Provider (Auth) - WAJIB di luar === */}
+        <SessionProviderWrapper>
+          {/* === Translation Provider (i18n) - butuh session, jadi di dalam === */}
+          <TranslationProvider>
+            {children}
+          </TranslationProvider>
+        </SessionProviderWrapper>
 
         <Toaster />
         <SonnerToaster position="bottom-right" />
