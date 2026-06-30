@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, Suspense } from "react";
 import Image from "next/image";
-import { useParams, useRouter } from "next/navigation";
-import { ArrowLeft, Loader2, Film, Tv, Calendar, MapPin, Star, ExternalLink } from "lucide-react";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
+import { ArrowLeft, Loader2, Film, Tv, Calendar, MapPin } from "lucide-react";
 import { Header } from "@/components/cinepro/header";
 import { Footer } from "@/components/cinepro/footer";
 import { Button } from "@/components/ui/button";
@@ -41,15 +41,19 @@ interface PersonDetail {
   };
 }
 
-export default function PersonPage() {
+function PersonContent() {
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const setSelectedMedia = useAppStore((s) => s.setSelectedMedia);
 
   const personId = params?.id as string;
   const [person, setPerson] = useState<PersonDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Ambil parameter return dari URL (misal: "movie=123" atau "tv=456")
+  const returnUrl = searchParams.get("return");
 
   useEffect(() => {
     if (!personId) return;
@@ -87,6 +91,18 @@ export default function PersonPage() {
     setSelectedMedia(selected);
   };
 
+  // Handle Back Button
+  const handleBack = () => {
+    if (returnUrl) {
+      // Jika ada return URL, arahkan ke homepage dengan parameter tersebut
+      // Homepage akan otomatis membuka DetailModal
+      router.push(`/?${returnUrl}`);
+    } else {
+      // Fallback kalau tidak ada return URL
+      router.back();
+    }
+  };
+
   // Sort filmography by popularity (vote_average desc, then by date)
   const filmography = (person?.combined_credits?.cast || [])
     .filter((c) => c.poster_path)
@@ -122,7 +138,7 @@ export default function PersonPage() {
         ) : error ? (
           <div className="flex h-[60vh] flex-col items-center justify-center gap-3 px-4 text-center">
             <p className="text-sm text-destructive">{error}</p>
-            <Button variant="secondary" size="sm" onClick={() => router.back()}>
+            <Button variant="secondary" size="sm" onClick={handleBack}>
               Go Back
             </Button>
           </div>
@@ -149,7 +165,7 @@ export default function PersonPage() {
             <div className="relative z-10 mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
               {/* Back button */}
               <button
-                onClick={() => router.back()}
+                onClick={handleBack}
                 className="mb-6 flex items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground"
               >
                 <ArrowLeft className="h-4 w-4" />
@@ -235,16 +251,9 @@ export default function PersonPage() {
                     </div>
                   )}
 
-                  {/* TMDB link */}
-                  <a
-                    href={`https://www.themoviedb.org/person/${person.id}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="mt-6 inline-flex items-center gap-1.5 text-xs text-primary hover:underline"
-                  >
-                    <ExternalLink className="h-3 w-3" />
-                    View on TMDB
-                  </a>
+                  {/* ============================================================ */}
+                  {/* FIX: Hapus link "View on TMDB"                               */}
+                  {/* ============================================================ */}
                 </div>
               </div>
             </div>
@@ -345,5 +354,25 @@ export default function PersonPage() {
       <PlayerModal />
       <AuthModal />
     </main>
+  );
+}
+
+// ============================================================
+// WRAPPER with Suspense (required for useSearchParams)
+// ============================================================
+export default function PersonPage() {
+  return (
+    <Suspense
+      fallback={
+        <main className="min-h-screen bg-background">
+          <Header />
+          <div className="flex h-[60vh] items-center justify-center">
+            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          </div>
+        </main>
+      }
+    >
+      <PersonContent />
+    </Suspense>
   );
 }
