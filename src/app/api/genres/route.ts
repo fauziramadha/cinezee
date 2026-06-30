@@ -15,6 +15,9 @@ import { TMDB_BASE } from "@/lib/tmdb";
  *   }
  */
 
+// FIX: Tambahkan ini agar Next.js tidak mencoba render static (karena pakai request.url)
+export const dynamic = "force-dynamic";
+
 const API_KEY = process.env.TMDB_API_KEY || process.env.NEXT_PUBLIC_TMDB_API_KEY;
 
 // Cache genres for 24 hours (genres rarely change)
