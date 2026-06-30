@@ -3,7 +3,7 @@
 import { useEffect, useState, Suspense } from "react";
 import Image from "next/image";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
-import { ArrowLeft, Loader2, Film, Tv, Calendar, MapPin } from "lucide-react";
+import { ArrowLeft, Loader2, Film, Tv, Calendar, MapPin, ChevronDown } from "lucide-react";
 import { Header } from "@/components/cinepro/header";
 import { Footer } from "@/components/cinepro/footer";
 import { Button } from "@/components/ui/button";
@@ -13,7 +13,7 @@ import { PlayerModal } from "@/components/cinepro/player-modal";
 import { SearchModal } from "@/components/cinepro/search-modal";
 import { AuthModal } from "@/components/cinepro/auth-modal";
 import { useAppStore, type SelectedMedia } from "@/lib/store";
-import { getImageUrl, type Movie } from "@/lib/tmdb";
+import { getImageUrl } from "@/lib/tmdb";
 
 interface PersonCredit {
   id: number;
@@ -41,6 +41,8 @@ interface PersonDetail {
   };
 }
 
+const ITEMS_PER_PAGE = 20; // Load 20 judul per halaman
+
 function PersonContent() {
   const params = useParams();
   const router = useRouter();
@@ -51,8 +53,10 @@ function PersonContent() {
   const [person, setPerson] = useState<PersonDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  
+  // State untuk Load More
+  const [visibleCount, setVisibleCount] = useState(ITEMS_PER_PAGE);
 
-  // Ambil parameter return dari URL (misal: "movie=123" atau "tv=456")
   const returnUrl = searchParams.get("return");
 
   useEffect(() => {
@@ -91,19 +95,15 @@ function PersonContent() {
     setSelectedMedia(selected);
   };
 
-  // Handle Back Button
   const handleBack = () => {
     if (returnUrl) {
-      // Jika ada return URL, arahkan ke homepage dengan parameter tersebut
-      // Homepage akan otomatis membuka DetailModal
       router.push(`/?${returnUrl}`);
     } else {
-      // Fallback kalau tidak ada return URL
       router.back();
     }
   };
 
-  // Sort filmography by popularity (vote_average desc, then by date)
+  // Sort & dedup filmography
   const filmography = (person?.combined_credits?.cast || [])
     .filter((c) => c.poster_path)
     .sort((a, b) => {
@@ -111,11 +111,12 @@ function PersonContent() {
       const dateB = b.release_date || b.first_air_date || "";
       return dateB.localeCompare(dateA);
     })
-    // Remove duplicates (same id + media_type)
     .filter((c, idx, self) =>
       idx === self.findIndex((t) => t.id === c.id && t.media_type === c.media_type)
-    )
-    .slice(0, 60); // Limit to 60 items
+    );
+
+  // Hanya tampilkan sesuai visibleCount (20, 40, 60, dst)
+  const visibleFilmography = filmography.slice(0, visibleCount);
 
   const calculateAge = (birthday: string, deathday: string | null) => {
     if (!birthday) return null;
@@ -163,7 +164,6 @@ function PersonContent() {
 
             {/* Content */}
             <div className="relative z-10 mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
-              {/* Back button */}
               <button
                 onClick={handleBack}
                 className="mb-6 flex items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground"
@@ -172,9 +172,7 @@ function PersonContent() {
                 Back
               </button>
 
-              {/* Profile header */}
               <div className="flex flex-col gap-6 sm:flex-row sm:items-start">
-                {/* Profile image */}
                 <div className="mx-auto w-40 shrink-0 sm:mx-0 sm:w-48 md:w-56">
                   <div className="relative aspect-[2/3] overflow-hidden rounded-xl border border-border bg-muted shadow-2xl">
                     {person.profile_path ? (
@@ -195,13 +193,11 @@ function PersonContent() {
                   </div>
                 </div>
 
-                {/* Info */}
                 <div className="flex-1 min-w-0">
                   <h1 className="text-2xl font-bold tracking-tight sm:text-3xl md:text-4xl">
                     {person.name}
                   </h1>
 
-                  {/* Department badge */}
                   {person.known_for_department && (
                     <div className="mt-2 flex flex-wrap items-center gap-2">
                       <Badge variant="secondary" className="text-xs">
@@ -210,7 +206,6 @@ function PersonContent() {
                     </div>
                   )}
 
-                  {/* Personal info */}
                   <div className="mt-4 flex flex-wrap gap-4 text-sm text-muted-foreground">
                     {person.birthday && (
                       <div className="flex items-center gap-1.5">
@@ -239,7 +234,6 @@ function PersonContent() {
                     )}
                   </div>
 
-                  {/* Biography */}
                   {person.biography && (
                     <div className="mt-6">
                       <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
@@ -250,10 +244,6 @@ function PersonContent() {
                       </p>
                     </div>
                   )}
-
-                  {/* ============================================================ */}
-                  {/* FIX: Hapus link "View on TMDB"                               */}
-                  {/* ============================================================ */}
                 </div>
               </div>
             </div>
@@ -272,9 +262,8 @@ function PersonContent() {
             </span>
           </div>
 
-          {/* Grid */}
           <div className="grid grid-cols-3 gap-3 sm:grid-cols-4 sm:gap-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7">
-            {filmography.map((credit) => {
+            {visibleFilmography.map((credit) => {
               const title = credit.title || credit.name || "Untitled";
               const year = (credit.release_date || credit.first_air_date || "").split("-")[0];
               const rating = credit.vote_average?.toFixed(1) || "N/A";
@@ -293,6 +282,7 @@ function PersonContent() {
                       sizes="(max-width: 640px) 33vw, 200px"
                       className="object-cover transition-transform group-hover:scale-105"
                       unoptimized
+                      loading="lazy" // Lazy load gambar untuk hemat bandwidth
                     />
                   ) : (
                     <div className="flex h-full items-center justify-center bg-muted">
@@ -304,24 +294,20 @@ function PersonContent() {
                     </div>
                   )}
 
-                  {/* Gradient overlay */}
                   <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent" />
 
-                  {/* Type badge */}
                   <div className="absolute left-1.5 top-1.5">
                     <span className="rounded bg-primary/90 px-1 text-[7px] font-bold uppercase text-primary-foreground backdrop-blur-sm">
                       {credit.media_type}
                     </span>
                   </div>
 
-                  {/* Rating */}
                   <div className="absolute right-1.5 top-1.5">
                     <span className="flex items-center gap-0.5 rounded bg-black/60 px-1 py-0.5 text-[7px] font-semibold text-yellow-400 backdrop-blur-sm">
                       ★ {rating}
                     </span>
                   </div>
 
-                  {/* Character name (if available) */}
                   {credit.character && (
                     <div className="absolute left-1.5 right-1.5 top-7">
                       <span className="line-clamp-1 text-[8px] font-medium text-white/80">
@@ -330,7 +316,6 @@ function PersonContent() {
                     </div>
                   )}
 
-                  {/* Bottom info */}
                   <div className="absolute bottom-0 left-0 right-0 p-1.5">
                     <h3 className="line-clamp-2 text-[10px] font-semibold text-white sm:text-xs">
                       {title}
@@ -343,6 +328,20 @@ function PersonContent() {
               );
             })}
           </div>
+
+          {/* === LOAD MORE BUTTON === */}
+          {visibleCount < filmography.length && (
+            <div className="mt-8 flex justify-center">
+              <Button
+                variant="outline"
+                onClick={() => setVisibleCount(visibleCount + ITEMS_PER_PAGE)}
+                className="gap-2"
+              >
+                Load More ({filmography.length - visibleCount} remaining)
+                <ChevronDown className="h-4 w-4" />
+              </Button>
+            </div>
+          )}
         </div>
       )}
 
