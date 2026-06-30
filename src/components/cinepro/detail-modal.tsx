@@ -30,8 +30,13 @@ export function DetailModal() {
   const router = useRouter();
 
   const handlePersonClick = (personId: number) => {
-    setSelectedMedia(null);
+  if (selectedMedia) {
+    // Kirim tipe dan ID film yang sedang dibuka sebagai parameter return
+    router.push(`/person/${personId}?return=${selectedMedia.type}=${selectedMedia.id}`);
+  } else {
     router.push(`/person/${personId}`);
+  }
+  setSelectedMedia(null); // Tutup modal
   };
   const [detail, setDetail] = useState<MovieDetail | null>(null);
   const [loading, setLoading] = useState(false);
