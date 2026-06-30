@@ -2,10 +2,12 @@
 
 import { useEffect, useState, useCallback } from "react";
 import Image from "next/image";
+import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import {
   Play, X, Star, Calendar, Clock, Loader2, Bookmark, Check, Share2,
   MessageSquare, Send, Trash2, CornerDownRight, ChevronLeft, ChevronRight,
+  User as UserIcon,
 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -25,6 +27,12 @@ interface Episode { episodeNumber: number; name: string; overview: string; still
 export function DetailModal() {
   const { selectedMedia, setSelectedMedia, openPlayer, addToHistory, setAuthModalOpen } = useAppStore();
   const { data: session, status } = useSession();
+  const router = useRouter();
+
+  const handlePersonClick = (personId: number) => {
+    setSelectedMedia(null);
+    router.push(`/person/${personId}`);
+  };
   const [detail, setDetail] = useState<MovieDetail | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -408,23 +416,31 @@ export function DetailModal() {
                         <style>{`div::-webkit-scrollbar { display: none; }`}</style>
                         <div className="flex gap-3">
                           {cast.map((p) => (
-                            <div key={p.id} className="shrink-0 w-20 sm:w-24">
-                              <div className="relative mx-auto mb-2 h-20 w-20 overflow-hidden rounded-full bg-muted sm:h-24 sm:w-24">
-                                {p.profile_path && (
-                                  <Image
-                                    src={getImageUrl(p.profile_path, "w185")}
-                                    alt={p.name}
-                                    fill
-                                    sizes="96px"
-                                    className="object-cover"
-                                    unoptimized
+                            <button
+                              key={p.id}
+                              onClick={() => handlePersonClick(p.id)}
+                              className="shrink-0 w-20 text-center sm:w-24 group"
+                            >
+                              <div className="relative mx-auto mb-2 h-20 w-20 overflow-hidden rounded-full bg-muted sm:h-24 sm:w-24 ring-2 ring-transparent transition-all group-hover:ring-primary">
+                               {p.profile_path ? (
+                                 <Image
+                                   src={getImageUrl(p.profile_path, "w185")}
+                                   alt={p.name}
+                                   fill
+                                   sizes="96px"
+                                   className="object-cover"
+                                   unoptimized
                                   />
+                                ) : (
+                                  <div className="flex h-full items-center justify-center text-muted-foreground">
+                                    <UserIcon className="h-8 w-8" />
+                                  </div>
                                 )}
-                              </div>
-                              <p className="truncate text-center text-[11px] font-medium sm:text-xs">{p.name}</p>
-                              <p className="truncate text-center text-[9px] text-muted-foreground sm:text-[10px]">{p.character}</p>
-                            </div>
-                          ))}
+                               </div>
+                               <p className="truncate text-[11px] font-medium text-foreground group-hover:text-primary sm:text-xs">{p.name}</p>
+                               <p className="truncate text-[9px] text-muted-foreground sm:text-[10px]">{p.character}</p>
+                              </button>
+                            ))}
                         </div>
                       </div>
                     </div>
