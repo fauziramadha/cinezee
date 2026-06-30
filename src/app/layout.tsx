@@ -15,7 +15,7 @@ const geistSans = Geist({
 });
 
 // ============================================================
-// METADATA — SEO + PWA + Social Sharing.
+// METADATA — SEO + PWA + Social Sharing..
 // ============================================================
 export const metadata: Metadata = {
   metadataBase: new URL("https://cinezee.fauziramadhani4321.workers.dev"),
