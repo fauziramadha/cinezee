@@ -1,10 +1,10 @@
 /**
- * src/components/admin/admin-nav.tsx (REVISED - Added Logs)
+ * src/components/admin/admin-nav.tsx (REVISED - Added Ads)
  *
  * Navigasi untuk admin pages.
  * Letakkan di layout admin.
  *
- * Tab: Dashboard, Providers, Messages, Users, Analytics, Logs
+ * Tab: Dashboard, Providers, Messages, Users, Ads, Analytics, Logs
  * - Highlight tab yang sedang aktif berdasarkan URL pathname
  * - Responsive: scroll horizontal di mobile
  */
@@ -20,6 +20,7 @@ import {
   Users,
   BarChart3,
   ScrollText,
+  Megaphone,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -28,6 +29,7 @@ const NAV_ITEMS = [
   { href: "/admin/providers", label: "Providers", icon: Server },
   { href: "/admin/messages", label: "Messages", icon: Mail },
   { href: "/admin/users", label: "Users", icon: Users },
+  { href: "/admin/ads", label: "Ads", icon: Megaphone },
   { href: "/admin/analytics", label: "Analytics", icon: BarChart3 },
   { href: "/admin/logs", label: "Logs", icon: ScrollText },
 ];
