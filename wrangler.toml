@@ -1,7 +1,7 @@
 # CineStream — Cloudflare Workers Config
 # ALL variables are set as Secrets in Dashboard (never touched by wrangler.toml).
 
-name = "cinestream"
+name = "cinezee"
 main = ".open-next/worker.js"
 compatibility_date = "2024-09-23"
 compatibility_flags = ["nodejs_compat"]
