@@ -1,6 +1,8 @@
 //test
 "use client";
 
+export const dynamic = "force-dynamic"; // Nonaktifkan SSG untuk halaman ini
+
 import { AdBanner } from "@/components/cinepro/ad-banner";
 import { useEffect, useState, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
