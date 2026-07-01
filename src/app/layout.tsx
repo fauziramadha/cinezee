@@ -5,7 +5,6 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as SonnerToaster } from "@/components/ui/sonner";
 import { SessionProviderWrapper } from "@/components/providers/session-provider";
 import { SplashOverlay } from "@/components/pwa/splash-screen";
-import { TranslationProvider } from "@/i18n/translation-provider";
 import Script from "next/script";
 
 const geistSans = Geist({
@@ -160,12 +159,9 @@ export default function RootLayout({
         {/* === Splash Screen Overlay === */}
         <SplashOverlay />
 
-        {/* === Session Provider (Auth) - WAJIB di luar === */}
+        {/* === Session Provider (Auth) === */}
         <SessionProviderWrapper>
-          {/* === Translation Provider (i18n) - butuh session, jadi di dalam === */}
-          <TranslationProvider>
-            {children}
-          </TranslationProvider>
+          {children}
         </SessionProviderWrapper>
 
         <Toaster />
