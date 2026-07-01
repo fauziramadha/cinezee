@@ -1,5 +1,7 @@
 "use client";
 
+export const dynamic = "force-dynamic"; // Nonaktifkan SSG untuk halaman ini
+
 import { useEffect, useState, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import Image from "next/image";
