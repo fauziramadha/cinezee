@@ -6,6 +6,7 @@ const nextConfig: NextConfig = {
     ignoreBuildErrors: true,
   },
   reactStrictMode: false,
+  transpilePackages: ["next-auth", "@auth/prisma-adapter"], // TAMBAHKAN INI
 };
 
 export default nextConfig;
