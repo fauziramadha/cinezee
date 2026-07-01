@@ -1,3 +1,6 @@
+// Nonaktifkan SSG (Static Site Generation) secara global untuk Cloudflare Workers
+export const dynamic = "force-dynamic";
+
 import type { Metadata, Viewport } from "next";
 import { Geist } from "next/font/google";
 import "./globals.css";
