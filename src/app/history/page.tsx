@@ -1,7 +1,5 @@
 "use client";
 
-export const dynamic = "force-dynamic"; // Nonaktifkan SSG untuk halaman ini
-
 import { useEffect, useState } from "react";
 import { Header } from "@/components/cinepro/header";
 import { Footer } from "@/components/cinepro/footer";
