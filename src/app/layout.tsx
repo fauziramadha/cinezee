@@ -3,9 +3,18 @@ import { Geist } from "next/font/google";
 import "./globals.css";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as SonnerToaster } from "@/components/ui/sonner";
-import { SessionProviderWrapper } from "@/components/providers/session-provider";
 import { SplashOverlay } from "@/components/pwa/splash-screen";
 import Script from "next/script";
+import dynamic from "next/dynamic";
+
+// SessionProvider dipakai dynamic ssr:false agar hook useSession tidak dieval saat build SSG
+const SessionProviderWrapper = dynamic(
+  () => import("@/components/providers/session-provider").then(mod => mod.SessionProviderWrapper),
+  { 
+    ssr: false,
+    loading: () => null 
+  }
+);
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -159,7 +168,7 @@ export default function RootLayout({
         {/* === Splash Screen Overlay === */}
         <SplashOverlay />
 
-        {/* === Session Provider (Auth) === */}
+        {/* === Session Provider (Auth) - ssr:false agar build SSG tidak crash === */}
         <SessionProviderWrapper>
           {children}
         </SessionProviderWrapper>
