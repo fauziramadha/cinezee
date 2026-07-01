@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Header } from "@/components/cinepro/header";
+import dynamic from "next/dynamic";
 import { Footer } from "@/components/cinepro/footer";
 import { SearchModal } from "@/components/cinepro/search-modal";
 import { DetailModal } from "@/components/cinepro/detail-modal";
@@ -9,6 +9,12 @@ import { PlayerModal } from "@/components/cinepro/player-modal";
 import { AuthModal } from "@/components/cinepro/auth-modal";
 import { MovieCard } from "@/components/cinepro/movie-card";
 import { Loader2 } from "lucide-react";
+
+// Header dipakai dynamic ssr:false agar hook useSession tidak dieval saat build SSG
+const Header = dynamic(() => import("@/components/cinepro/header").then(mod => mod.Header), { 
+  ssr: false,
+  loading: () => <div className="h-16" /> 
+});
 
 export default function HistoryPage() {
   const [items, setItems] = useState<any[]>([]);
