@@ -5,16 +5,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as SonnerToaster } from "@/components/ui/sonner";
 import { SplashOverlay } from "@/components/pwa/splash-screen";
 import Script from "next/script";
-import dynamic from "next/dynamic";
-
-// SessionProvider dipakai dynamic ssr:false agar hook useSession tidak dieval saat build SSG
-const SessionProviderWrapper = dynamic(
-  () => import("@/components/providers/session-provider").then(mod => mod.SessionProviderWrapper),
-  { 
-    ssr: false,
-    loading: () => null 
-  }
-);
+import ClientLayout from "./client-layout";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -168,10 +159,10 @@ export default function RootLayout({
         {/* === Splash Screen Overlay === */}
         <SplashOverlay />
 
-        {/* === Session Provider (Auth) - ssr:false agar build SSG tidak crash === */}
-        <SessionProviderWrapper>
+        {/* === Session Provider (Auth) - ssr:false via ClientLayout === */}
+        <ClientLayout>
           {children}
-        </SessionProviderWrapper>
+        </ClientLayout>
 
         <Toaster />
         <SonnerToaster position="bottom-right" />
