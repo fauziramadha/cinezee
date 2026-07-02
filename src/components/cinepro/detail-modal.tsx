@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { useSession } from "next-auth/react";
+import { useSafeSession } from "@/lib/use-safe-session";
 import {
   Play, X, Star, Calendar, Clock, Loader2, Bookmark, Check, Share2,
   MessageSquare, Send, Trash2, CornerDownRight, ChevronLeft, ChevronRight,
@@ -26,7 +26,7 @@ interface Episode { episodeNumber: number; name: string; overview: string; still
 
 export function DetailModal() {
   const { selectedMedia, setSelectedMedia, openPlayer, addToHistory, setAuthModalOpen } = useAppStore();
-  const { data: session, status } = useSession();
+  const { data: session, status } = useSafeSession();
   const router = useRouter();
 
   const handlePersonClick = (personId: number) => {
