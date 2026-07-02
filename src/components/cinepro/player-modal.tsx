@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback, useRef } from "react";
-import { useSession } from "next-auth/react";
+import { useSafeSession } from "@/lib/use-safe-session";
 import {
   X,
   ChevronLeft,
@@ -45,7 +45,7 @@ export function PlayerModal() {
     playerEpisode,
     closePlayer,
   } = useAppStore();
-  const { data: session, status } = useSession();
+  const { data: session, status } = useSafeSession();
 
   const [providers, setProviders] = useState<ProviderInfo[]>([]);
   const [currentIdx, setCurrentIdx] = useState(0);
