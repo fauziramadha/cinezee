@@ -1,6 +1,6 @@
 "use client";
 
-import { useSyncExternalStore } from "react";
+import { useState, useEffect } from "react";
 import { getTranslation, type Language, type TranslationKeys } from "./messages";
 
 const VALID_LANGS: Language[] = ["en", "id", "es", "fr", "de", "pt", "ja", "ko", "zh"];
@@ -11,35 +11,37 @@ interface UseTranslationReturn {
   tArray: (key: TranslationKeys) => string[];
 }
 
-// Fungsi untuk subscribe ke perubahan bahasa
-function subscribe(callback: () => void) {
-  if (typeof window !== "undefined") {
-    window.addEventListener("cinestream-language-change", callback);
-    window.addEventListener("storage", callback);
-    return () => {
-      window.removeEventListener("cinestream-language-change", callback);
-      window.removeEventListener("storage", callback);
-    };
-  }
-  return () => {};
-}
-
-// Ambil bahasa saat ini di client
-function getSnapshot() {
-  if (typeof window !== "undefined") {
-    return localStorage.getItem("cinestream_language") || "en";
-  }
-  return "en";
-}
-
-// Ambil bahasa saat build (SSG) - selalu return "en"
-function getServerSnapshot() {
-  return "en";
-}
-
 export function useTranslation(): UseTranslationReturn {
-  // useSyncExternalStore aman untuk SSR/SSG
-  const lang = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot) as Language;
+  // Default ke "en" saat build (SSG) maupun first load
+  const [lang, setLang] = useState<Language>("en");
+
+  useEffect(() => {
+    // Ini hanya jalan di browser (client), tidak pernah di-eval saat build
+    try {
+      const stored = localStorage.getItem("cinestream_language") as Language | null;
+      if (stored && VALID_LANGS.includes(stored)) {
+        setLang(stored);
+      }
+    } catch {}
+
+    // Listen jika bahasa diubah oleh setGuestLanguage
+    const handler = () => {
+      try {
+        const stored = localStorage.getItem("cinestream_language") as Language | null;
+        if (stored && VALID_LANGS.includes(stored)) {
+          setLang(stored);
+        }
+      } catch {}
+    };
+
+    window.addEventListener("cinestream-language-change", handler);
+    window.addEventListener("storage", handler);
+
+    return () => {
+      window.removeEventListener("cinestream-language-change", handler);
+      window.removeEventListener("storage", handler);
+    };
+  }, []);
 
   const t = (key: TranslationKeys): string => getTranslation(lang, key);
   const tArray = (key: TranslationKeys): string[] => {
