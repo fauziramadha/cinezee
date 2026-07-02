@@ -6,6 +6,7 @@ import { Toaster as SonnerToaster } from "@/components/ui/sonner";
 import { SplashOverlay } from "@/components/pwa/splash-screen";
 import Script from "next/script";
 import ClientLayout from "./client-layout";
+import { MonetagPopunder } from "@/components/ads/monetag-popunder";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -158,6 +159,9 @@ export default function RootLayout({
       >
         {/* === Splash Screen Overlay === */}
         <SplashOverlay />
+
+        {/* === Monetag Popunder (hanya untuk non-premium user) === */}
+        <MonetagPopunder />
 
         {/* === Session Provider (Auth) - ssr:false via ClientLayout === */}
         <ClientLayout>
