@@ -1,50 +1,87 @@
-import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth/next";
+import { NextResponse } from "next/server";
+import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
-import { dbAd } from "@/lib/db-ad";
 
-async function requireAdmin() {
-  const session = await getServerSession(authOptions);
-  if (!session?.user?.id) {
-    return { error: NextResponse.json({ error: "Unauthorized" }, { status: 401 }) };
-  }
-  if (session.user.role !== "admin") {
-    return { error: NextResponse.json({ error: "Forbidden" }, { status: 403 }) };
-  }
-  return { session };
-}
+export const runtime = "edge";
 
+// GET: Ambil config lengkap (admin only)
 export async function GET() {
-  const adminCheck = await requireAdmin();
-  if ("error" in adminCheck) return adminCheck.error;
-
   try {
-    const ads = await dbAd.listAll();
-    return NextResponse.json({ ads });
+    const session = await getServerSession(authOptions);
+    if (!session?.user || (session.user as any).role !== "admin") {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const { D1 } = process as any;
+    if (!D1) {
+      return NextResponse.json({ error: "Database not available" }, { status: 500 });
+    }
+
+    const config = await D1.prepare("SELECT * FROM ads_config WHERE id = 1").first();
+
+    return NextResponse.json({ success: true, config });
   } catch (error) {
-    console.error("[ADMIN ADS GET]", error);
-    return NextResponse.json({ error: "Failed to fetch ads" }, { status: 500 });
+    return NextResponse.json(
+      { error: "Failed to fetch ads config" },
+      { status: 500 }
+    );
   }
 }
 
-export async function POST(request: NextRequest) {
-  const adminCheck = await requireAdmin();
-  if ("error" in adminCheck) return adminCheck.error;
-
+// PATCH: Update config (admin only)
+export async function PATCH(request: Request) {
   try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user || (session.user as any).role !== "admin") {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     const body = await request.json();
-    const id = await dbAd.create({
-      name: body.name,
-      image_url: body.image_url,
-      click_url: body.click_url,
-      position: body.position || "home_top",
-      is_active: body.is_active ? 1 : 0,
-      start_date: body.start_date || null,
-      end_date: body.end_date || null,
-    });
-    return NextResponse.json({ id, success: true });
+    const { D1 } = process as any;
+    if (!D1) {
+      return NextResponse.json({ error: "Database not available" }, { status: 500 });
+    }
+
+    // Build update query dinamis berdasarkan field yang dikirim
+    const allowedFields = [
+      "pre_roll_enabled",
+      "hilltopads_preroll_url",
+      "hilltopads_preroll_duration",
+      "hilltopads_preroll_skip_delay",
+      "monetag_popunder_url",
+      "monetag_popunder_enabled",
+      "adsterra_direct_link",
+      "adsterra_enabled",
+    ];
+
+    const updates: string[] = [];
+    const values: any[] = [];
+
+    for (const field of allowedFields) {
+      if (body[field] !== undefined) {
+        updates.push(`${field} = ?`);
+        values.push(body[field]);
+      }
+    }
+
+    if (updates.length === 0) {
+      return NextResponse.json({ error: "No fields to update" }, { status: 400 });
+    }
+
+    updates.push(`updated_at = datetime('now')`);
+    values.push(1); // WHERE id = 1
+
+    await D1.prepare(
+      `UPDATE ads_config SET ${updates.join(", ")} WHERE id = ?`
+    )
+      .bind(...values)
+      .run();
+
+    return NextResponse.json({ success: true });
   } catch (error) {
-    console.error("[ADMIN ADS POST]", error);
-    return NextResponse.json({ error: "Failed to create ad" }, { status: 500 });
+    return NextResponse.json(
+      { error: "Failed to update ads config" },
+      { status: 500 }
+    );
   }
 }
