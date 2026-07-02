@@ -31,6 +31,7 @@ import { useAppStore } from "@/lib/store";
 import { trackPlay } from "@/lib/analytics";
 import { cn } from "@/lib/utils";
 import type { MovieDetail } from "@/lib/tmdb";
+import { PreRollAd } from "@/components/ads/pre-roll-ad";
 
 interface ProviderInfo {
   name: string;
@@ -61,11 +62,34 @@ export function PlayerModal() {
   const hideControlsTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const prevMediaKey = useRef<string>("");
+  const [showPreRoll, setShowPreRoll] = useState(false);
+  const [adConfig, setAdConfig] = useState<{
+    preroll_url: string;
+    duration: number;
+    skip_delay: number;
+  } | null>(null);
 
   useEffect(() => {
     setSeason(playerSeason || 1);
     setEpisode(playerEpisode || 1);
   }, [playerSeason, playerEpisode]);
+  
+  useEffect(() => {
+    if (playerMedia) {
+      fetch("/api/ads/config")
+        .then((res) => res.json())
+        .then((data) => {
+          if (data.hilltopads?.preroll_url) {
+            setAdConfig(data.hilltopads);
+            setShowPreRoll(true);
+          }
+        })
+        .catch(() => {});
+    } else {
+      setShowPreRoll(false);
+      setAdConfig(null);
+    }
+  }, [playerMedia]);
 
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
@@ -398,6 +422,12 @@ export function PlayerModal() {
           </div>
 
           <div className="relative flex-1 overflow-hidden bg-black">
+            {showPreRoll && adConfig && (
+              <PreRollAd
+                config={adConfig}
+                onComplete={() => setShowPreRoll(false)}
+              />
+            )}
             {loading && (
               <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-white">
                 <Loader2 className="h-10 w-10 animate-spin text-primary" />
