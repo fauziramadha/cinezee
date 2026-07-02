@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useSession } from "next-auth/react";
+import { useSafeSession } from "@/lib/use-safe-session";
 import {
   Search,
   Film,
@@ -25,7 +25,7 @@ const NAV_ITEMS = [
 
 export function Header() {
   const [scrolled, setScrolled] = useState(false);
-  const { data: session, status } = useSession();
+  const { data: session, status } = useSafeSession();
   const setSearchOpen = useAppStore((s) => s.setSearchOpen);
   const setAuthModalOpen = useAppStore((s) => s.setAuthModalOpen);
   const [mobileOpen, setMobileOpen] = useState(false);
