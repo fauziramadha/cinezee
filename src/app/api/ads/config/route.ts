@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
+import { getCloudflareContext } from "@opennextjs/cloudflare";
 
 interface AdsConfig {
   hilltopads: {
@@ -17,47 +18,41 @@ interface AdsConfig {
   isPremium: boolean;
 }
 
-async function getAdsConfigFromDB(): Promise<any> {
-  // Pakai D1 binding langsung (bypass Prisma untuk edge runtime)
-  const { D1 } = process as any;
-  if (!D1) return null;
-
-  try {
-    const result = await D1.prepare(
-      "SELECT * FROM ads_config WHERE id = 1"
-    ).first();
-    return result;
-  } catch {
-    return null;
+async function getD1(): Promise<D1Database> {
+  const ctx = await getCloudflareContext();
+  if (ctx?.env?.DB) {
+    return ctx.env.DB as D1Database;
   }
+  throw new Error('D1 database binding "DB" not found.');
 }
 
 export async function GET() {
   try {
-    // Cek session user (untuk premium check)
     const session = await getServerSession(authOptions);
     const userId = (session?.user as any)?.id;
 
     let isPremium = false;
     if (userId) {
-      const { D1 } = process as any;
-      if (D1) {
-        try {
-          const user = await D1.prepare(
-            "SELECT is_premium FROM User WHERE id = ?"
-          )
-            .bind(userId)
-            .first();
-          isPremium = !!user?.is_premium;
-        } catch {
-          // Kolom is_premium belum ada → assume not premium
-        }
+      try {
+        const d1 = await getD1();
+        const user = await d1
+          .prepare("SELECT is_premium FROM User WHERE id = ?")
+          .bind(userId)
+          .first();
+        isPremium = !!user?.is_premium;
+      } catch {
+        // Kolom is_premium belum ada → assume not premium
       }
     }
 
-    const config = await getAdsConfigFromDB();
+    let config: any = null;
+    try {
+      const d1 = await getD1();
+      config = await d1.prepare("SELECT * FROM ads_config WHERE id = 1").first();
+    } catch {
+      // Tabel belum ada → return kosong
+    }
 
-    // Kalau premium atau config belum diset → return kosong (tidak ada iklan)
     if (isPremium || !config) {
       return NextResponse.json({
         hilltopads: null,
@@ -67,7 +62,6 @@ export async function GET() {
       } satisfies AdsConfig);
     }
 
-    // Build config berdasarkan toggle di CMS
     const hilltopads =
       config.pre_roll_enabled && config.hilltopads_preroll_url
         ? {
@@ -94,6 +88,7 @@ export async function GET() {
       isPremium,
     } satisfies AdsConfig);
   } catch (error) {
+    console.error("[ADS CONFIG GET]", error);
     return NextResponse.json(
       {
         hilltopads: null,
