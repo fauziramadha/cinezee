@@ -17,7 +17,7 @@
 
 import { useEffect, useState, useCallback, useRef } from "react";
 import { createPortal } from "react-dom";
-import { useSession } from "next-auth/react";
+import { useSafeSession } from "@/lib/use-safe-session";
 import {
   Bell,
   Mail,
@@ -52,7 +52,7 @@ const TYPE_META: Record<string, { color: string; icon: any; label: string }> = {
 };
 
 export function UserMessages() {
-  const { status } = useSession();
+  const { status } = useSafeSession();
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState<UserMessage[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
