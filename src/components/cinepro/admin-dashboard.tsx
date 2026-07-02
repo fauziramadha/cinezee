@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useSession } from "next-auth/react";
+import { useSafeSession } from "@/lib/use-safe-session";
 import {
   X,
   Users,
@@ -52,7 +52,7 @@ interface UserItem {
 
 export function AdminDashboard() {
   const { adminDashboardOpen, setAdminDashboardOpen } = useAppStore();
-  const { data: session } = useSession();
+  const { data: session } = useSafeSession();
   
   const [stats, setStats] = useState<Stats | null>(null);
   const [users, setUsers] = useState<UserItem[]>([]);
