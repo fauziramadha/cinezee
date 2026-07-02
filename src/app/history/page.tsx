@@ -1,3 +1,4 @@
+//.
 import { HistoryContent } from "./history-content";
 
 export default function HistoryPage() {
