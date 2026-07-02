@@ -53,17 +53,33 @@ export function PreRollAd({ config, onComplete }: PreRollAdProps) {
         zIndex: 40,
         backgroundColor: "#000",
         display: "flex",
-        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "center",
+        overflow: "hidden",
       }}
     >
+      {/* === Iframe dengan aspect ratio fleksibel === */}
       <iframe
         src={config.preroll_url}
-        className="h-full w-full"
+        style={{
+          width: "100%",
+          height: "100%",
+          border: "0",
+          margin: "0",
+          padding: "0",
+          display: "block",
+          objectFit: "contain",
+        }}
         allow="autoplay; fullscreen; encrypted-media"
         sandbox="allow-scripts allow-same-origin allow-presentation allow-popups"
+        scrolling="no"
+        frameBorder="0"
+        marginWidth={0}
+        marginHeight={0}
         title="Advertisement"
       />
 
+      {/* === Top bar: Ad label + Skip button === */}
       <div
         style={{
           position: "absolute",
@@ -76,6 +92,7 @@ export function PreRollAd({ config, onComplete }: PreRollAdProps) {
           justifyContent: "space-between",
           alignItems: "center",
           pointerEvents: "none",
+          zIndex: 10,
         }}
       >
         <span
