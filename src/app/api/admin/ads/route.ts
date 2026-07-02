@@ -1,6 +1,15 @@
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
+import { getCloudflareContext } from "@opennextjs/cloudflare";
+
+async function getD1(): Promise<D1Database> {
+  const ctx = await getCloudflareContext();
+  if (ctx?.env?.DB) {
+    return ctx.env.DB as D1Database;
+  }
+  throw new Error('D1 database binding "DB" not found.');
+}
 
 // GET: Ambil config lengkap (admin only)
 export async function GET() {
@@ -10,15 +19,12 @@ export async function GET() {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { D1 } = process as any;
-    if (!D1) {
-      return NextResponse.json({ error: "Database not available" }, { status: 500 });
-    }
-
-    const config = await D1.prepare("SELECT * FROM ads_config WHERE id = 1").first();
+    const d1 = await getD1();
+    const config = await d1.prepare("SELECT * FROM ads_config WHERE id = 1").first();
 
     return NextResponse.json({ success: true, config });
   } catch (error) {
+    console.error("[ADMIN ADS GET]", error);
     return NextResponse.json(
       { error: "Failed to fetch ads config" },
       { status: 500 }
@@ -35,12 +41,8 @@ export async function PATCH(request: Request) {
     }
 
     const body = await request.json();
-    const { D1 } = process as any;
-    if (!D1) {
-      return NextResponse.json({ error: "Database not available" }, { status: 500 });
-    }
+    const d1 = await getD1();
 
-    // Build update query dinamis berdasarkan field yang dikirim
     const allowedFields = [
       "pre_roll_enabled",
       "hilltopads_preroll_url",
@@ -67,16 +69,16 @@ export async function PATCH(request: Request) {
     }
 
     updates.push(`updated_at = datetime('now')`);
-    values.push(1); // WHERE id = 1
+    values.push(1);
 
-    await D1.prepare(
-      `UPDATE ads_config SET ${updates.join(", ")} WHERE id = ?`
-    )
+    await d1
+      .prepare(`UPDATE ads_config SET ${updates.join(", ")} WHERE id = ?`)
       .bind(...values)
       .run();
 
     return NextResponse.json({ success: true });
   } catch (error) {
+    console.error("[ADMIN ADS PATCH]", error);
     return NextResponse.json(
       { error: "Failed to update ads config" },
       { status: 500 }
