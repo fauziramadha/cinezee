@@ -2,8 +2,6 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 
-export const runtime = "edge";
-
 // GET: Ambil config lengkap (admin only)
 export async function GET() {
   try {
