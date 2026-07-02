@@ -13,10 +13,9 @@ import {
   SheetContent,
   SheetHeader,
   SheetTitle,
-  SheetTrigger,
   SheetClose,
 } from "@/components/ui/sheet";
-import { useSession } from "next-auth/react";
+import { useSafeSession } from "@/lib/use-safe-session";
 import { useAppStore } from "@/lib/store";
 import { cn } from "@/lib/utils";
 
@@ -34,7 +33,7 @@ interface MobileSidebarProps {
 }
 
 export function MobileSidebar({ open, onOpenChange }: MobileSidebarProps) {
-  const { data: session } = useSession();
+  const { data: session } = useSafeSession();
   const setAuthModalOpen = useAppStore((s) => s.setAuthModalOpen);
 
   return (
@@ -43,8 +42,6 @@ export function MobileSidebar({ open, onOpenChange }: MobileSidebarProps) {
         side="right"
         className="w-72 p-0 flex flex-col"
         style={{
-          // === FIX NOTCH iOS ===
-          // Tambah safe-area-inset-top di atas padding default
           paddingTop: "env(safe-area-inset-top)",
           paddingBottom: "env(safe-area-inset-bottom)",
         }}
