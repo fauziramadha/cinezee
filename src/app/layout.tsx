@@ -7,6 +7,7 @@ import { SplashOverlay } from "@/components/pwa/splash-screen";
 import Script from "next/script";
 import ClientLayout from "./client-layout";
 import { MonetagPopunder } from "@/components/ads/monetag-popunder";
+import { AdsterraBanner } from "@/components/ads/adsterra-banner";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -162,6 +163,9 @@ export default function RootLayout({
 
         {/* === Monetag Popunder (hanya untuk non-premium user) === */}
         <MonetagPopunder />
+        
+        {/* === Adsterra Banner (hanya untuk non-premium user) === */}
+        <AdsterraBanner />
 
         {/* === Session Provider (Auth) - ssr:false via ClientLayout === */}
         <ClientLayout>
