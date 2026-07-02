@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Image from "next/image";
-import { useSession } from "next-auth/react";
+import { useSafeSession } from "@/lib/use-safe-session";
 import { Play, Trash2, History, Loader2 } from "lucide-react";
 import { useAppStore, type WatchHistoryItem } from "@/lib/store";
 import { getImageUrl } from "@/lib/tmdb";
@@ -12,7 +12,7 @@ import { toast } from "sonner";
 export function WatchHistory() {
   const { history, loadHistory, removeFromHistory, clearHistory, openPlayer } =
     useAppStore();
-  const { data: session, status } = useSession();
+  const { data: session, status } = useSafeSession();
 
   const [cloudHistory, setCloudHistory] = useState<WatchHistoryItem[]>([]);
   const [cloudHistoryRaw, setCloudHistoryRaw] = useState<any[]>([]);
