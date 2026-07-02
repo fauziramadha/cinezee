@@ -309,6 +309,7 @@ export function PlayerModal() {
         <DialogTitle className="sr-only">{playerMedia.title} Player</DialogTitle>
 
         <div
+          data-player-modal="true"
           style={
             isPseudoFullscreen
               ? {
