@@ -1,31 +1,5 @@
 "use client";
 
-import { PreRollAd } from "@/components/ads/pre-roll-ad";
-
-// Di dalam komponen PlayerModal(), tambahkan state:
-const [showPreRoll, setShowPreRoll] = useState(false);
-const [adConfig, setAdConfig] = useState<{
-  preroll_url: string;
-  duration: number;
-  skip_delay: number;
-} | null>(null);
-
-// Fetch ad config saat modal buka
-useEffect(() => {
-  if (playerMedia) {
-    fetch("/api/ads/config")
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.hilltopads?.preroll_url) {
-          setAdConfig(data.hilltopads);
-          setShowPreRoll(true);
-        }
-      })
-      .catch(() => {});
-  } else {
-    setShowPreRoll(false);
-  }
-}, [playerMedia]);
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useSession } from "next-auth/react";
 import {
@@ -253,13 +227,9 @@ export function PlayerModal() {
   const isTV = playerMedia.type === "tv" && detail?.seasons;
   const isFilmU = currentProvider?.url.includes("embed.filmu.in");
   const isVidking = currentProvider?.url.includes("vidking.net");
-  
-  // ============================================================
-  // FIX: Bottom controls hanya untuk VidKing + TV Show
-  // ============================================================
+
   const showBottomControls = isTV && isVidking;
 
-  // Dialog styling
   const dialogContentStyle: React.CSSProperties = isPseudoFullscreen
     ? {
         position: "fixed",
@@ -345,11 +315,6 @@ export function PlayerModal() {
                 }
           }
         >
-          {/* ============================================================ */}
-          {/* TOP BAR                                                       */}
-          {/* Pseudo-fullscreen: absolute overlay (auto-hide)              */}
-          {/* Normal mode: flex child (tidak nimpa video)                  */}
-          {/* ============================================================ */}
           <div
             className={cn(
               "flex shrink-0 items-center justify-between gap-2 bg-gradient-to-b from-black/90 to-black/40 px-3 py-2 transition-opacity duration-300 sm:px-4 sm:py-3",
@@ -432,7 +397,6 @@ export function PlayerModal() {
             )}
           </div>
 
-          {/* Player area */}
           <div className="relative flex-1 overflow-hidden bg-black">
             {loading && (
               <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-white">
@@ -498,11 +462,6 @@ export function PlayerModal() {
             )}
           </div>
 
-          {/* ============================================================ */}
-          {/* BOTTOM CONTROLS (TV + VidKing ONLY)                           */}
-          {/* FIX: Flex child (bukan absolute overlay) → tidak nimpa video */}
-          {/* Pseudo-fullscreen: absolute overlay (auto-hide)              */}
-          {/* ============================================================ */}
           {showBottomControls && (
             <div
               className={cn(
@@ -511,7 +470,6 @@ export function PlayerModal() {
                 controlsVisible ? "opacity-100" : "opacity-0 pointer-events-none"
               )}
             >
-              {/* LEFT: Season + Episode selects */}
               <div className="flex shrink-0 items-center gap-2">
                 <Select value={String(season)} onValueChange={(v) => setSeason(parseInt(v, 10))}>
                   <SelectTrigger className="h-9 w-20 shrink-0 border-white/20 bg-white/10 text-xs text-white backdrop-blur-sm">
@@ -542,7 +500,6 @@ export function PlayerModal() {
                 </Select>
               </div>
 
-              {/* RIGHT: Prev/Next buttons */}
               <div className="flex shrink-0 items-center gap-1">
                 <Button
                   size="icon"
