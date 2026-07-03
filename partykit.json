@@ -2,9 +2,7 @@
   "name": "cinezee-watch-party",
   "main": "src/party/server.ts",
   "compatibilityDate": "2024-11-01",
-  "define": {
-    "PARTYKIT_HOST": "cinezee-watch-party.fauziramadhani4321.partykit.dev"
-  },
+  "domain": "cinezee-watch-party.fauziramadhani4321.workers.dev",
   "vars": {
     "CINEZEE_API_URL": "https://cinezee.fauziramadhani4321.workers.dev"
   }
