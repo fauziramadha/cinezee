@@ -30,4 +30,4 @@ jobs:
       - name: Deploy to PartyKit
         env:
           PARTYKIT_TOKEN: ${{ secrets.PARTYKIT_TOKEN }}
-        run: npx partykit deploy
+        run: npx partykit deploy --token ${{ secrets.PARTYKIT_TOKEN }} --yes
