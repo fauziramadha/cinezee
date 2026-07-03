@@ -25,7 +25,7 @@ jobs:
         run: npm install -g partykit
 
       - name: Install dependencies
-        run: npm install
+        run: npm install --legacy-peer-deps
 
       - name: Deploy to PartyKit
         env:
