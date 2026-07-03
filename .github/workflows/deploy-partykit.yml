@@ -1,0 +1,33 @@
+name: Deploy PartyKit
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'src/party/**'
+      - 'partykit.json'
+      - '.github/workflows/deploy-partykit.yml'
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install PartyKit
+        run: npm install -g partykit
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Deploy to PartyKit
+        env:
+          PARTYKIT_TOKEN: ${{ secrets.PARTYKIT_TOKEN }}
+        run: npx partykit deploy
