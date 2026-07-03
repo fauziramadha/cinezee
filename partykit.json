@@ -1,0 +1,12 @@
+{
+  "name": "cinezee-watch-party",
+  "main": "src/party/server.ts",
+  "compatibilityDate": "2024-11-01",
+  "region": ["sjc"],
+  "define": {
+    "PARTYKIT_HOST": "cinezee-watch-party.fauziramadhani4321.partykit.dev"
+  },
+  "vars": {
+    "CINEZEE_API_URL": "https://cinezee.fauziramadhani4321.workers.dev"
+  }
+}
