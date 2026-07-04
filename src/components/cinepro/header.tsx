@@ -19,6 +19,7 @@ const NAV_ITEMS = [
   { label: "Home", href: "/", active: true },
   { label: "Movies", href: "/movies", active: false },
   { label: "TV Shows", href: "/tv", active: false },
+  { label: "Anime", href: "/anime", active: false },
   { label: "New", href: "/new", active: false },
   { label: "My List", href: "/watchlist", active: false },
 ];
