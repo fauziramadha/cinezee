@@ -40,7 +40,7 @@ export function AnimeGenreContent({ slug }: AnimeGenreContentProps) {
     genreName || slug.charAt(0).toUpperCase() + slug.slice(1);
 
   // === Load anime by genre ===
-  const loadData = useCallback(
+    const loadData = useCallback(
     async (pageNum: number) => {
       setLoading(true);
       setError(null);
@@ -53,9 +53,17 @@ export function AnimeGenreContent({ slug }: AnimeGenreContentProps) {
         const list = json?.data?.animeList || [];
         setAnimeList(list);
 
-        // Cek pagination
-        const pagination = json?.data?.pagination;
-        setHasNextPage(pagination?.hasNextPage || list.length >= 20);
+        // API tidak return pagination info, jadi pakai heuristic:
+        // - Kalau list >= 20 → kemungkinan ada page berikutnya
+        // - Kalau list < 20 → sudah halaman terakhir
+        // - Kalau list kosong → pasti halaman terakhir
+        setHasNextPage(list.length >= 20);
+
+        // Kalau page > 1 dan list kosong, balik ke page sebelumnya
+        if (pageNum > 1 && list.length === 0) {
+          setPage(pageNum - 1);
+          loadData(pageNum - 1);
+        }
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to load");
       } finally {
