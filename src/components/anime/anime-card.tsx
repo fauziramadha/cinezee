@@ -29,9 +29,15 @@ export function AnimeCard({ anime, variant = "default" }: AnimeCardProps) {
   const status = anime.status || (anime.releaseDay ? "Ongoing" : "Unknown");
   const animeId = anime.animeId;
 
+    // Generate link berdasarkan source
+  const detailHref =
+    anime.source === "samehadaku"
+      ? `/anime/samehadaku/${animeId}`
+      : `/anime/${animeId}`;
+
   return (
     <Link
-      href={`/anime/${animeId}`}
+      href={detailHref}
       className="group relative flex shrink-0 flex-col overflow-hidden rounded-lg bg-card text-left transition-all duration-300 hover:scale-105 hover:shadow-2xl hover:shadow-primary/20 hover:ring-2 hover:ring-primary/40"
     >
       {/* Poster */}
