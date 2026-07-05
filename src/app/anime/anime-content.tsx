@@ -254,7 +254,7 @@ export function AnimeContent() {
           <>
             {/* Source selector */}
             <div className="mb-4 flex items-center gap-2">
-              <span className="text-xs text-muted-foreground">Sumber:</span>
+              <span className="text-xs text-muted-foreground">Server:</span>
               <div className="flex gap-1 rounded-full bg-muted p-1">
                 <button
                   onClick={() => handleSourceChange("otakudesu")}
@@ -265,7 +265,7 @@ export function AnimeContent() {
                       : "text-muted-foreground hover:text-foreground"
                   )}
                 >
-                  Otakudesu
+                  Server 1
                 </button>
                 <button
                   onClick={() => handleSourceChange("animasu")}
@@ -276,7 +276,7 @@ export function AnimeContent() {
                       : "text-muted-foreground hover:text-foreground"
                   )}
                 >
-                  Animasu
+                  Server 2
                 </button>
               </div>
 
