@@ -108,7 +108,13 @@ export function AnimeDetailContent({
       })
       .then((json) => {
         // Animasu: data.detail, Otakudesu: data
-        const rawData = source === "animasu" ? json?.data?.detail : json?.data;
+        let rawData: any = null;
+        if (source === "animasu") {
+          // Animasu bisa return di data.detail atau langsung di data
+          rawData = json?.data?.detail || json?.data || json?.detail;
+        } else {
+          rawData = json?.data;
+        }
         if (rawData) {
           const data = { ...rawData } as AnimeDetail;
           // Fallback title
