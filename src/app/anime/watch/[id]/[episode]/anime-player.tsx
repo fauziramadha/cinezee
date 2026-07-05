@@ -19,6 +19,7 @@ import {
   X,
   Maximize,
   Minimize,
+  ExternalLink,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -87,18 +88,23 @@ export function AnimePlayerContent({
   const [iframeError, setIframeError] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showDownload, setShowDownload] = useState(false);
+  const [showOpenInNewTab, setShowOpenInNewTab] = useState(false);
 
   const playerContainerRef = useRef<HTMLDivElement>(null);
+  const iframeLoadTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null
+  );
 
   // ============================================================
   // LOAD EPISODE DATA
   // ============================================================
-    useEffect(() => {
+  useEffect(() => {
     setLoading(true);
     setError(null);
     setStreamUrl("");
     setIframeLoading(true);
     setIframeError(false);
+    setShowOpenInNewTab(false);
 
     const episodeEndpoint =
       source === "samehadaku"
@@ -114,19 +120,27 @@ export function AnimePlayerContent({
         if (json?.data) {
           setEpisode(json.data);
 
-          // Auto-pilih quality terbaik (720p > 480p > 360p)
+          // Auto-pilih quality terbaik (1080p > 720p > 480p > 360p)
           const qualities = json.data.server?.qualities || [];
           if (qualities.length > 0) {
-            // Cari 720p dulu, fallback ke quality pertama
+            // Cari 1080p dulu, lalu 720p, fallback ke quality pertama yang ada server
             const best =
               qualities.find((q: QualityItem) =>
+                q.title.toLowerCase().includes("1080")
+              ) ||
+              qualities.find((q: QualityItem) =>
                 q.title.toLowerCase().includes("720")
-              ) || qualities[0];
+              ) ||
+              qualities.find(
+                (q: QualityItem) =>
+                  q.serverList && q.serverList.length > 0
+              ) ||
+              qualities[0];
 
             setSelectedQuality(best.title);
 
-            // Auto-pilih server pertama
-            if (best.serverList.length > 0) {
+            // Auto-pilih server pertama yang tersedia
+            if (best.serverList && best.serverList.length > 0) {
               setSelectedServerId(best.serverList[0].serverId);
             }
           }
@@ -143,12 +157,19 @@ export function AnimePlayerContent({
   // ============================================================
   // FETCH STREAM URL saat server berubah
   // ============================================================
-    useEffect(() => {
+  useEffect(() => {
     if (!selectedServerId) return;
 
     setIframeLoading(true);
     setIframeError(false);
     setStreamUrl("");
+    setShowOpenInNewTab(false);
+
+    // Clear timeout sebelumnya
+    if (iframeLoadTimeoutRef.current) {
+      clearTimeout(iframeLoadTimeoutRef.current);
+      iframeLoadTimeoutRef.current = null;
+    }
 
     const serverEndpoint =
       source === "samehadaku"
@@ -163,15 +184,45 @@ export function AnimePlayerContent({
       .then((json) => {
         if (json?.data?.url) {
           setStreamUrl(json.data.url);
+        } else if (episode?.defaultStreamingUrl) {
+          // Fallback: pakai defaultStreamingUrl dari episode response
+          setStreamUrl(episode.defaultStreamingUrl);
         } else {
           throw new Error("No stream URL");
         }
       })
       .catch(() => {
-        setIframeError(true);
+        // Last resort: pakai defaultStreamingUrl kalau ada
+        if (episode?.defaultStreamingUrl) {
+          setStreamUrl(episode.defaultStreamingUrl);
+        } else {
+          setIframeError(true);
+        }
       })
       .finally(() => setIframeLoading(false));
-  }, [selectedServerId, source]);
+  }, [selectedServerId, source, episode?.defaultStreamingUrl]);
+
+  // ============================================================
+  // TIMEOUT DETECTION: cek iframe blank (untuk Samehadaku)
+  // ============================================================
+  useEffect(() => {
+    if (!streamUrl || iframeError) return;
+
+    // Set timeout 8 detik. Kalau iframe belum onLoad, kemungkinan di-block X-Frame-Options
+    iframeLoadTimeoutRef.current = setTimeout(() => {
+      if (iframeLoading) {
+        console.log("[Player] Iframe load timeout, showing Open in New Tab");
+        setShowOpenInNewTab(true);
+        setIframeLoading(false);
+      }
+    }, 8000);
+
+    return () => {
+      if (iframeLoadTimeoutRef.current) {
+        clearTimeout(iframeLoadTimeoutRef.current);
+      }
+    };
+  }, [streamUrl, iframeLoading, iframeError]);
 
   // ============================================================
   // Handle quality change
@@ -206,7 +257,7 @@ export function AnimePlayerContent({
     );
     if (currentIdx === -1) return;
 
-    // Cari server berikutnya
+    // Cari server berikutnya yang berbeda
     const nextIdx = (currentIdx + 1) % q.serverList.length;
     setSelectedServerId(q.serverList[nextIdx].serverId);
   }, [episode, selectedQuality, selectedServerId]);
@@ -233,7 +284,7 @@ export function AnimePlayerContent({
   // ============================================================
   // Navigate prev/next
   // ============================================================
-    const goPrevEpisode = () => {
+  const goPrevEpisode = () => {
     if (episode?.hasPrevEpisode && episode.prevEpisode?.episodeId) {
       const watchBase =
         source === "samehadaku"
@@ -326,7 +377,7 @@ export function AnimePlayerContent({
       <Header />
 
       <div className="container mx-auto px-4 py-6 pt-20">
-        {/* Back button */}   
+        {/* Back button */}
         <button
           onClick={() =>
             router.push(
@@ -369,7 +420,14 @@ export function AnimePlayerContent({
               allow="autoplay; fullscreen; encrypted-media; picture-in-picture"
               allowFullScreen
               referrerPolicy="origin"
-              onLoad={() => setIframeLoading(false)}
+              onLoad={() => {
+                setIframeLoading(false);
+                // Clear timeout karena iframe berhasil load
+                if (iframeLoadTimeoutRef.current) {
+                  clearTimeout(iframeLoadTimeoutRef.current);
+                  iframeLoadTimeoutRef.current = null;
+                }
+              }}
               onError={() => {
                 setIframeError(true);
                 setIframeLoading(false);
@@ -388,15 +446,64 @@ export function AnimePlayerContent({
                   Server ini gagal load. Coba server lain.
                 </p>
               </div>
-              <Button onClick={switchServer} size="sm" className="gap-2">
-                <Server className="h-3.5 w-3.5" />
-                Coba Server Lain
-              </Button>
+              <div className="flex flex-wrap justify-center gap-2">
+                <Button onClick={switchServer} size="sm" className="gap-2">
+                  <Server className="h-3.5 w-3.5" />
+                  Coba Server Lain
+                </Button>
+                {streamUrl && (
+                  <a
+                    href={streamUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-2 rounded-md border border-white/30 px-4 py-2 text-sm font-semibold text-white hover:bg-white/10"
+                  >
+                    <ExternalLink className="h-3.5 w-3.5" />
+                    Buka di Tab Baru
+                  </a>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Open in New Tab overlay (untuk Samehadaku yang X-Frame-Options blocked) */}
+          {showOpenInNewTab && streamUrl && !iframeError && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-black p-6 text-center text-white">
+              <AlertCircle className="h-10 w-10 text-yellow-500" />
+              <div>
+                <p className="mb-1 text-sm font-semibold">
+                  Video tidak bisa di-embed
+                </p>
+                <p className="text-xs text-white/60">
+                  Server ini memblokir iframe embed. Buka di tab baru untuk
+                  menonton.
+                </p>
+              </div>
+              <div className="flex flex-wrap justify-center gap-2">
+                <a
+                  href={streamUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90"
+                >
+                  <ExternalLink className="h-3.5 w-3.5" />
+                  Buka di Tab Baru
+                </a>
+                <Button
+                  onClick={switchServer}
+                  size="sm"
+                  variant="outline"
+                  className="gap-2"
+                >
+                  <Server className="h-3.5 w-3.5" />
+                  Coba Server Lain
+                </Button>
+              </div>
             </div>
           )}
 
           {/* Fullscreen button (overlay, top-right) */}
-          {!iframeLoading && !iframeError && (
+          {!iframeLoading && !iframeError && !showOpenInNewTab && (
             <button
               onClick={toggleFullscreen}
               className="absolute right-3 top-3 z-10 flex h-8 w-8 items-center justify-center rounded-full bg-black/60 text-white backdrop-blur-sm transition-colors hover:bg-primary"
@@ -453,64 +560,63 @@ export function AnimePlayerContent({
         </div>
 
         {/* === QUALITY & SERVER SELECTOR === */}
-        {episode.server?.qualities &&
-          episode.server.qualities.length > 0 && (
-            <div className="mt-4 rounded-lg border border-border bg-card p-4">
-              <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold">
-                <Server className="h-4 w-4 text-primary" />
-                Pilih Quality & Server
-              </h3>
+        {episode.server?.qualities && episode.server.qualities.length > 0 && (
+          <div className="mt-4 rounded-lg border border-border bg-card p-4">
+            <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold">
+              <Server className="h-4 w-4 text-primary" />
+              Pilih Quality & Server
+            </h3>
 
-              <div className="flex flex-wrap items-center gap-3">
-                {/* Quality selector */}
+            <div className="flex flex-wrap items-center gap-3">
+              {/* Quality selector */}
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-muted-foreground">Quality:</span>
+                <Select
+                  value={selectedQuality}
+                  onValueChange={handleQualityChange}
+                >
+                  <SelectTrigger className="h-8 w-24 text-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {episode.server.qualities.map((q) => (
+                      <SelectItem key={q.title} value={q.title}>
+                        {q.title}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Server selector */}
+              {currentServers.length > 0 && (
                 <div className="flex items-center gap-2">
-                  <span className="text-xs text-muted-foreground">Quality:</span>
+                  <span className="text-xs text-muted-foreground">Server:</span>
                   <Select
-                    value={selectedQuality}
-                    onValueChange={handleQualityChange}
+                    value={selectedServerId}
+                    onValueChange={handleServerChange}
                   >
-                    <SelectTrigger className="h-8 w-24 text-xs">
+                    <SelectTrigger className="h-8 w-32 text-xs">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      {episode.server.qualities.map((q) => (
-                        <SelectItem key={q.title} value={q.title}>
-                          {q.title}
+                      {currentServers.map((s) => (
+                        <SelectItem key={s.serverId} value={s.serverId}>
+                          {s.title.trim()}
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                 </div>
-
-                {/* Server selector */}
-                {currentServers.length > 0 && (
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-muted-foreground">Server:</span>
-                    <Select
-                      value={selectedServerId}
-                      onValueChange={handleServerChange}
-                    >
-                      <SelectTrigger className="h-8 w-32 text-xs">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {currentServers.map((s) => (
-                          <SelectItem key={s.serverId} value={s.serverId}>
-                            {s.title.trim()}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                )}
-              </div>
-
-              <p className="mt-2 text-[11px] text-muted-foreground">
-                💡 Kalau video tidak muncul, coba ganti server. Beberapa server
-                mungkin lambat.
-              </p>
+              )}
             </div>
-          )}
+
+            <p className="mt-2 text-[11px] text-muted-foreground">
+              💡 Kalau video tidak muncul, coba ganti server. Beberapa server
+              mungkin lambat.
+            </p>
+          </div>
+        )}
 
         {/* === DOWNLOAD MODAL === */}
         {showDownload && episode.downloadUrl?.qualities && (
@@ -529,10 +635,7 @@ export function AnimePlayerContent({
             </div>
             <div className="space-y-3">
               {episode.downloadUrl.qualities.map((q, idx) => (
-                <div
-                  key={idx}
-                  className="rounded border border-border p-3"
-                >
+                <div key={idx} className="rounded border border-border p-3">
                   <div className="mb-2 flex items-center gap-2">
                     <Badge variant="outline">{q.title}</Badge>
                     {q.size && (
