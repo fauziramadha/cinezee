@@ -105,7 +105,7 @@ export function AnimeCard({ anime, variant = "default" }: AnimeCardProps) {
                 : "bg-blue-500/90 text-white"
             )}
           >
-            {anime.source}
+            {anime.source === "animasu" ? "Server 2" : "Server 1"}
           </span>
         )}
         <h3 className="line-clamp-2 text-xs font-semibold text-white sm:text-sm">
