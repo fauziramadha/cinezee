@@ -196,7 +196,7 @@ export function AnimePlayerContent({
     fetch(`/api/anime/animasu/detail/${animeId}`)
       .then((res) => res.json())
       .then((json) => {
-        const episodes = json?.data?.detail?.episodes || json?.data?.episodes || [];
+        const episodes = json?.detail?.episodes || json?.data?.detail?.episodes || json?.data?.episodes || [];
         if (Array.isArray(episodes) && episodes.length > 0) {
           setAnimasuEpisodes(episodes);
 
