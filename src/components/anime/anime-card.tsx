@@ -84,8 +84,20 @@ export function AnimeCard({ anime, variant = "default" }: AnimeCardProps) {
         </div>
       </div>
 
-      {/* Title & meta */}
+       {/* Title & meta */}
       <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/95 via-black/70 to-transparent p-2.5 pt-8">
+        {anime.source && (
+          <span
+            className={cn(
+              "mb-1 inline-block rounded px-1 py-0.5 text-[8px] font-bold uppercase tracking-wide",
+              anime.source === "samehadaku"
+                ? "bg-purple-500/90 text-white"
+                : "bg-blue-500/90 text-white"
+            )}
+          >
+            {anime.source}
+          </span>
+        )}
         <h3 className="line-clamp-2 text-xs font-semibold text-white sm:text-sm">
           {title}
         </h3>
