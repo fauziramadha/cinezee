@@ -140,8 +140,12 @@ export function AnimeContent() {
               setOngoing((prev) => [...prev, ...list]);
             else setCompleted((prev) => [...prev, ...list]);
           }
-          // Heuristic pagination (page size ~15-20)
-          setHasMore(list.length >= 15);
+          // Pagination: Animasu punya field pagination.hasNext, Otakudesu pakai heuristic
+          if (src === "animasu") {
+            setHasMore(json?.pagination?.hasNext ?? list.length >= 10);
+          } else {
+            setHasMore(list.length >= 15);
+          }
         }
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to load anime");
