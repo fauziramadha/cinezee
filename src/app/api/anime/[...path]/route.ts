@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { fetchAnimeAPI } from "@/lib/anime-api";
+import { fetchSamehadakuAPI } from "@/lib/samehadaku-api";
 
 // ============================================================
 // GET /api/anime/[...path]
-// Proxy route untuk API Sanka Vollerei dengan cache otomatis
+// Proxy route untuk API Sanka Vollerei (Otakudesu + Samehadaku)
 // ============================================================
 
 export async function GET(
@@ -17,20 +18,19 @@ export async function GET(
     // Build endpoint dari path segments
     let endpoint = "/anime/" + path.join("/");
 
-    // Append query params (page, q, dll)
+    // Append query params
     const queryString = searchParams.toString();
     if (queryString) {
       endpoint += `?${queryString}`;
     }
 
-    // Fetch dengan cache
-    const data = await fetchAnimeAPI(endpoint);
+    // Deteksi source: kalau path[0] === "samehadaku", pakai Samehadaku API
+    const isSamehadaku = path[0] === "samehadaku";
+    const data = isSamehadaku
+      ? await fetchSamehadakuAPI(endpoint)
+      : await fetchAnimeAPI(endpoint);
 
-    // Return response dengan header anti-cache untuk dynamic data,
-    // tapi long cache untuk static data
     const response = NextResponse.json(data);
-
-    // Cache-Control: client bisa cache 5 menit untuk mengurangi request
     response.headers.set(
       "Cache-Control",
       "public, s-maxage=300, stale-while-revalidate=600"
