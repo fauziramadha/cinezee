@@ -57,13 +57,22 @@ export function AnimeGenreContent({
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const json = await res.json();
 
-        // Animasu: array langsung atau di data, Otakudesu: data.animeList
-        const rawList =
-          source === "animasu"
-            ? Array.isArray(json)
-              ? json
-              : json?.data?.animeList || json?.data || []
-            : json?.data?.animeList || [];
+        // Animasu: { animes: [] } atau array langsung
+        // Otakudesu: { data: { animeList: [] } }
+        let rawList: any[] = [];
+        if (source === "animasu") {
+          if (Array.isArray(json)) {
+            rawList = json;
+          } else if (Array.isArray(json?.animes)) {
+            rawList = json.animes;
+          } else if (Array.isArray(json?.data)) {
+            rawList = json.data;
+          } else if (Array.isArray(json?.data?.animeList)) {
+            rawList = json.data.animeList;
+          }
+        } else {
+          rawList = json?.data?.animeList || [];
+        }
         const list = rawList.map((item: any) => ({
           ...item,
           animeId: item.slug || item.animeId,
@@ -71,9 +80,10 @@ export function AnimeGenreContent({
         }));
         setAnimeList(list);
 
-        // Heuristic pagination
+        // Heuristic pagination (page size ~15)
         setHasNextPage(list.length >= 10);
 
+        // Kalau page > 1 dan list kosong, balik ke page sebelumnya
         if (pageNum > 1 && list.length === 0) {
           setPage(pageNum - 1);
           loadData(pageNum - 1);
