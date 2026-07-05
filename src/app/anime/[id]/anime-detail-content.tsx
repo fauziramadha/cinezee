@@ -27,9 +27,9 @@ import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 
 interface EpisodeItem {
-  title: string;
-  eps: number;
-  date: string;
+  title: string | number;
+  eps?: number;
+  date?: string;
   episodeId: string;
   href: string;
 }
@@ -44,7 +44,8 @@ interface AnimeDetail {
   title: string;
   poster?: string;
   japanese?: string;
-  score?: string;
+  english?: string;
+  score?: string | { value?: string; users?: string };
   producers?: string;
   type?: string;
   status?: string;
@@ -53,6 +54,7 @@ interface AnimeDetail {
   aired?: string;
   studios?: string;
   batch?: string | null;
+  batchList?: any[];
   synopsis?: {
     paragraphs?: string[];
     connections?: string[];
@@ -63,9 +65,13 @@ interface AnimeDetail {
 
 interface AnimeDetailContentProps {
   animeId: string;
+  source?: "otakudesu" | "samehadaku";
 }
 
-export function AnimeDetailContent({ animeId }: AnimeDetailContentProps) {
+export function AnimeDetailContent({
+  animeId,
+  source = "otakudesu",
+}: AnimeDetailContentProps) {
   const router = useRouter();
   const [detail, setDetail] = useState<AnimeDetail | null>(null);
   const [loading, setLoading] = useState(true);
@@ -79,14 +85,25 @@ export function AnimeDetailContent({ animeId }: AnimeDetailContentProps) {
     setLoading(true);
     setError(null);
 
-    fetch(`/api/anime/anime/${animeId}`)
+    const detailEndpoint =
+      source === "samehadaku"
+        ? `/api/anime/samehadaku/anime/${animeId}`
+        : `/api/anime/anime/${animeId}`;
+
+    fetch(detailEndpoint)
       .then((res) => {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         return res.json();
       })
       .then((json) => {
         if (json?.data) {
-          setDetail(json.data);
+          const data = { ...json.data } as AnimeDetail;
+          // Samehadaku sering return title kosong, pakai dari data lain
+          if (source === "samehadaku" && !data.title) {
+            data.title =
+              data.english || data.japanese || animeId.replace(/-/g, " ");
+          }
+          setDetail(data);
         } else {
           throw new Error("Invalid response");
         }
@@ -95,10 +112,22 @@ export function AnimeDetailContent({ animeId }: AnimeDetailContentProps) {
         setError(err instanceof Error ? err.message : "Failed to load");
       })
       .finally(() => setLoading(false));
-  }, [animeId]);
+  }, [animeId, source]);
 
   // === Load batch download (lazy, hanya saat tombol diklik) ===
   const handleLoadBatch = async () => {
+    // Kalau Samehadaku: batchList sudah ada di detail, tidak perlu fetch terpisah
+    if (source === "samehadaku") {
+      if (detail?.batchList && detail.batchList.length > 0) {
+        setBatchData({ downloadList: detail.batchList });
+      } else {
+        setBatchData({ error: "Batch tidak tersedia untuk anime ini" });
+      }
+      setShowBatch(true);
+      return;
+    }
+
+    // Otakudesu: fetch terpisah
     if (batchData) {
       setShowBatch(!showBatch);
       return;
@@ -117,6 +146,27 @@ export function AnimeDetailContent({ animeId }: AnimeDetailContentProps) {
     } finally {
       setBatchLoading(false);
     }
+  };
+
+  // === Helper: build watch URL berdasarkan source ===
+  const buildWatchUrl = (episodeId: string) => {
+    return source === "samehadaku"
+      ? `/anime/samehadaku/watch/${animeId}/${episodeId}`
+      : `/anime/watch/${animeId}/${episodeId}`;
+  };
+
+  // === Helper: build genre URL berdasarkan source ===
+  const buildGenreUrl = (genreId: string) => {
+    return source === "samehadaku"
+      ? `/anime/samehadaku/genre/${genreId}`
+      : `/anime/genre/${genreId}`;
+  };
+
+  // === Helper: get episode number untuk tampilan ===
+  const getEpisodeNumber = (ep: EpisodeItem, idx: number): string => {
+    if (typeof ep.eps === "number") return String(ep.eps);
+    if (typeof ep.title === "number") return String(ep.title);
+    return String(idx + 1);
   };
 
   // === Loading state ===
@@ -172,6 +222,24 @@ export function AnimeDetailContent({ animeId }: AnimeDetailContentProps) {
   const episodeCount = detail.episodes || detail.episodeList?.length || 0;
   const synopsisParagraphs = detail.synopsis?.paragraphs || [];
 
+  // Score bisa string (Otakudesu) atau object {value, users} (Samehadaku)
+  const scoreValue =
+    typeof detail.score === "object"
+      ? detail.score?.value
+      : detail.score;
+
+  // Cek apakah ada batch (Otakudesu: batch string; Samehadaku: batchList array)
+  const hasBatch =
+    source === "samehadaku"
+      ? !!(detail.batchList && detail.batchList.length > 0)
+      : !!detail.batch;
+
+  // Episode pertama: Otakudesu urutan terakhir (latest), Samehadaku urutan pertama
+  const firstEpisode =
+    source === "samehadaku"
+      ? detail.episodeList?.[0]
+      : detail.episodeList?.[detail.episodeList.length - 1];
+
   return (
     <main className="min-h-screen bg-background">
       <Header />
@@ -201,6 +269,20 @@ export function AnimeDetailContent({ animeId }: AnimeDetailContentProps) {
           <ArrowLeft className="h-4 w-4" />
           Kembali ke Anime
         </button>
+
+        {/* Source badge */}
+        <div className="mb-3">
+          <span
+            className={cn(
+              "inline-block rounded px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide",
+              source === "samehadaku"
+                ? "bg-purple-500/90 text-white"
+                : "bg-blue-500/90 text-white"
+            )}
+          >
+            {source}
+          </span>
+        </div>
 
         {/* === Hero content: poster + info === */}
         <div className="flex flex-col gap-6 sm:flex-row sm:items-end">
@@ -233,6 +315,11 @@ export function AnimeDetailContent({ animeId }: AnimeDetailContentProps) {
                 {detail.japanese}
               </p>
             )}
+            {source === "samehadaku" && detail.english && (
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                {detail.english}
+              </p>
+            )}
 
             {/* Quick info badges */}
             <div className="mt-3 flex flex-wrap items-center justify-center gap-2 sm:justify-start">
@@ -252,10 +339,10 @@ export function AnimeDetailContent({ animeId }: AnimeDetailContentProps) {
               >
                 {status}
               </Badge>
-              {detail.score && (
+              {scoreValue && (
                 <Badge variant="secondary" className="gap-1">
                   <Star className="h-3 w-3 fill-yellow-400 text-yellow-400" />
-                  {detail.score}
+                  {scoreValue}
                 </Badge>
               )}
               {detail.duration && (
@@ -271,13 +358,11 @@ export function AnimeDetailContent({ animeId }: AnimeDetailContentProps) {
 
             {/* Action buttons */}
             <div className="mt-4 flex flex-wrap justify-center gap-2 sm:justify-start">
-              {detail.episodeList && detail.episodeList.length > 0 && (
+              {firstEpisode && (
                 <Button
                   size="sm"
                   onClick={() =>
-                    router.push(
-                      `/anime/watch/${animeId}/${detail.episodeList![detail.episodeList!.length - 1].episodeId}`
-                    )
+                    router.push(buildWatchUrl(firstEpisode.episodeId))
                   }
                   className="gap-2"
                 >
@@ -286,7 +371,7 @@ export function AnimeDetailContent({ animeId }: AnimeDetailContentProps) {
                 </Button>
               )}
 
-              {detail.batch && (
+              {hasBatch && (
                 <Button
                   size="sm"
                   variant="outline"
@@ -330,18 +415,22 @@ export function AnimeDetailContent({ animeId }: AnimeDetailContentProps) {
                     key={idx}
                     className="flex flex-wrap items-center gap-2 rounded border border-border p-2 text-xs"
                   >
-                    <Badge variant="outline">{dl.quality || "Unknown"}</Badge>
-                    {dl.links?.map((link: any, lidx: number) => (
-                      <a
-                        key={lidx}
-                        href={link.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="rounded bg-primary/10 px-2 py-1 font-medium text-primary hover:bg-primary/20"
-                      >
-                        {link.host || "Download"}
-                      </a>
-                    ))}
+                    <Badge variant="outline">
+                      {dl.quality || dl.title || "Unknown"}
+                    </Badge>
+                    {(dl.links || dl.urls || []).map(
+                      (link: any, lidx: number) => (
+                        <a
+                          key={lidx}
+                          href={link.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="rounded bg-primary/10 px-2 py-1 font-medium text-primary hover:bg-primary/20"
+                        >
+                          {link.host || link.title || "Download"}
+                        </a>
+                      )
+                    )}
                   </div>
                 ))}
               </div>
@@ -365,8 +454,11 @@ export function AnimeDetailContent({ animeId }: AnimeDetailContentProps) {
                 </h3>
                 <div className="flex flex-wrap gap-1.5">
                   {detail.genreList.map((g) => (
-                    <Link key={g.genreId} href={`/anime/genre/${g.genreId}`}>
-                      <Badge variant="outline" className="cursor-pointer hover:border-primary hover:text-primary">
+                    <Link key={g.genreId} href={buildGenreUrl(g.genreId)}>
+                      <Badge
+                        variant="outline"
+                        className="cursor-pointer hover:border-primary hover:text-primary"
+                      >
                         {g.title}
                       </Badge>
                     </Link>
@@ -396,24 +488,26 @@ export function AnimeDetailContent({ animeId }: AnimeDetailContentProps) {
                   Episode ({detail.episodeList.length})
                 </h3>
                 <div className="space-y-1.5">
-                  {detail.episodeList.map((ep) => (
+                  {detail.episodeList.map((ep, idx) => (
                     <Link
                       key={ep.episodeId}
-                      href={`/anime/watch/${animeId}/${ep.episodeId}`}
+                      href={buildWatchUrl(ep.episodeId)}
                       className="flex items-center justify-between gap-2 rounded-lg border border-border bg-card p-3 transition-all hover:border-primary hover:bg-primary/5"
                     >
                       <div className="flex min-w-0 flex-1 items-center gap-3">
                         <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary">
-                          {ep.eps}
+                          {getEpisodeNumber(ep, idx)}
                         </div>
                         <div className="min-w-0 flex-1">
                           <p className="truncate text-sm font-medium">
-                            Episode {ep.eps}
+                            Episode {getEpisodeNumber(ep, idx)}
                           </p>
-                          <p className="flex items-center gap-1 text-[10px] text-muted-foreground">
-                            <Calendar className="h-2.5 w-2.5" />
-                            {ep.date}
-                          </p>
+                          {ep.date && (
+                            <p className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                              <Calendar className="h-2.5 w-2.5" />
+                              {ep.date}
+                            </p>
+                          )}
                         </div>
                       </div>
                       <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
@@ -470,7 +564,21 @@ export function AnimeDetailContent({ animeId }: AnimeDetailContentProps) {
                 {detail.producers && (
                   <div className="flex justify-between gap-2">
                     <dt className="text-muted-foreground">Produser</dt>
-                    <dd className="text-right font-medium">{detail.producers}</dd>
+                    <dd className="text-right font-medium">
+                      {detail.producers}
+                    </dd>
+                  </div>
+                )}
+                {source === "samehadaku" && (detail as any).season && (
+                  <div className="flex justify-between gap-2">
+                    <dt className="text-muted-foreground">Musim</dt>
+                    <dd className="font-medium">{(detail as any).season}</dd>
+                  </div>
+                )}
+                {source === "samehadaku" && (detail as any).source && (
+                  <div className="flex justify-between gap-2">
+                    <dt className="text-muted-foreground">Source</dt>
+                    <dd className="font-medium">{(detail as any).source}</dd>
                   </div>
                 )}
               </dl>
