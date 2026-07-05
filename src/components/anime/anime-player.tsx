@@ -94,6 +94,9 @@ export function AnimePlayerContent({
   const [showDownload, setShowDownload] = useState(false);
   const [showOpenInNewTab, setShowOpenInNewTab] = useState(false);
   const [animasuEpisodes, setAnimasuEpisodes] = useState<any[]>([]);
+  // State terpisah untuk prev/next (hindari race condition dengan episode state)
+  const [prevEpisodeId, setPrevEpisodeId] = useState<string | null>(null);
+  const [nextEpisodeId, setNextEpisodeId] = useState<string | null>(null);
 
   const playerContainerRef = useRef<HTMLDivElement>(null);
   const iframeLoadTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
@@ -206,22 +209,16 @@ export function AnimePlayerContent({
           );
 
           if (currentIdx !== -1) {
-            setEpisode((prev) => {
-              if (!prev) return prev;
-              return {
-                ...prev,
-                hasPrevEpisode: currentIdx > 0,
-                prevEpisode:
-                  currentIdx > 0
-                    ? { episodeId: episodes[currentIdx - 1].slug || episodes[currentIdx - 1].episodeId }
-                    : null,
-                hasNextEpisode: currentIdx < episodes.length - 1,
-                nextEpisode:
-                  currentIdx < episodes.length - 1
-                    ? { episodeId: episodes[currentIdx + 1].slug || episodes[currentIdx + 1].episodeId }
-                    : null,
-              };
-            });
+            // Pakai state terpisah, TIDAK tergantung episode state
+            // (hindari race condition saat episode state masih null)
+            const prevId = currentIdx > 0
+              ? (episodes[currentIdx - 1].slug || episodes[currentIdx - 1].episodeId)
+              : null;
+            const nextId = currentIdx < episodes.length - 1
+              ? (episodes[currentIdx + 1].slug || episodes[currentIdx + 1].episodeId)
+              : null;
+            setPrevEpisodeId(prevId);
+            setNextEpisodeId(nextId);
           }
         }
       })
@@ -365,22 +362,26 @@ export function AnimePlayerContent({
   // Navigate prev/next
   // ============================================================
   const goPrevEpisode = () => {
-    if (episode?.hasPrevEpisode && episode.prevEpisode?.episodeId) {
+    // Animasu: pakai state terpisah (prevEpisodeId)
+    // Otakudesu: pakai episode.prevEpisode
+    const targetId = source === "animasu" ? prevEpisodeId : episode?.prevEpisode?.episodeId;
+    if (targetId) {
       const watchBase =
         source === "animasu"
           ? `/anime/s2/watch/${animeId}`
           : `/anime/s1/watch/${animeId}`;
-      router.push(`${watchBase}/${episode.prevEpisode.episodeId}`);
+      router.push(`${watchBase}/${targetId}`);
     }
   };
 
   const goNextEpisode = () => {
-    if (episode?.hasNextEpisode && episode.nextEpisode?.episodeId) {
+    const targetId = source === "animasu" ? nextEpisodeId : episode?.nextEpisode?.episodeId;
+    if (targetId) {
       const watchBase =
         source === "animasu"
           ? `/anime/s2/watch/${animeId}`
           : `/anime/s1/watch/${animeId}`;
-      router.push(`${watchBase}/${episode.nextEpisode.episodeId}`);
+      router.push(`${watchBase}/${targetId}`);
     }
   };
 
@@ -608,7 +609,11 @@ export function AnimePlayerContent({
               size="sm"
               variant="outline"
               onClick={goPrevEpisode}
-              disabled={!episode.hasPrevEpisode}
+              disabled={
+                source === "animasu"
+                  ? !prevEpisodeId
+                  : !episode?.hasPrevEpisode
+              }
               className="gap-1.5"
             >
               <ChevronLeft className="h-4 w-4" />
@@ -618,7 +623,11 @@ export function AnimePlayerContent({
               size="sm"
               variant="outline"
               onClick={goNextEpisode}
-              disabled={!episode.hasNextEpisode}
+              disabled={
+                source === "animasu"
+                  ? !nextEpisodeId
+                  : !episode?.hasNextEpisode
+              }
               className="gap-1.5"
             >
               Next
