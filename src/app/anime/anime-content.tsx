@@ -16,15 +16,16 @@ import { cn } from "@/lib/utils";
 interface AnimeListItem {
   title: string;
   poster?: string;
-  episodes?: number;
+  episodes?: number | string;
   releaseDay?: string;
   latestReleaseDate?: string;
   animeId: string;
   href: string;
+  source?: "otakudesu" | "animasu";
 }
 
-type Tab = "home" | "ongoing" | "completed" | "popular" | "movies";
-type Source = "otakudesu" | "samehadaku";
+type Tab = "home" | "ongoing" | "completed" | "popular" | "movies" | "latest";
+type Source = "otakudesu" | "animasu";
 
 export function AnimeContent() {
   const [source, setSource] = useState<Source>("otakudesu");
@@ -40,7 +41,7 @@ export function AnimeContent() {
   const [hasMore, setHasMore] = useState(false);
 
   // === Load data berdasarkan tab ===
-    const loadData = useCallback(
+  const loadData = useCallback(
     async (src: Source, tab: Tab, pageNum: number = 1) => {
       setLoading(true);
       setError(null);
@@ -54,16 +55,18 @@ export function AnimeContent() {
           else if (tab === "completed")
             endpoint = `/api/anime/complete-anime?page=${pageNum}`;
         } else {
-          // Samehadaku
-          if (tab === "home") endpoint = "/api/anime/samehadaku/home";
+          // Animasu
+          if (tab === "home") endpoint = "/api/anime/animasu/home";
           else if (tab === "ongoing")
-            endpoint = `/api/anime/samehadaku/ongoing?page=${pageNum}`;
+            endpoint = `/api/anime/animasu/ongoing?page=${pageNum}`;
           else if (tab === "completed")
-            endpoint = `/api/anime/samehadaku/completed?page=${pageNum}`;
+            endpoint = `/api/anime/animasu/completed?page=${pageNum}`;
           else if (tab === "popular")
-            endpoint = `/api/anime/samehadaku/popular?page=${pageNum}`;
+            endpoint = `/api/anime/animasu/popular?page=${pageNum}`;
           else if (tab === "movies")
-            endpoint = `/api/anime/samehadaku/movies?page=${pageNum}`;
+            endpoint = `/api/anime/animasu/movies?page=${pageNum}`;
+          else if (tab === "latest")
+            endpoint = `/api/anime/animasu/latest?page=${pageNum}`;
         }
 
         const res = await fetch(endpoint);
@@ -72,31 +75,57 @@ export function AnimeContent() {
 
         // Normalize list dengan source tag
         const normalize = (list: any[] = []) =>
-          list.map((item: any) => ({
-            ...item,
-            source: src,
-          }));
+          list.map((item: any) => {
+            // Animasu pakai slug, Otakudesu pakai animeId
+            const animeId = item.slug || item.animeId;
+            return {
+              ...item,
+              animeId,
+              source: src,
+            };
+          });
 
         if (src === "otakudesu" && tab === "home") {
           const ongoingList = normalize(json?.data?.ongoing?.animeList || []);
-          const completedList = normalize(json?.data?.completed?.animeList || []);
+          const completedList = normalize(
+            json?.data?.completed?.animeList || []
+          );
           setOngoing(ongoingList);
           setCompleted(completedList);
           setHasMore(false);
-        } else if (src === "samehadaku" && tab === "home") {
-          // Samehadaku home hanya punya "recent"
-          const recentList = normalize(json?.data?.recent?.animeList || []);
-          setOngoing(recentList);
-          setCompleted([]);
+        } else if (src === "animasu" && tab === "home") {
+          // Animasu home return { ongoing: [], recent: [] }
+          const ongoingList = normalize(json?.ongoing || []);
+          const recentList = normalize(json?.recent || []);
+          setOngoing(ongoingList);
+          setCompleted(recentList);
           setHasMore(false);
         } else {
-          const list = normalize(json?.data?.animeList || []);
+          // Animasu return array langsung, Otakudesu return { data: { animeList } }
+          const rawList =
+            src === "animasu"
+              ? Array.isArray(json)
+                ? json
+                : json?.data?.animeList || []
+              : json?.data?.animeList || [];
+          const list = normalize(rawList);
+
           if (pageNum === 1) {
-            if (tab === "ongoing" || tab === "popular" || tab === "movies")
+            if (
+              tab === "ongoing" ||
+              tab === "popular" ||
+              tab === "movies" ||
+              tab === "latest"
+            )
               setOngoing(list);
             else setCompleted(list);
           } else {
-            if (tab === "ongoing" || tab === "popular" || tab === "movies")
+            if (
+              tab === "ongoing" ||
+              tab === "popular" ||
+              tab === "movies" ||
+              tab === "latest"
+            )
               setOngoing((prev) => [...prev, ...list]);
             else setCompleted((prev) => [...prev, ...list]);
           }
@@ -133,7 +162,7 @@ export function AnimeContent() {
     setSearchQuery("");
   };
 
- // === Search dengan debounce ===
+  // === Search dengan debounce ===
   useEffect(() => {
     if (!searchQuery.trim()) {
       setSearchResults([]);
@@ -146,13 +175,24 @@ export function AnimeContent() {
         const searchEndpoint =
           source === "otakudesu"
             ? `/api/anime/search/${encodeURIComponent(searchQuery.trim())}`
-            : `/api/anime/samehadaku/search?q=${encodeURIComponent(searchQuery.trim())}`;
+            : `/api/anime/animasu/search/${encodeURIComponent(
+                searchQuery.trim()
+              )}`;
 
         const res = await fetch(searchEndpoint);
         if (!res.ok) throw new Error("Search failed");
         const json = await res.json();
-        const list = (json?.data?.animeList || []).map((item: any) => ({
+
+        // Animasu return array langsung atau di data
+        const rawList =
+          source === "animasu"
+            ? Array.isArray(json)
+              ? json
+              : json?.data?.animeList || []
+            : json?.data?.animeList || [];
+        const list = rawList.map((item: any) => ({
           ...item,
+          animeId: item.slug || item.animeId,
           source,
         }));
         setSearchResults(list);
@@ -166,7 +206,7 @@ export function AnimeContent() {
     return () => clearTimeout(timer);
   }, [searchQuery, source]);
 
- // === Load more ===
+  // === Load more ===
   const handleLoadMore = () => {
     const nextPage = page + 1;
     setPage(nextPage);
@@ -228,15 +268,15 @@ export function AnimeContent() {
                   Otakudesu
                 </button>
                 <button
-                  onClick={() => handleSourceChange("samehadaku")}
+                  onClick={() => handleSourceChange("animasu")}
                   className={cn(
                     "rounded-full px-3 py-1 text-xs font-semibold transition-all",
-                    source === "samehadaku"
+                    source === "animasu"
                       ? "bg-purple-500 text-white"
                       : "text-muted-foreground hover:text-foreground"
                   )}
                 >
-                  Samehadaku
+                  Animasu
                 </button>
               </div>
 
@@ -245,7 +285,9 @@ export function AnimeContent() {
                 className="ml-auto shrink-0 rounded-full p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                 aria-label="Refresh"
               >
-                <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} />
+                <RefreshCw
+                  className={cn("h-4 w-4", loading && "animate-spin")}
+                />
               </button>
             </div>
 
@@ -253,7 +295,14 @@ export function AnimeContent() {
             <div className="mb-6 flex items-center gap-2 overflow-x-auto pb-2">
               {(source === "otakudesu"
                 ? (["home", "ongoing", "completed"] as Tab[])
-                : (["home", "ongoing", "completed", "popular", "movies"] as Tab[])
+                : ([
+                    "home",
+                    "ongoing",
+                    "completed",
+                    "popular",
+                    "movies",
+                    "latest",
+                  ] as Tab[])
               ).map((tab) => (
                 <button
                   key={tab}
@@ -270,6 +319,7 @@ export function AnimeContent() {
                   {tab === "completed" && "Tamat"}
                   {tab === "popular" && "Populer"}
                   {tab === "movies" && "Movie"}
+                  {tab === "latest" && "Terbaru"}
                 </button>
               ))}
             </div>
@@ -324,7 +374,7 @@ export function AnimeContent() {
             {ongoing.length > 0 && (
               <section className="mb-8">
                 <h2 className="mb-4 text-lg font-bold">
-                  {source === "samehadaku" ? "🔥 Rilisan Terbaru" : "🔥 Sedang Tayang"}
+                  {source === "animasu" ? "🔥 Rilisan Terbaru" : "🔥 Sedang Tayang"}
                 </h2>
                 <div className="grid grid-cols-3 gap-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7">
                   {ongoing.slice(0, 14).map((anime) => (
@@ -334,10 +384,12 @@ export function AnimeContent() {
               </section>
             )}
 
-            {/* Completed (only Otakudesu) */}
-            {source === "otakudesu" && completed.length > 0 && (
+            {/* Completed / Recent */}
+            {completed.length > 0 && (
               <section className="mb-8">
-                <h2 className="mb-4 text-lg font-bold">✅ Tamat</h2>
+                <h2 className="mb-4 text-lg font-bold">
+                  {source === "animasu" ? "✅ Tamat" : "✅ Tamat"}
+                </h2>
                 <div className="grid grid-cols-3 gap-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7">
                   {completed.slice(0, 14).map((anime) => (
                     <AnimeCard key={anime.animeId} anime={anime} />
@@ -346,58 +398,6 @@ export function AnimeContent() {
               </section>
             )}
           </>
-        )}
-
-        {/* === POPULAR TAB (Samehadaku only) === */}
-        {!showSearch && activeTab === "popular" && !loading && !error && (
-          <section>
-            <h2 className="mb-4 text-lg font-bold">Anime Populer</h2>
-            <div className="grid grid-cols-3 gap-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7">
-              {ongoing.map((anime) => (
-                <AnimeCard key={anime.animeId} anime={anime} />
-              ))}
-            </div>
-            {hasMore && (
-              <div className="mt-6 flex justify-center">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleLoadMore}
-                  disabled={loading}
-                  className="gap-2"
-                >
-                  {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-                  Muat lebih banyak
-                </Button>
-              </div>
-            )}
-          </section>
-        )}
-
-        {/* === MOVIES TAB (Samehadaku only) === */}
-        {!showSearch && activeTab === "movies" && !loading && !error && (
-          <section>
-            <h2 className="mb-4 text-lg font-bold">Anime Movie</h2>
-            <div className="grid grid-cols-3 gap-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7">
-              {ongoing.map((anime) => (
-                <AnimeCard key={anime.animeId} anime={anime} />
-              ))}
-            </div>
-            {hasMore && (
-              <div className="mt-6 flex justify-center">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleLoadMore}
-                  disabled={loading}
-                  className="gap-2"
-                >
-                  {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-                  Muat lebih banyak
-                </Button>
-              </div>
-            )}
-          </section>
         )}
 
         {/* === ONGOING TAB === */}
@@ -418,9 +418,7 @@ export function AnimeContent() {
                   disabled={loading}
                   className="gap-2"
                 >
-                  {loading ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : null}
+                  {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
                   Muat lebih banyak
                 </Button>
               </div>
@@ -446,9 +444,85 @@ export function AnimeContent() {
                   disabled={loading}
                   className="gap-2"
                 >
-                  {loading ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : null}
+                  {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                  Muat lebih banyak
+                </Button>
+              </div>
+            )}
+          </section>
+        )}
+
+        {/* === POPULAR TAB (Animasu only) === */}
+        {!showSearch && activeTab === "popular" && !loading && !error && (
+          <section>
+            <h2 className="mb-4 text-lg font-bold">Anime Populer</h2>
+            <div className="grid grid-cols-3 gap-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7">
+              {ongoing.map((anime) => (
+                <AnimeCard key={anime.animeId} anime={anime} />
+              ))}
+            </div>
+            {hasMore && (
+              <div className="mt-6 flex justify-center">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleLoadMore}
+                  disabled={loading}
+                  className="gap-2"
+                >
+                  {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                  Muat lebih banyak
+                </Button>
+              </div>
+            )}
+          </section>
+        )}
+
+        {/* === MOVIES TAB (Animasu only) === */}
+        {!showSearch && activeTab === "movies" && !loading && !error && (
+          <section>
+            <h2 className="mb-4 text-lg font-bold">Anime Movie</h2>
+            <div className="grid grid-cols-3 gap-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7">
+              {ongoing.map((anime) => (
+                <AnimeCard key={anime.animeId} anime={anime} />
+              ))}
+            </div>
+            {hasMore && (
+              <div className="mt-6 flex justify-center">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleLoadMore}
+                  disabled={loading}
+                  className="gap-2"
+                >
+                  {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                  Muat lebih banyak
+                </Button>
+              </div>
+            )}
+          </section>
+        )}
+
+        {/* === LATEST TAB (Animasu only) === */}
+        {!showSearch && activeTab === "latest" && !loading && !error && (
+          <section>
+            <h2 className="mb-4 text-lg font-bold">Anime Terbaru</h2>
+            <div className="grid grid-cols-3 gap-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7">
+              {ongoing.map((anime) => (
+                <AnimeCard key={anime.animeId} anime={anime} />
+              ))}
+            </div>
+            {hasMore && (
+              <div className="mt-6 flex justify-center">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleLoadMore}
+                  disabled={loading}
+                  className="gap-2"
+                >
+                  {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
                   Muat lebih banyak
                 </Button>
               </div>
