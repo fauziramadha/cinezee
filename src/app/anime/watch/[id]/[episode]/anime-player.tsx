@@ -66,11 +66,13 @@ interface EpisodeData {
 interface AnimePlayerContentProps {
   animeId: string;
   episodeId: string;
+  source?: "otakudesu" | "samehadaku";
 }
 
 export function AnimePlayerContent({
   animeId,
   episodeId,
+  source = "otakudesu",
 }: AnimePlayerContentProps) {
   const router = useRouter();
   const [episode, setEpisode] = useState<EpisodeData | null>(null);
@@ -91,14 +93,19 @@ export function AnimePlayerContent({
   // ============================================================
   // LOAD EPISODE DATA
   // ============================================================
-  useEffect(() => {
+    useEffect(() => {
     setLoading(true);
     setError(null);
     setStreamUrl("");
     setIframeLoading(true);
     setIframeError(false);
 
-    fetch(`/api/anime/episode/${episodeId}`)
+    const episodeEndpoint =
+      source === "samehadaku"
+        ? `/api/anime/samehadaku/episode/${episodeId}`
+        : `/api/anime/episode/${episodeId}`;
+
+    fetch(episodeEndpoint)
       .then((res) => {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         return res.json();
@@ -131,19 +138,24 @@ export function AnimePlayerContent({
         setError(err instanceof Error ? err.message : "Failed to load");
       })
       .finally(() => setLoading(false));
-  }, [episodeId]);
+  }, [episodeId, source]);
 
   // ============================================================
   // FETCH STREAM URL saat server berubah
   // ============================================================
-  useEffect(() => {
+    useEffect(() => {
     if (!selectedServerId) return;
 
     setIframeLoading(true);
     setIframeError(false);
     setStreamUrl("");
 
-    fetch(`/api/anime/server/${selectedServerId}`)
+    const serverEndpoint =
+      source === "samehadaku"
+        ? `/api/anime/samehadaku/server/${selectedServerId}`
+        : `/api/anime/server/${selectedServerId}`;
+
+    fetch(serverEndpoint)
       .then((res) => {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         return res.json();
@@ -159,7 +171,7 @@ export function AnimePlayerContent({
         setIframeError(true);
       })
       .finally(() => setIframeLoading(false));
-  }, [selectedServerId]);
+  }, [selectedServerId, source]);
 
   // ============================================================
   // Handle quality change
@@ -221,15 +233,23 @@ export function AnimePlayerContent({
   // ============================================================
   // Navigate prev/next
   // ============================================================
-  const goPrevEpisode = () => {
+    const goPrevEpisode = () => {
     if (episode?.hasPrevEpisode && episode.prevEpisode?.episodeId) {
-      router.push(`/anime/watch/${animeId}/${episode.prevEpisode.episodeId}`);
+      const watchBase =
+        source === "samehadaku"
+          ? `/anime/samehadaku/watch/${animeId}`
+          : `/anime/watch/${animeId}`;
+      router.push(`${watchBase}/${episode.prevEpisode.episodeId}`);
     }
   };
 
   const goNextEpisode = () => {
     if (episode?.hasNextEpisode && episode.nextEpisode?.episodeId) {
-      router.push(`/anime/watch/${animeId}/${episode.nextEpisode.episodeId}`);
+      const watchBase =
+        source === "samehadaku"
+          ? `/anime/samehadaku/watch/${animeId}`
+          : `/anime/watch/${animeId}`;
+      router.push(`${watchBase}/${episode.nextEpisode.episodeId}`);
     }
   };
 
@@ -275,7 +295,13 @@ export function AnimePlayerContent({
             <Button
               variant="secondary"
               size="sm"
-              onClick={() => router.push(`/anime/${animeId}`)}
+              onClick={() =>
+                router.push(
+                  source === "samehadaku"
+                    ? `/anime/samehadaku/${animeId}`
+                    : `/anime/${animeId}`
+                )
+              }
               className="gap-1.5"
             >
               <ArrowLeft className="h-3.5 w-3.5" />
@@ -300,9 +326,15 @@ export function AnimePlayerContent({
       <Header />
 
       <div className="container mx-auto px-4 py-6 pt-20">
-        {/* Back button */}
+        {/* Back button */}   
         <button
-          onClick={() => router.push(`/anime/${animeId}`)}
+          onClick={() =>
+            router.push(
+              source === "samehadaku"
+                ? `/anime/samehadaku/${animeId}`
+                : `/anime/${animeId}`
+            )
+          }
           className="mb-4 flex items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground"
         >
           <ArrowLeft className="h-4 w-4" />
