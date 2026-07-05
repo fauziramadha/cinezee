@@ -93,6 +93,7 @@ export function AnimePlayerContent({
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showDownload, setShowDownload] = useState(false);
   const [showOpenInNewTab, setShowOpenInNewTab] = useState(false);
+  const [animasuEpisodes, setAnimasuEpisodes] = useState<any[]>([]);
 
   const playerContainerRef = useRef<HTMLDivElement>(null);
   const iframeLoadTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
@@ -185,6 +186,47 @@ export function AnimePlayerContent({
       })
       .finally(() => setLoading(false));
   }, [episodeId, source]);
+
+  // ============================================================
+  // FETCH DETAIL (Animasu only — untuk dapat episode list)
+  // ============================================================
+  useEffect(() => {
+    if (source !== "animasu" || !animeId) return;
+
+    fetch(`/api/anime/animasu/detail/${animeId}`)
+      .then((res) => res.json())
+      .then((json) => {
+        const episodes = json?.data?.detail?.episodes || json?.data?.episodes || [];
+        if (Array.isArray(episodes) && episodes.length > 0) {
+          setAnimasuEpisodes(episodes);
+
+          // Cari index episode saat ini
+          const currentIdx = episodes.findIndex(
+            (ep: any) => (ep.slug || ep.episodeId) === episodeId
+          );
+
+          if (currentIdx !== -1) {
+            setEpisode((prev) => {
+              if (!prev) return prev;
+              return {
+                ...prev,
+                hasPrevEpisode: currentIdx > 0,
+                prevEpisode:
+                  currentIdx > 0
+                    ? { episodeId: episodes[currentIdx - 1].slug || episodes[currentIdx - 1].episodeId }
+                    : null,
+                hasNextEpisode: currentIdx < episodes.length - 1,
+                nextEpisode:
+                  currentIdx < episodes.length - 1
+                    ? { episodeId: episodes[currentIdx + 1].slug || episodes[currentIdx + 1].episodeId }
+                    : null,
+              };
+            });
+          }
+        }
+      })
+      .catch(() => {});
+  }, [animeId, episodeId, source]);
 
   // ============================================================
   // FETCH STREAM URL (Otakudesu only — saat server berubah)
