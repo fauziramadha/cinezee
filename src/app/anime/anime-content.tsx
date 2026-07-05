@@ -101,18 +101,19 @@ export function AnimeContent() {
           setCompleted(recentList);
           setHasMore(false);
         } else {
-          // Animasu return array langsung atau di json.data, Otakudesu return { data: { animeList } }
+          // Animasu: { animes: [] } atau array langsung
+          // Otakudesu: { data: { animeList: [] } }
           let rawList: any[] = [];
           if (src === "animasu") {
-            // Coba berbagai struktur response Animasu
             if (Array.isArray(json)) {
               rawList = json;
+            } else if (Array.isArray(json?.animes)) {
+              rawList = json.animes;
             } else if (Array.isArray(json?.data)) {
               rawList = json.data;
             } else if (Array.isArray(json?.data?.animeList)) {
               rawList = json.data.animeList;
             } else if (json?.data?.detail) {
-              // Response home punya ongoing + recent
               rawList = [];
             }
           } else {
@@ -193,13 +194,22 @@ export function AnimeContent() {
         if (!res.ok) throw new Error("Search failed");
         const json = await res.json();
 
-        // Animasu return array langsung atau di data
-        const rawList =
-          source === "animasu"
-            ? Array.isArray(json)
-              ? json
-              : json?.data?.animeList || []
-            : json?.data?.animeList || [];
+        // Animasu: { animes: [] } atau array langsung
+        // Otakudesu: { data: { animeList: [] } }
+        let rawList: any[] = [];
+        if (source === "animasu") {
+          if (Array.isArray(json)) {
+            rawList = json;
+          } else if (Array.isArray(json?.animes)) {
+            rawList = json.animes;
+          } else if (Array.isArray(json?.data)) {
+            rawList = json.data;
+          } else if (Array.isArray(json?.data?.animeList)) {
+            rawList = json.data.animeList;
+          }
+        } else {
+          rawList = json?.data?.animeList || [];
+        }
         const list = rawList.map((item: any) => ({
           ...item,
           animeId: item.slug || item.animeId,
@@ -294,7 +304,7 @@ export function AnimeContent() {
                 onClick={handleRefresh}
                 className="ml-auto shrink-0 rounded-full p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                 aria-label="Refresh"
-                >
+              >
                 <RefreshCw
                   className={cn("h-4 w-4", loading && "animate-spin")}
                 />
