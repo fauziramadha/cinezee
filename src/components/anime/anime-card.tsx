@@ -9,7 +9,7 @@ interface AnimeCardProps {
   anime: {
     title: string;
     poster?: string;
-    episodes?: number;
+    episodes?: number | string;
     releaseDay?: string;
     latestReleaseDate?: string;
     animeId: string;
@@ -17,6 +17,7 @@ interface AnimeCardProps {
     status?: string;
     type?: string;
     rating?: string | number;
+    source?: "otakudesu" | "samehadaku";
   };
   variant?: "default" | "compact";
 }
