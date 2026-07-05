@@ -32,8 +32,8 @@ export function AnimeCard({ anime, variant = "default" }: AnimeCardProps) {
   // Generate link berdasarkan source
   const detailHref =
     anime.source === "animasu"
-      ? `/anime/animasu/${animeId}`
-      : `/anime/${animeId}`;
+      ? `/anime/s2/${animeId}`
+      : `/anime/s1/${animeId}`;
 
   return (
     <Link
