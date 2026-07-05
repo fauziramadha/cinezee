@@ -23,9 +23,11 @@ interface AnimeListItem {
   href: string;
 }
 
-type Tab = "home" | "ongoing" | "completed";
+type Tab = "home" | "ongoing" | "completed" | "popular" | "movies";
+type Source = "otakudesu" | "samehadaku";
 
 export function AnimeContent() {
+  const [source, setSource] = useState<Source>("otakudesu");
   const [activeTab, setActiveTab] = useState<Tab>("home");
   const [ongoing, setOngoing] = useState<AnimeListItem[]>([]);
   const [completed, setCompleted] = useState<AnimeListItem[]>([]);
@@ -38,44 +40,68 @@ export function AnimeContent() {
   const [hasMore, setHasMore] = useState(false);
 
   // === Load data berdasarkan tab ===
-  const loadData = useCallback(
-    async (tab: Tab, pageNum: number = 1) => {
+    const loadData = useCallback(
+    async (src: Source, tab: Tab, pageNum: number = 1) => {
       setLoading(true);
       setError(null);
 
       try {
         let endpoint = "";
-        if (tab === "home") endpoint = "/api/anime/home";
-        else if (tab === "ongoing")
-          endpoint = `/api/anime/ongoing-anime?page=${pageNum}`;
-        else if (tab === "completed")
-          endpoint = `/api/anime/complete-anime?page=${pageNum}`;
+        if (src === "otakudesu") {
+          if (tab === "home") endpoint = "/api/anime/home";
+          else if (tab === "ongoing")
+            endpoint = `/api/anime/ongoing-anime?page=${pageNum}`;
+          else if (tab === "completed")
+            endpoint = `/api/anime/complete-anime?page=${pageNum}`;
+        } else {
+          // Samehadaku
+          if (tab === "home") endpoint = "/api/anime/samehadaku/home";
+          else if (tab === "ongoing")
+            endpoint = `/api/anime/samehadaku/ongoing?page=${pageNum}`;
+          else if (tab === "completed")
+            endpoint = `/api/anime/samehadaku/completed?page=${pageNum}`;
+          else if (tab === "popular")
+            endpoint = `/api/anime/samehadaku/popular?page=${pageNum}`;
+          else if (tab === "movies")
+            endpoint = `/api/anime/samehadaku/movies?page=${pageNum}`;
+        }
 
         const res = await fetch(endpoint);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const json = await res.json();
 
-        if (tab === "home") {
-          // Home return { data: { ongoing: { animeList }, completed: { animeList } } }
-          const ongoingList = json?.data?.ongoing?.animeList || [];
-          const completedList = json?.data?.completed?.animeList || [];
+        // Normalize list dengan source tag
+        const normalize = (list: any[] = []) =>
+          list.map((item: any) => ({
+            ...item,
+            source: src,
+          }));
+
+        if (src === "otakudesu" && tab === "home") {
+          const ongoingList = normalize(json?.data?.ongoing?.animeList || []);
+          const completedList = normalize(json?.data?.completed?.animeList || []);
           setOngoing(ongoingList);
           setCompleted(completedList);
           setHasMore(false);
+        } else if (src === "samehadaku" && tab === "home") {
+          // Samehadaku home hanya punya "recent"
+          const recentList = normalize(json?.data?.recent?.animeList || []);
+          setOngoing(recentList);
+          setCompleted([]);
+          setHasMore(false);
         } else {
-          // ongoing/completed return { data: { animeList, pagination } }
-          const list = json?.data?.animeList || [];
+          const list = normalize(json?.data?.animeList || []);
           if (pageNum === 1) {
-            if (tab === "ongoing") setOngoing(list);
+            if (tab === "ongoing" || tab === "popular" || tab === "movies")
+              setOngoing(list);
             else setCompleted(list);
           } else {
-            if (tab === "ongoing")
+            if (tab === "ongoing" || tab === "popular" || tab === "movies")
               setOngoing((prev) => [...prev, ...list]);
             else setCompleted((prev) => [...prev, ...list]);
           }
-          // Cek apakah ada page berikutnya
-          const pagination = json?.data?.pagination;
-          setHasMore(pagination?.hasNextPage || (list.length >= 20 && !!pagination));
+          // Heuristic pagination (page size ~15-20)
+          setHasMore(list.length >= 15);
         }
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to load anime");
@@ -88,18 +114,26 @@ export function AnimeContent() {
 
   // === Initial load ===
   useEffect(() => {
-    loadData("home");
-  }, [loadData]);
+    loadData(source, "home");
+  }, [loadData, source]);
 
   // === Tab change ===
   useEffect(() => {
-    if (activeTab !== "home" && activeTab !== "search") {
+    if (activeTab !== "home") {
       setPage(1);
-      loadData(activeTab, 1);
+      loadData(source, activeTab, 1);
     }
-  }, [activeTab, loadData]);
+  }, [activeTab, source, loadData]);
 
-  // === Search dengan debounce ===
+  // === Handle source change ===
+  const handleSourceChange = (newSource: Source) => {
+    setSource(newSource);
+    setActiveTab("home");
+    setPage(1);
+    setSearchQuery("");
+  };
+
+ // === Search dengan debounce ===
   useEffect(() => {
     if (!searchQuery.trim()) {
       setSearchResults([]);
@@ -109,12 +143,19 @@ export function AnimeContent() {
     setSearching(true);
     const timer = setTimeout(async () => {
       try {
-        const res = await fetch(
-          `/api/anime/search/${encodeURIComponent(searchQuery.trim())}`
-        );
+        const searchEndpoint =
+          source === "otakudesu"
+            ? `/api/anime/search/${encodeURIComponent(searchQuery.trim())}`
+            : `/api/anime/samehadaku/search?q=${encodeURIComponent(searchQuery.trim())}`;
+
+        const res = await fetch(searchEndpoint);
         if (!res.ok) throw new Error("Search failed");
         const json = await res.json();
-        setSearchResults(json?.data?.animeList || []);
+        const list = (json?.data?.animeList || []).map((item: any) => ({
+          ...item,
+          source,
+        }));
+        setSearchResults(list);
       } catch {
         setSearchResults([]);
       } finally {
@@ -123,19 +164,19 @@ export function AnimeContent() {
     }, 500);
 
     return () => clearTimeout(timer);
-  }, [searchQuery]);
+  }, [searchQuery, source]);
 
-  // === Load more ===
+ // === Load more ===
   const handleLoadMore = () => {
     const nextPage = page + 1;
     setPage(nextPage);
-    loadData(activeTab, nextPage);
+    loadData(source, activeTab, nextPage);
   };
 
   // === Refresh ===
   const handleRefresh = () => {
     setPage(1);
-    loadData(activeTab === "search" ? "home" : activeTab, 1);
+    loadData(source, activeTab === "search" ? "home" : activeTab, 1);
   };
 
   const showSearch = searchQuery.trim().length > 0;
@@ -168,34 +209,71 @@ export function AnimeContent() {
           )}
         </div>
 
-        {/* Tabs (hidden when searching) */}
+        {/* Source selector + Tabs (hidden when searching) */}
         {!showSearch && (
-          <div className="mb-6 flex items-center gap-2 overflow-x-auto pb-2">
-            {(["home", "ongoing", "completed"] as Tab[]).map((tab) => (
-              <button
-                key={tab}
-                onClick={() => setActiveTab(tab)}
-                className={cn(
-                  "shrink-0 rounded-full px-4 py-1.5 text-sm font-medium transition-colors",
-                  activeTab === tab
-                    ? "bg-primary text-primary-foreground"
-                    : "bg-muted text-muted-foreground hover:bg-muted/70"
-                )}
-              >
-                {tab === "home" && "Beranda"}
-                {tab === "ongoing" && "Sedang Tayang"}
-                {tab === "completed" && "Tamat"}
-              </button>
-            ))}
+          <>
+            {/* Source selector */}
+            <div className="mb-4 flex items-center gap-2">
+              <span className="text-xs text-muted-foreground">Sumber:</span>
+              <div className="flex gap-1 rounded-full bg-muted p-1">
+                <button
+                  onClick={() => handleSourceChange("otakudesu")}
+                  className={cn(
+                    "rounded-full px-3 py-1 text-xs font-semibold transition-all",
+                    source === "otakudesu"
+                      ? "bg-blue-500 text-white"
+                      : "text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  Otakudesu
+                </button>
+                <button
+                  onClick={() => handleSourceChange("samehadaku")}
+                  className={cn(
+                    "rounded-full px-3 py-1 text-xs font-semibold transition-all",
+                    source === "samehadaku"
+                      ? "bg-purple-500 text-white"
+                      : "text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  Samehadaku
+                </button>
+              </div>
 
-            <button
-              onClick={handleRefresh}
-              className="ml-auto shrink-0 rounded-full p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-              aria-label="Refresh"
-            >
-              <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} />
-            </button>
-          </div>
+              <button
+                onClick={handleRefresh}
+                className="ml-auto shrink-0 rounded-full p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                aria-label="Refresh"
+              >
+                <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} />
+              </button>
+            </div>
+
+            {/* Tabs */}
+            <div className="mb-6 flex items-center gap-2 overflow-x-auto pb-2">
+              {(source === "otakudesu"
+                ? (["home", "ongoing", "completed"] as Tab[])
+                : (["home", "ongoing", "completed", "popular", "movies"] as Tab[])
+              ).map((tab) => (
+                <button
+                  key={tab}
+                  onClick={() => setActiveTab(tab)}
+                  className={cn(
+                    "shrink-0 rounded-full px-4 py-1.5 text-sm font-medium transition-colors",
+                    activeTab === tab
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-muted text-muted-foreground hover:bg-muted/70"
+                  )}
+                >
+                  {tab === "home" && "Beranda"}
+                  {tab === "ongoing" && "Sedang Tayang"}
+                  {tab === "completed" && "Tamat"}
+                  {tab === "popular" && "Populer"}
+                  {tab === "movies" && "Movie"}
+                </button>
+              ))}
+            </div>
+          </>
         )}
 
         {/* Loading state */}
@@ -242,10 +320,12 @@ export function AnimeContent() {
         {/* === HOME TAB === */}
         {!showSearch && activeTab === "home" && !loading && !error && (
           <>
-            {/* Ongoing */}
+            {/* Recent / Ongoing */}
             {ongoing.length > 0 && (
               <section className="mb-8">
-                <h2 className="mb-4 text-lg font-bold">🔥 Sedang Tayang</h2>
+                <h2 className="mb-4 text-lg font-bold">
+                  {source === "samehadaku" ? "🔥 Rilisan Terbaru" : "🔥 Sedang Tayang"}
+                </h2>
                 <div className="grid grid-cols-3 gap-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7">
                   {ongoing.slice(0, 14).map((anime) => (
                     <AnimeCard key={anime.animeId} anime={anime} />
@@ -254,8 +334,8 @@ export function AnimeContent() {
               </section>
             )}
 
-            {/* Completed */}
-            {completed.length > 0 && (
+            {/* Completed (only Otakudesu) */}
+            {source === "otakudesu" && completed.length > 0 && (
               <section className="mb-8">
                 <h2 className="mb-4 text-lg font-bold">✅ Tamat</h2>
                 <div className="grid grid-cols-3 gap-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7">
@@ -266,6 +346,58 @@ export function AnimeContent() {
               </section>
             )}
           </>
+        )}
+
+        {/* === POPULAR TAB (Samehadaku only) === */}
+        {!showSearch && activeTab === "popular" && !loading && !error && (
+          <section>
+            <h2 className="mb-4 text-lg font-bold">Anime Populer</h2>
+            <div className="grid grid-cols-3 gap-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7">
+              {ongoing.map((anime) => (
+                <AnimeCard key={anime.animeId} anime={anime} />
+              ))}
+            </div>
+            {hasMore && (
+              <div className="mt-6 flex justify-center">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleLoadMore}
+                  disabled={loading}
+                  className="gap-2"
+                >
+                  {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                  Muat lebih banyak
+                </Button>
+              </div>
+            )}
+          </section>
+        )}
+
+        {/* === MOVIES TAB (Samehadaku only) === */}
+        {!showSearch && activeTab === "movies" && !loading && !error && (
+          <section>
+            <h2 className="mb-4 text-lg font-bold">Anime Movie</h2>
+            <div className="grid grid-cols-3 gap-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7">
+              {ongoing.map((anime) => (
+                <AnimeCard key={anime.animeId} anime={anime} />
+              ))}
+            </div>
+            {hasMore && (
+              <div className="mt-6 flex justify-center">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleLoadMore}
+                  disabled={loading}
+                  className="gap-2"
+                >
+                  {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                  Muat lebih banyak
+                </Button>
+              </div>
+            )}
+          </section>
         )}
 
         {/* === ONGOING TAB === */}
