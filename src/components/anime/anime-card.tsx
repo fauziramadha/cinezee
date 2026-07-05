@@ -17,7 +17,7 @@ interface AnimeCardProps {
     status?: string;
     type?: string;
     rating?: string | number;
-    source?: "otakudesu" | "samehadaku";
+    source?: "otakudesu" | "animasu";
   };
   variant?: "default" | "compact";
 }
@@ -29,10 +29,10 @@ export function AnimeCard({ anime, variant = "default" }: AnimeCardProps) {
   const status = anime.status || (anime.releaseDay ? "Ongoing" : "Unknown");
   const animeId = anime.animeId;
 
-    // Generate link berdasarkan source
+  // Generate link berdasarkan source
   const detailHref =
-    anime.source === "samehadaku"
-      ? `/anime/samehadaku/${animeId}`
+    anime.source === "animasu"
+      ? `/anime/animasu/${animeId}`
       : `/anime/${animeId}`;
 
   return (
@@ -64,7 +64,9 @@ export function AnimeCard({ anime, variant = "default" }: AnimeCardProps) {
               "rounded px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide backdrop-blur-sm",
               status.toLowerCase().includes("ongoing")
                 ? "bg-green-500/90 text-white"
-                : status.toLowerCase().includes("tamat") || status.toLowerCase().includes("completed")
+                : status.toLowerCase().includes("tamat") ||
+                  status.toLowerCase().includes("completed") ||
+                  status.toLowerCase().includes("selesai")
                 ? "bg-blue-500/90 text-white"
                 : "bg-black/70 text-white"
             )}
@@ -77,7 +79,9 @@ export function AnimeCard({ anime, variant = "default" }: AnimeCardProps) {
         {episodes && (
           <div className="absolute right-1.5 top-1.5">
             <span className="flex items-center gap-0.5 rounded bg-black/70 px-1.5 py-0.5 text-[9px] font-semibold text-white backdrop-blur-sm">
-              EP {episodes}
+              {typeof episodes === "string" && episodes.length > 10
+                ? episodes.slice(0, 10)
+                : `EP ${episodes}`}
             </span>
           </div>
         )}
@@ -90,13 +94,13 @@ export function AnimeCard({ anime, variant = "default" }: AnimeCardProps) {
         </div>
       </div>
 
-       {/* Title & meta */}
+      {/* Title & meta */}
       <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/95 via-black/70 to-transparent p-2.5 pt-8">
         {anime.source && (
           <span
             className={cn(
               "mb-1 inline-block rounded px-1 py-0.5 text-[8px] font-bold uppercase tracking-wide",
-              anime.source === "samehadaku"
+              anime.source === "animasu"
                 ? "bg-purple-500/90 text-white"
                 : "bg-blue-500/90 text-white"
             )}
