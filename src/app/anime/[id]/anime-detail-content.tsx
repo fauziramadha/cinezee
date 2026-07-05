@@ -224,11 +224,9 @@ export function AnimeDetailContent({
 
   // Score bisa string (Otakudesu) atau object {value, users} (Samehadaku)
   const scoreValue =
-    typeof detail.score === "object"
-      ? detail.score?.value
-      : detail.score;
+    typeof detail.score === "object" ? detail.score?.value : detail.score;
 
-  // Cek apakah ada batch (Otakudesu: batch string; Samehadaku: batchList array)
+  // Cek apakah ada batch
   const hasBatch =
     source === "samehadaku"
       ? !!(detail.batchList && detail.batchList.length > 0)
@@ -391,7 +389,7 @@ export function AnimeDetailContent({
           </div>
         </div>
 
-        {/* === Batch download modal === */}
+        {/* === Batch download modal (FIXED) === */}
         {showBatch && batchData && (
           <div className="mt-6 rounded-lg border border-border bg-card p-4">
             <div className="mb-3 flex items-center justify-between">
@@ -409,30 +407,60 @@ export function AnimeDetailContent({
             {batchData.error ? (
               <p className="text-sm text-muted-foreground">{batchData.error}</p>
             ) : batchData?.downloadList?.length > 0 ? (
-              <div className="space-y-2">
-                {batchData.downloadList.map((dl: any, idx: number) => (
-                  <div
-                    key={idx}
-                    className="flex flex-wrap items-center gap-2 rounded border border-border p-2 text-xs"
-                  >
-                    <Badge variant="outline">
-                      {dl.quality || dl.title || "Unknown"}
-                    </Badge>
-                    {(dl.links || dl.urls || []).map(
-                      (link: any, lidx: number) => (
-                        <a
-                          key={lidx}
-                          href={link.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="rounded bg-primary/10 px-2 py-1 font-medium text-primary hover:bg-primary/20"
-                        >
-                          {link.host || link.title || "Download"}
-                        </a>
-                      )
-                    )}
-                  </div>
-                ))}
+              <div className="space-y-3">
+                {batchData.downloadList.map((dl: any, idx: number) => {
+                  // Handle multiple possible structures:
+                  // Otakudesu: { quality, links: [{ host, url }] }
+                  // Samehadaku: { title, quality, downloadLinks: [{ host, url }] } or { urls: [{ title, url }] }
+                  const qualityLabel =
+                    dl.quality || dl.resolution || dl.size || "Download";
+                  const titleLabel = dl.title || "";
+                  const downloadLinks =
+                    dl.links ||
+                    dl.downloadLinks ||
+                    dl.urls ||
+                    dl.mirrors ||
+                    [];
+
+                  return (
+                    <div
+                      key={idx}
+                      className="rounded border border-border p-3 text-xs"
+                    >
+                      {/* Quality badge + title (truncate if too long) */}
+                      <div className="mb-2 flex flex-wrap items-center gap-2">
+                        <Badge variant="outline" className="shrink-0">
+                          {qualityLabel}
+                        </Badge>
+                        {titleLabel && (
+                          <span className="min-w-0 truncate text-muted-foreground">
+                            {titleLabel}
+                          </span>
+                        )}
+                      </div>
+                      {/* Download links */}
+                      {downloadLinks.length > 0 ? (
+                        <div className="flex flex-wrap gap-2">
+                          {downloadLinks.map((link: any, lidx: number) => (
+                            <a
+                              key={lidx}
+                              href={link.url || link.href}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="rounded bg-primary/10 px-3 py-1.5 font-medium text-primary transition-colors hover:bg-primary/20"
+                            >
+                              {link.host || link.title || `Link ${lidx + 1}`}
+                            </a>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-muted-foreground">
+                          Tidak ada link download untuk quality ini.
+                        </p>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             ) : (
               <p className="text-sm text-muted-foreground">
@@ -558,7 +586,9 @@ export function AnimeDetailContent({
                 {detail.studios && (
                   <div className="flex justify-between gap-2">
                     <dt className="text-muted-foreground">Studio</dt>
-                    <dd className="text-right font-medium">{detail.studios}</dd>
+                    <dd className="text-right font-medium">
+                      {detail.studios}
+                    </dd>
                   </div>
                 )}
                 {detail.producers && (
