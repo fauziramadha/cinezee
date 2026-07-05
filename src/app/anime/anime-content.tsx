@@ -8,7 +8,7 @@ import { DetailModal } from "@/components/cinepro/detail-modal";
 import { PlayerModal } from "@/components/cinepro/player-modal";
 import { AuthModal } from "@/components/cinepro/auth-modal";
 import { AnimeCard } from "@/components/anime/anime-card";
-import { Loader2, Search, RefreshCw } from "lucide-react";
+import { Loader2, Search, RefreshCw, ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
@@ -101,13 +101,23 @@ export function AnimeContent() {
           setCompleted(recentList);
           setHasMore(false);
         } else {
-          // Animasu return array langsung, Otakudesu return { data: { animeList } }
-          const rawList =
-            src === "animasu"
-              ? Array.isArray(json)
-                ? json
-                : json?.data?.animeList || []
-              : json?.data?.animeList || [];
+          // Animasu return array langsung atau di json.data, Otakudesu return { data: { animeList } }
+          let rawList: any[] = [];
+          if (src === "animasu") {
+            // Coba berbagai struktur response Animasu
+            if (Array.isArray(json)) {
+              rawList = json;
+            } else if (Array.isArray(json?.data)) {
+              rawList = json.data;
+            } else if (Array.isArray(json?.data?.animeList)) {
+              rawList = json.data.animeList;
+            } else if (json?.data?.detail) {
+              // Response home punya ongoing + recent
+              rawList = [];
+            }
+          } else {
+            rawList = json?.data?.animeList || [];
+          }
           const list = normalize(rawList);
 
           if (pageNum === 1) {
@@ -284,7 +294,7 @@ export function AnimeContent() {
                 onClick={handleRefresh}
                 className="ml-auto shrink-0 rounded-full p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                 aria-label="Refresh"
-              >
+                >
                 <RefreshCw
                   className={cn("h-4 w-4", loading && "animate-spin")}
                 />
@@ -370,6 +380,17 @@ export function AnimeContent() {
         {/* === HOME TAB === */}
         {!showSearch && activeTab === "home" && !loading && !error && (
           <>
+            {/* Tombol kembali ke beranda home CineStream */}
+            <div className="mb-6">
+              <a
+                href="/"
+                className="inline-flex items-center gap-2 text-sm text-primary transition-colors hover:text-primary/80"
+              >
+                <ArrowLeft className="h-4 w-4" />
+                Kembali ke Beranda
+              </a>
+            </div>
+
             {/* Recent / Ongoing */}
             {ongoing.length > 0 && (
               <section className="mb-8">
@@ -387,9 +408,7 @@ export function AnimeContent() {
             {/* Completed / Recent */}
             {completed.length > 0 && (
               <section className="mb-8">
-                <h2 className="mb-4 text-lg font-bold">
-                  {source === "animasu" ? "✅ Tamat" : "✅ Tamat"}
-                </h2>
+                <h2 className="mb-4 text-lg font-bold">✅ Tamat</h2>
                 <div className="grid grid-cols-3 gap-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7">
                   {completed.slice(0, 14).map((anime) => (
                     <AnimeCard key={anime.animeId} anime={anime} />
