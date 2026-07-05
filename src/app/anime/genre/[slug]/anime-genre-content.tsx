@@ -54,10 +54,11 @@ export function AnimeGenreContent({ slug }: AnimeGenreContentProps) {
         setAnimeList(list);
 
         // API tidak return pagination info, jadi pakai heuristic:
-        // - Kalau list >= 20 → kemungkinan ada page berikutnya
-        // - Kalau list < 20 → sudah halaman terakhir
+        // - Page size API = 15 item per halaman
+        // - Kalau list >= 10 → kemungkinan ada page berikutnya
+        // - Kalau list < 10 → kemungkinan sudah halaman terakhir
         // - Kalau list kosong → pasti halaman terakhir
-        setHasNextPage(list.length >= 20);
+        setHasNextPage(list.length >= 10);
 
         // Kalau page > 1 dan list kosong, balik ke page sebelumnya
         if (pageNum > 1 && list.length === 0) {
