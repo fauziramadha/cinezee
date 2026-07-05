@@ -20,13 +20,18 @@ interface AnimeListItem {
   latestReleaseDate?: string;
   animeId: string;
   href: string;
+  source?: "otakudesu" | "samehadaku";
 }
 
 interface AnimeGenreContentProps {
   slug: string;
+  source?: "otakudesu" | "samehadaku";
 }
 
-export function AnimeGenreContent({ slug }: AnimeGenreContentProps) {
+export function AnimeGenreContent({
+  slug,
+  source = "otakudesu",
+}: AnimeGenreContentProps) {
   const router = useRouter();
   const [animeList, setAnimeList] = useState<AnimeListItem[]>([]);
   const [genreName, setGenreName] = useState<string>("");
@@ -40,24 +45,26 @@ export function AnimeGenreContent({ slug }: AnimeGenreContentProps) {
     genreName || slug.charAt(0).toUpperCase() + slug.slice(1);
 
   // === Load anime by genre ===
-    const loadData = useCallback(
+  const loadData = useCallback(
     async (pageNum: number) => {
       setLoading(true);
       setError(null);
 
       try {
-        const res = await fetch(`/api/anime/genre/${slug}?page=${pageNum}`);
+        const endpoint =
+          source === "samehadaku"
+            ? `/api/anime/samehadaku/genres/${slug}?page=${pageNum}`
+            : `/api/anime/genre/${slug}?page=${pageNum}`;
+        const res = await fetch(endpoint);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const json = await res.json();
 
-        const list = json?.data?.animeList || [];
+        // Tag each item with source for proper linking
+        const rawList = json?.data?.animeList || [];
+        const list = rawList.map((item: any) => ({ ...item, source }));
         setAnimeList(list);
 
-        // API tidak return pagination info, jadi pakai heuristic:
-        // - Page size API = 15 item per halaman
-        // - Kalau list >= 10 → kemungkinan ada page berikutnya
-        // - Kalau list < 10 → kemungkinan sudah halaman terakhir
-        // - Kalau list kosong → pasti halaman terakhir
+        // Heuristic pagination (page size ~15)
         setHasNextPage(list.length >= 10);
 
         // Kalau page > 1 dan list kosong, balik ke page sebelumnya
@@ -71,14 +78,14 @@ export function AnimeGenreContent({ slug }: AnimeGenreContentProps) {
         setLoading(false);
       }
     },
-    [slug]
+    [slug, source] // ← FIX: tambah source ke deps
   );
 
-  // === Initial load ===
+  // === Initial load + reload saat source/slug berubah ===
   useEffect(() => {
     setPage(1);
     loadData(1);
-  }, [loadData]);
+  }, [loadData, source, slug]);
 
   // === Pagination ===
   const handlePrevPage = () => {
