@@ -15,6 +15,44 @@ interface ComicReaderProps {
   chapterSlug: string;
 }
 
+// Component untuk load gambar dengan proxy + fallback ke direct URL
+function ProxyImage({ src, alt, loading }: { src: string; alt: string; loading?: "eager" | "lazy" }) {
+  const [imgSrc, setImgSrc] = useState(`/api/proxy-image?url=${encodeURIComponent(src)}`);
+  const [error, setError] = useState(false);
+
+  if (error) {
+    // Fallback: coba direct URL dengan referrerPolicy no-referrer
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={src}
+        alt={alt}
+        className="h-auto w-full"
+        loading={loading}
+        referrerPolicy="no-referrer"
+        onError={() => {
+          // Kalau direct URL juga gagal, tampilkan placeholder
+          console.error(`[Reader] Image failed: ${src}`);
+        }}
+      />
+    );
+  }
+
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={imgSrc}
+      alt={alt}
+      className="h-auto w-full"
+      loading={loading}
+      onError={() => {
+        // Kalau proxy gagal, coba direct URL
+        setError(true);
+      }}
+    />
+  );
+}
+
 export function ComicReader({ chapterSlug }: ComicReaderProps) {
   const router = useRouter();
   const [chapterData, setChapterData] = useState<any>(null);
@@ -63,15 +101,13 @@ export function ComicReader({ chapterSlug }: ComicReaderProps) {
         </div>
 
         {/* Reader: Vertical scroll, images stacked */}
-        {/* Using standard <img> tag with proxy to fully bypass hotlink protection */}
+        {/* ProxyImage: coba proxy dulu, kalau gagal fallback ke direct URL */}
         <div className="mx-auto max-w-3xl space-y-1">
           {images.map((imgUrl: string, idx: number) => (
             <div key={idx} className="relative w-full">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={`/api/proxy-image?url=${encodeURIComponent(imgUrl)}`}
+              <ProxyImage
+                src={imgUrl}
                 alt={`Page ${idx + 1}`}
-                className="h-auto w-full"
                 loading={idx < 2 ? "eager" : "lazy"}
               />
             </div>
