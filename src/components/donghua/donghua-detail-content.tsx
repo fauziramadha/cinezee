@@ -87,26 +87,26 @@ export function DonghuaDetailContent({ slug, source }: DonghuaDetailContentProps
   const watchBase = source === "s2" ? `/donghua/s2/watch` : `/donghua/s1/watch`;
   const genreBase = source === "s2" ? `/donghua/s2/genre` : `/donghua/s1/genre`;
 
-  // S1 returns episodes descending (Ep 148 first), S2 returns ascending (Ep 1 first)
-  const firstEpisode = source === "s1"
-    ? episodeList[episodeList.length - 1]
-    : episodeList[0];
-
-  // FIX: Extract ONLY the number from the episode string
-  // API can return: { episode: "148" } OR { episode: "Title Episode 148 Subtitle" }
+  // FIX: Extract ONLY the number from the episode string and parse to integer
+  // API can return: { episode: "04" } OR { episode: "Title Episode 4 Subtitle" }
+  // We need to handle "04" -> 4, "4" -> 4, "148" -> 148
   const getEpNum = (ep: any, idx: number): string => {
     const rawValue = ep.episode || ep.title || ep.episode_name || "";
     const match = String(rawValue).match(/\d+/);
-    if (match) return match[0];
+    if (match) return String(parseInt(match[0], 10));
     return String(idx + 1);
   };
 
-  // Sort episode list ascending by episode number
+  // Sort episode list ascending by parsed integer episode number
+  // This handles "04" vs "4" correctly (both become 4)
   const sortedEpisodes = [...episodeList].sort((a: any, b: any) => {
     const numA = parseInt((a.episode || a.title || "").match(/\d+/)?.[0] || "0", 10);
     const numB = parseInt((b.episode || b.title || "").match(/\d+/)?.[0] || "0", 10);
     return numA - numB;
   });
+
+  // After sorting, Episode 1 is always at index 0 for both servers
+  const firstEpisode = sortedEpisodes[0];
 
   return (
     <main className="min-h-screen bg-background overflow-hidden">
