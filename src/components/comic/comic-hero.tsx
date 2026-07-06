@@ -61,15 +61,15 @@ export function ComicHero({ comics }: ComicHeroProps) {
               <div key={slug || idx} className="relative min-w-0 flex-[0_0_100%]">
                 <div className="absolute inset-0">
                   {poster && (
+                   {poster && (
                     <Image
-                      src={poster}
+                      src={`/api/proxy-image?url=${encodeURIComponent(poster)}`}
                       alt={title}
                       fill
                       priority={idx === 0}
                       sizes="100vw"
                       className="object-cover"
                       unoptimized
-                      referrerPolicy="no-referrer"
                     />
                   )}
                 </div>
