@@ -15,13 +15,13 @@ interface ComicReaderProps {
   chapterSlug: string;
 }
 
-// Component untuk load gambar dengan proxy + fallback ke direct URL
+// ProxyImage: coba proxy dulu, kalau gagal fallback ke direct URL
 function ProxyImage({ src, alt, loading }: { src: string; alt: string; loading?: "eager" | "lazy" }) {
   const [imgSrc, setImgSrc] = useState(`/api/proxy-image?url=${encodeURIComponent(src)}`);
-  const [error, setError] = useState(false);
+  const [failed, setFailed] = useState(false);
 
-  if (error) {
-    // Fallback: coba direct URL dengan referrerPolicy no-referrer
+  if (failed) {
+    // Fallback: direct URL dengan referrerPolicy no-referrer
     return (
       // eslint-disable-next-line @next/next/no-img-element
       <img
@@ -30,10 +30,6 @@ function ProxyImage({ src, alt, loading }: { src: string; alt: string; loading?:
         className="h-auto w-full"
         loading={loading}
         referrerPolicy="no-referrer"
-        onError={() => {
-          // Kalau direct URL juga gagal, tampilkan placeholder
-          console.error(`[Reader] Image failed: ${src}`);
-        }}
       />
     );
   }
@@ -45,10 +41,7 @@ function ProxyImage({ src, alt, loading }: { src: string; alt: string; loading?:
       alt={alt}
       className="h-auto w-full"
       loading={loading}
-      onError={() => {
-        // Kalau proxy gagal, coba direct URL
-        setError(true);
-      }}
+      onError={() => setFailed(true)}
     />
   );
 }
@@ -100,21 +93,18 @@ export function ComicReader({ chapterSlug }: ComicReaderProps) {
           <p className="mt-1 text-sm text-muted-foreground">{chapterTitle}</p>
         </div>
 
-        {/* Reader: Vertical scroll, images stacked */}
-        {/* ProxyImage: coba proxy dulu, kalau gagal fallback ke direct URL */}
         <div className="mx-auto max-w-3xl space-y-1">
           {images.map((imgUrl: string, idx: number) => (
             <div key={idx} className="relative w-full">
               <ProxyImage
                 src={imgUrl}
                 alt={`Page ${idx + 1}`}
-                loading={idx < 2 ? "eager" : "lazy"}
+                loading={idx < 3 ? "eager" : "lazy"}
               />
             </div>
           ))}
         </div>
 
-        {/* Navigation Controls */}
         <div className="mt-8 flex items-center justify-between gap-3">
           <Button
             variant="outline"
