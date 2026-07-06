@@ -75,6 +75,7 @@ export function ComicReader({ chapterSlug }: ComicReaderProps) {
                 className="h-auto w-full"
                 unoptimized
                 priority={idx < 2}
+                referrerPolicy="no-referrer"
               />
             </div>
           ))}
