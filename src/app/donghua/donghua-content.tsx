@@ -22,6 +22,7 @@ interface DonghuaListItem {
   episode?: string;
   type?: string;
   source?: "s1" | "s2";
+  isEpisode?: boolean;
 }
 
 type Tab = "home" | "ongoing" | "completed" | "latest" | "popular" | "movie";
@@ -40,12 +41,13 @@ export function DonghuaContent() {
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(false);
 
-  const normalize = (list: any[], src: Source): DonghuaListItem[] => {
+  const normalize = (list: any[], src: Source, isEp: boolean = false): DonghuaListItem[] => {
     return list.map((item: any) => ({
       ...item,
       slug: (item.slug || "").replace(/\/$/, ""),
       title: item.title?.includes("\t") ? item.title.split("\t")[0] : item.title,
       source: src,
+      isEpisode: isEp,
     }));
   };
 
@@ -54,8 +56,9 @@ export function DonghuaContent() {
     setError(null);
     try {
       let endpoint = "";
+      // Fix: S1 home returns episodes, use ongoing for series list
       if (src === "s1") {
-        if (tab === "home") endpoint = `/api/donghua/donghua/home/${pageNum}`;
+        if (tab === "home") endpoint = `/api/donghua/donghua/ongoing/${pageNum}`;
         else if (tab === "ongoing") endpoint = `/api/donghua/donghua/ongoing/${pageNum}`;
         else if (tab === "completed") endpoint = `/api/donghua/donghua/completed/${pageNum}`;
         else if (tab === "latest") endpoint = `/api/donghua/donghua/latest/${pageNum}`;
@@ -70,16 +73,17 @@ export function DonghuaContent() {
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const json = await res.json();
 
+      // Latest tab returns episodes, mark them as isEpisode
+      const isEp = tab === "latest";
+
       if (src === "s1") {
-        // Server 1: flat response
-        const rawList = json?.latest_release || json?.ongoing || json?.completed || json?.latest || (Array.isArray(json) ? json : []);
-        const list = normalize(rawList, src);
+        // Fix: prioritize ongoing/completed (series) over latest_release (episodes)
+        const rawList = json?.ongoing || json?.completed || json?.latest_release || json?.latest || (Array.isArray(json) ? json : []);
+        const list = normalize(rawList, src, isEp);
         setItems(list);
         setHasMore(list.length >= 10);
       } else {
-        // Server 2: wrapped in data
         if (tab === "home") {
-          // Home has slider + popular
           const popular = normalize(json?.data?.popular || [], src);
           const slider = normalize(json?.data?.slider || [], src);
           setItems(popular);
@@ -87,7 +91,7 @@ export function DonghuaContent() {
           setHasMore(false);
         } else {
           const rawList = json?.data || (Array.isArray(json?.data) ? json.data : []);
-          const list = normalize(rawList, src);
+          const list = normalize(rawList, src, isEp);
           setItems(list);
           setHasMore(json?.pagination?.has_next ?? list.length >= 10);
         }
@@ -127,7 +131,7 @@ export function DonghuaContent() {
         const rawList = source === "s1"
           ? (json?.data || (Array.isArray(json) ? json : []))
           : (json?.data || (Array.isArray(json?.data) ? json.data : []));
-        const list = normalize(rawList, source);
+        const list = normalize(rawList, source, false);
         setSearchResults(list);
       } catch { setSearchResults([]); }
       finally { setSearching(false); }
@@ -139,7 +143,6 @@ export function DonghuaContent() {
   const handleRefresh = () => { setPage(1); loadData(source, activeTab, 1); };
   const showSearch = searchQuery.trim().length > 0;
 
-  // Tab list berdasarkan source
   const tabs: Tab[] = source === "s1"
     ? ["home", "ongoing", "completed", "latest"]
     : ["home", "latest", "popular", "movie"];
@@ -203,7 +206,7 @@ export function DonghuaContent() {
             )}
             {items.length > 0 && (
               <section>
-                <h2 className="mb-4 text-lg font-bold">{source === "s2" ? "🔥 Populer" : "🔥 Rilisan Terbaru"}</h2>
+                <h2 className="mb-4 text-lg font-bold">{source === "s2" ? "🔥 Populer" : "🔥 Sedang Tayang"}</h2>
                 <div className="grid grid-cols-3 gap-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7">
                   {items.slice(0, 14).map((d) => (<DonghuaCard key={d.slug} donghua={d} />))}
                 </div>
