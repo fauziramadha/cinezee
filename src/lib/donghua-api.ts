@@ -8,14 +8,14 @@ const CACHE_TTL = {
   ongoing: 30 * 60,
   completed: 30 * 60,
   latest: 30 * 60,
+  popular: 60 * 60,
+  movie: 60 * 60,
   detail: 6 * 60 * 60,
   episode: 60 * 60,
   search: 5 * 60,
   genres: 24 * 60 * 60,
   genreBrowse: 60 * 60,
   schedule: 60 * 60,
-  seasons: 24 * 60 * 60,
-  azList: 24 * 60 * 60,
 } as const;
 
 async function getD1(): Promise<D1Database> {
@@ -56,14 +56,14 @@ function getCacheTtl(endpoint: string): number {
   if (endpoint.includes("/ongoing")) return CACHE_TTL.ongoing;
   if (endpoint.includes("/completed")) return CACHE_TTL.completed;
   if (endpoint.includes("/latest")) return CACHE_TTL.latest;
+  if (endpoint.includes("/popular")) return CACHE_TTL.popular;
+  if (endpoint.includes("/movie")) return CACHE_TTL.movie;
   if (endpoint.includes("/detail/")) return CACHE_TTL.detail;
   if (endpoint.includes("/episode/")) return CACHE_TTL.episode;
   if (endpoint.includes("/search")) return CACHE_TTL.search;
   if (endpoint.includes("/genres") && !endpoint.includes("/genres/")) return CACHE_TTL.genres;
-  if (endpoint.includes("/genres/")) return CACHE_TTL.genreBrowse;
+  if (endpoint.includes("/genres/") || endpoint.includes("/genre/")) return CACHE_TTL.genreBrowse;
   if (endpoint.includes("/schedule")) return CACHE_TTL.schedule;
-  if (endpoint.includes("/seasons")) return CACHE_TTL.seasons;
-  if (endpoint.includes("/az-list")) return CACHE_TTL.azList;
   return 5 * 60;
 }
 
@@ -98,16 +98,34 @@ export async function fetchDonghuaAPI(endpoint: string, options: { forceRefresh?
   }
 }
 
-// === HIGH-LEVEL API ===
-export async function getHome(page = 1) { return fetchDonghuaAPI(`/anime/donghua/home/${page}`); }
-export async function getOngoing(page = 1) { return fetchDonghuaAPI(`/anime/donghua/ongoing/${page}`); }
-export async function getCompleted(page = 1) { return fetchDonghuaAPI(`/anime/donghua/completed/${page}`); }
-export async function getLatest(page = 1) { return fetchDonghuaAPI(`/anime/donghua/latest/${page}`); }
-export async function getDetail(slug: string) { return fetchDonghuaAPI(`/anime/donghua/detail/${slug}`); }
-export async function getEpisode(slug: string) { return fetchDonghuaAPI(`/anime/donghua/episode/${slug}`); }
-export async function searchDonghua(keyword: string, page = 1) { return fetchDonghuaAPI(`/anime/donghua/search/${encodeURIComponent(keyword)}/${page}`); }
-export async function getGenres() { return fetchDonghuaAPI(`/anime/donghua/genres`); }
-export async function getDonghuaByGenre(slug: string, page = 1) { return fetchDonghuaAPI(`/anime/donghua/genres/${slug}/${page}`); }
-export async function getSchedule() { return fetchDonghuaAPI(`/anime/donghua/schedule`); }
-export async function getSeasons(year?: string) { return fetchDonghuaAPI(`/anime/donghua/seasons${year ? `/${year}` : ""}`); }
-export async function getAzList(letter: string, page = 1) { return fetchDonghuaAPI(`/anime/donghua/az-list/${letter}/${page}`); }
+// ============================================================
+// SERVER 1 (🐉 Anichin) — /anime/donghua/...
+// ============================================================
+export const s1 = {
+  getHome: (page = 1) => fetchDonghuaAPI(`/anime/donghua/home/${page}`),
+  getOngoing: (page = 1) => fetchDonghuaAPI(`/anime/donghua/ongoing/${page}`),
+  getCompleted: (page = 1) => fetchDonghuaAPI(`/anime/donghua/completed/${page}`),
+  getLatest: (page = 1) => fetchDonghuaAPI(`/anime/donghua/latest/${page}`),
+  getDetail: (slug: string) => fetchDonghuaAPI(`/anime/donghua/detail/${slug}`),
+  getEpisode: (slug: string) => fetchDonghuaAPI(`/anime/donghua/episode/${slug}`),
+  search: (keyword: string, page = 1) => fetchDonghuaAPI(`/anime/donghua/search/${encodeURIComponent(keyword)}/${page}`),
+  getGenres: () => fetchDonghuaAPI(`/anime/donghua/genres`),
+  getByGenre: (slug: string, page = 1) => fetchDonghuaAPI(`/anime/donghua/genres/${slug}/${page}`),
+  getSchedule: () => fetchDonghuaAPI(`/anime/donghua/schedule`),
+};
+
+// ============================================================
+// SERVER 2 (🐼 Donghub) — /anime/donghub/...
+// ============================================================
+export const s2 = {
+  getHome: () => fetchDonghuaAPI(`/anime/donghub/home`),
+  getLatest: () => fetchDonghuaAPI(`/anime/donghub/latest`),
+  getPopular: () => fetchDonghuaAPI(`/anime/donghub/popular`),
+  getMovie: () => fetchDonghuaAPI(`/anime/donghub/movie`),
+  getDetail: (slug: string) => fetchDonghuaAPI(`/anime/donghub/detail/${slug}`),
+  getEpisode: (slug: string) => fetchDonghuaAPI(`/anime/donghub/episode/${slug}`),
+  search: (keyword: string, page = 1) => fetchDonghuaAPI(`/anime/donghub/search/${encodeURIComponent(keyword)}/${page}`),
+  getGenres: () => fetchDonghuaAPI(`/anime/donghub/genres`),
+  getByGenre: (slug: string, page = 1) => fetchDonghuaAPI(`/anime/donghub/genre/${slug}/${page}`),
+  getSchedule: () => fetchDonghuaAPI(`/anime/donghub/schedule`),
+};
