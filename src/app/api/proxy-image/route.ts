@@ -1,45 +1,38 @@
 import { NextRequest, NextResponse } from "next/server";
 
-export async function GET(req: NextRequest) {
-    const targetImageUrl = req.nextUrl.searchParams.get('url');
+export async function GET(request: NextRequest) {
+  const url = request.nextUrl.searchParams.get("url");
+  
+  if (!url) {
+    return new NextResponse("Missing url parameter", { status: 400 });
+  }
 
-    if (!targetImageUrl) {
-        return new NextResponse('Parameter "url" gambar wajib diisi', { status: 400 });
+  try {
+    const res = await fetch(url, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        "Referer": "https://komiku.org/",
+      },
+      // INI KUNCINYA: cf property membuat Cloudflare cache gambar di edge
+      // dan fetch melalui infrastructure Cloudflare, bukan langsung dari Worker
+      cf: { cacheTtl: 86400, cacheEverything: true } as any,
+    });
+
+    if (!res.ok) {
+      return new NextResponse("Failed to fetch image", { status: res.status });
     }
 
-    try {
-        // 1. Pecah URL gambar aslinya
-        const parsedUrl = new URL(targetImageUrl);
+    const contentType = res.headers.get("content-type") || "image/jpeg";
+    const arrayBuffer = await res.arrayBuffer();
 
-        // 2. Setup Header untuk bypass hotlink protection
-        const customHeaders: Record<string, string> = {
-            "Accept": "image/webp,image/apng,image/*,*/*;q=0.8",
-            "Referer": "https://komiku.org/",
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
-        };
-
-        // 3. Fetch langsung dari URL asli
-        const response = await fetch(targetImageUrl, {
-            headers: customHeaders
-        });
-
-        if (!response.ok) {
-            console.error(`[Proxy] Fetch failed: ${response.status} for ${targetImageUrl}`);
-            return new NextResponse(`Gagal mengambil gambar: ${response.statusText}`, { status: response.status });
-        }
-
-        // 4. Ambil data gambar
-        const buffer = await response.arrayBuffer();
-        const headers = new Headers();
-        headers.set('Content-Type', response.headers.get('Content-Type') || 'image/jpeg');
-        headers.set('Cache-Control', 'public, max-age=31536000, immutable');
-
-        return new NextResponse(buffer, {
-            status: 200,
-            headers: headers
-        });
-    } catch (error) {
-        console.error("[Proxy] Error:", error);
-        return new NextResponse('Internal Server Error', { status: 500 });
-    }
+    return new NextResponse(arrayBuffer, {
+      headers: {
+        "Content-Type": contentType,
+        "Cache-Control": "public, max-age=31536000, immutable",
+      },
+    });
+  } catch (error) {
+    console.error("[Proxy Image] Error:", error);
+    return new NextResponse("Internal Server Error", { status: 500 });
+  }
 }
