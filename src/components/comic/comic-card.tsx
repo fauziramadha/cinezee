@@ -21,7 +21,6 @@ interface ComicCardProps {
 
 export function ComicCard({ comic }: ComicCardProps) {
   const title = comic.title || "Untitled";
-  // Handle all possible poster field names: thumbnail, image, poster
   const poster = comic.thumbnail || comic.image || comic.poster || null;
   const slug = (comic.slug || "").replace(/\/$/, "");
   const type = comic.type || "Manga";
@@ -31,8 +30,9 @@ export function ComicCard({ comic }: ComicCardProps) {
   return (
     <Link
       href={detailHref}
-      // FIX: Added w-28 sm:w-32 md:w-36 so the card has a fixed width in horizontal scroll rows
-      className="group relative flex w-28 shrink-0 flex-col overflow-hidden rounded-lg bg-card text-left transition-all duration-300 hover:scale-105 hover:shadow-2xl hover:shadow-primary/20 hover:ring-2 hover:ring-primary/40 sm:w-32 md:w-36"
+      // FIX: Removed fixed width (w-28) so it works perfectly in Grid layouts (List & Search)
+      // It will take full width of its parent container
+      className="group relative flex w-full flex-col overflow-hidden rounded-lg bg-card text-left transition-all duration-300 hover:scale-105 hover:shadow-2xl hover:shadow-primary/20 hover:ring-2 hover:ring-primary/40"
     >
       <div className="relative aspect-[2/3] w-full overflow-hidden bg-muted">
         {poster ? (
@@ -40,7 +40,7 @@ export function ComicCard({ comic }: ComicCardProps) {
             src={poster} 
             alt={title} 
             fill 
-            sizes="(max-width: 640px) 112px, 144px" 
+            sizes="(max-width: 640px) 45vw, 200px" 
             className="object-cover transition-transform duration-300 group-hover:scale-110" 
             unoptimized 
             referrerPolicy="no-referrer"
