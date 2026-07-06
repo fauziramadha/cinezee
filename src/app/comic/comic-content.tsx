@@ -69,7 +69,8 @@ export function ComicContent() {
     setError(null);
     try {
       let endpoint = "";
-      if (tab === "home") endpoint = `/api/comic/homepage`;
+            // Homepage API only returns promotional APK, use "terbaru" for real comics
+      if (tab === "home") endpoint = `/api/comic/terbaru`;
       else if (tab === "terbaru") endpoint = `/api/comic/terbaru`;
       else if (tab === "populer") endpoint = `/api/comic/populer`;
       else if (tab === "trending") endpoint = `/api/comic/trending`;
