@@ -121,7 +121,28 @@ export async function getByType(type: string) { return fetchComicAPI(`/comic/typ
 export async function getRandom() { return fetchComicAPI(`/comic/random`); }
 export async function getRecommendations() { return fetchComicAPI(`/comic/recommendations`); }
 export async function getBerwarna(page = 1) { return fetchComicAPI(`/comic/berwarna/${page}`); }
+// Pustaka returns comics with "type" field (Manga/Manhwa/Manhua)
+// We use this to filter by type client-side
 export async function getPustaka(page = 1) { return fetchComicAPI(`/comic/pustaka/${page}`); }
+
+// Get comics by type using pustaka endpoint with client-side filtering
+// Fetches multiple pages to get enough comics of the specified type
+export async function getByTypeFiltered(type: string, maxPages = 3): Promise<any[]> {
+  const allComics: any[] = [];
+  for (let page = 1; page <= maxPages; page++) {
+    const data = await fetchComicAPI(`/comic/pustaka/${page}`);
+    const results = data?.results || [];
+    if (results.length === 0) break;
+    // Filter by type (case-insensitive)
+    const filtered = results.filter((item: any) => 
+      (item.type || "").toLowerCase() === type.toLowerCase()
+    );
+    allComics.push(...filtered);
+    // If we have enough comics, stop fetching
+    if (allComics.length >= 20) break;
+  }
+  return allComics;
+}
 export async function getBrowse(params?: { type?: string; order?: string; genre?: string }) {
   const query = new URLSearchParams();
   if (params?.type) query.set("type", params.type);
