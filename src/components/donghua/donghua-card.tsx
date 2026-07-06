@@ -12,18 +12,24 @@ interface DonghuaCardProps {
     slug?: string;
     status?: string;
     current_episode?: string;
+    episode?: string;
     type?: string;
+    source?: "s1" | "s2";
   };
 }
 
 export function DonghuaCard({ donghua }: DonghuaCardProps) {
-  const title = donghua.title || "Untitled";
+  // Clean title (Donghub sering punya duplikat title)
+  const rawTitle = donghua.title || "Untitled";
+  const title = rawTitle.includes("\t") ? rawTitle.split("\t")[0] : rawTitle;
+  
   const poster = donghua.poster || null;
   const status = donghua.status || "Unknown";
-  const slug = donghua.slug || "";
-  const currentEp = donghua.current_episode || "";
+  const slug = (donghua.slug || "").replace(/\/$/, "");
+  const currentEp = donghua.current_episode || donghua.episode || "";
+  const source = donghua.source || "s1";
 
-  const detailHref = `/donghua/s1/${slug}`;
+  const detailHref = source === "s2" ? `/donghua/s2/${slug}` : `/donghua/s1/${slug}`;
 
   return (
     <Link
@@ -37,7 +43,7 @@ export function DonghuaCard({ donghua }: DonghuaCardProps) {
           <div className="flex h-full items-center justify-center text-muted-foreground"><span className="text-xs">No Image</span></div>
         )}
         <div className="absolute left-1.5 top-1.5">
-          <span className={cn("rounded px-1.5 py-0.5 text-[9px] font-bold uppercase backdrop-blur-sm", status.toLowerCase().includes("ongoing") ? "bg-green-500/90 text-white" : "bg-blue-500/90 text-white")}>{status}</span>
+          <span className={cn("rounded px-1.5 py-0.5 text-[9px] font-bold uppercase backdrop-blur-sm", status.toLowerCase().includes("ongoing") ? "bg-green-500/90 text-white" : status.toLowerCase().includes("completed") || status.toLowerCase().includes("selesai") ? "bg-blue-500/90 text-white" : "bg-black/70 text-white")}>{status}</span>
         </div>
         {currentEp && (
           <div className="absolute right-1.5 top-1.5">
@@ -49,7 +55,9 @@ export function DonghuaCard({ donghua }: DonghuaCardProps) {
         </div>
       </div>
       <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/95 via-black/70 to-transparent p-2.5 pt-8">
-        <span className="mb-1 inline-block rounded bg-blue-500/90 px-1 py-0.5 text-[8px] font-bold uppercase tracking-wide text-white">Server 1</span>
+        <span className={cn("mb-1 inline-block rounded px-1 py-0.5 text-[8px] font-bold uppercase tracking-wide text-white", source === "s2" ? "bg-purple-500/90" : "bg-blue-500/90")}>
+          {source === "s2" ? "Server 2" : "Server 1"}
+        </span>
         <h3 className="line-clamp-2 text-xs font-semibold text-white sm:text-sm">{title}</h3>
       </div>
     </Link>
