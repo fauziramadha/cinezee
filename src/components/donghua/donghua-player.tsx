@@ -35,6 +35,7 @@ export function DonghuaPlayer({ animeId, episodeId, source }: DonghuaPlayerProps
   const [downloads, setDownloads] = useState<any[]>([]);
   const [prevEpSlug, setPrevEpSlug] = useState<string | null>(null);
   const [nextEpSlug, setNextEpSlug] = useState<string | null>(null);
+  const [seriesSlug, setSeriesSlug] = useState<string>(animeId);
   const playerRef = useRef<HTMLDivElement>(null);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -60,8 +61,19 @@ export function DonghuaPlayer({ animeId, episodeId, source }: DonghuaPlayerProps
           setDownloads(dlList);
         }
         // Normalize navigation: S1: navigation.previous_episode.slug / next_episode.slug, S2: data.navigation.prev_slug / next_slug
-        if (source === "s2") { setPrevEpSlug(raw.navigation?.prev_slug || null); setNextEpSlug(raw.navigation?.next_slug || null); }
-        else { setPrevEpSlug(raw.navigation?.previous_episode?.slug || null); setNextEpSlug(raw.navigation?.next_episode?.slug || null); }
+        if (source === "s2") {
+          setPrevEpSlug(raw.navigation?.prev_slug || null);
+          setNextEpSlug(raw.navigation?.next_slug || null);
+          // Extract series slug for back-to-detail link
+          if (raw.navigation?.all_slug) setSeriesSlug(raw.navigation.all_slug);
+          else if (raw.anime_info?.slug) setSeriesSlug(raw.anime_info.slug);
+        } else {
+          setPrevEpSlug(raw.navigation?.previous_episode?.slug || null);
+          setNextEpSlug(raw.navigation?.next_episode?.slug || null);
+          // Extract series slug for back-to-detail link
+          if (raw.navigation?.all_episodes?.slug) setSeriesSlug(raw.navigation.all_episodes.slug);
+          else if (raw.donghua_details?.slug) setSeriesSlug(raw.donghua_details.slug.replace(/\/$/, ""));
+        }
       })
       .catch((err) => setError(err instanceof Error ? err.message : "Failed to load"))
       .finally(() => setLoading(false));
@@ -76,8 +88,8 @@ export function DonghuaPlayer({ animeId, episodeId, source }: DonghuaPlayerProps
   const handleStreamChange = (idx: number) => { setSelectedStreamIdx(idx); setStreamUrl(streams[idx].url); setIframeLoading(true); setIframeError(false); setShowOpenInNewTab(false); };
   const switchServer = useCallback(() => { if (streams.length > 0) handleStreamChange((selectedStreamIdx + 1) % streams.length); }, [streams, selectedStreamIdx]);
   const toggleFullscreen = () => { if (!document.fullscreenElement) { playerRef.current?.requestFullscreen?.(); } else { document.exitFullscreen?.(); } };
-  const watchBase = source === "s2" ? `/donghua/s2/watch` : `/donghua/s1/watch`;
-  const detailHref = source === "s2" ? `/donghua/s2/${animeId}` : `/donghua/s1/${animeId}`;
+  const watchBase = source === "s2" ? `/donghua/s2/watch/${seriesSlug}` : `/donghua/s1/watch/${seriesSlug}`;
+  const detailHref = source === "s2" ? `/donghua/s2/${seriesSlug}` : `/donghua/s1/${seriesSlug}`;
   const title = source === "s2" ? episode?.title : episode?.episode;
 
   if (loading) return (<main className="min-h-screen bg-background"><Header /><div className="flex h-[60vh] items-center justify-center pt-20"><Loader2 className="h-10 w-10 animate-spin text-primary" /></div><Footer /><SearchModal /><DetailModal /><PlayerModal /><AuthModal /></main>);
@@ -98,8 +110,8 @@ export function DonghuaPlayer({ animeId, episodeId, source }: DonghuaPlayerProps
         </div>
         <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2">
-            <Button size="sm" variant="outline" onClick={() => prevEpSlug && router.push(`${watchBase}/${animeId}/${prevEpSlug}`)} disabled={!prevEpSlug} className="gap-1.5"><ChevronLeft className="h-4 w-4" />Prev</Button>
-            <Button size="sm" variant="outline" onClick={() => nextEpSlug && router.push(`${watchBase}/${animeId}/${nextEpSlug}`)} disabled={!nextEpSlug} className="gap-1.5">Next<ChevronRight className="h-4 w-4" /></Button>
+            <Button size="sm" variant="outline" onClick={() => prevEpSlug && router.push(`${watchBase}/${prevEpSlug}`)} disabled={!prevEpSlug} className="gap-1.5"><ChevronLeft className="h-4 w-4" />Prev</Button>
+            <Button size="sm" variant="outline" onClick={() => nextEpSlug && router.push(`${watchBase}/${nextEpSlug}`)} disabled={!nextEpSlug} className="gap-1.5">Next<ChevronRight className="h-4 w-4" /></Button>
           </div>
           {downloads.length > 0 && <Button size="sm" variant="outline" onClick={() => setShowDownload(!showDownload)} className="gap-1.5"><Download className="h-4 w-4" />Download</Button>}
         </div>
