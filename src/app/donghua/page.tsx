@@ -1,2 +1,2 @@
 import { DonghuaContent } from "./donghua-content";
-export default function DonghuaPage() { return <DhuaContent />; }
+export default function DonghuaPage() { return <DonghuaContent />; }
