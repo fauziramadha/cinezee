@@ -19,14 +19,19 @@ interface DonghuaListItem {
   slug?: string;
   status?: string;
   current_episode?: string;
+  episode?: string;
   type?: string;
+  source?: "s1" | "s2";
 }
 
-type Tab = "home" | "ongoing" | "completed" | "latest";
+type Tab = "home" | "ongoing" | "completed" | "latest" | "popular" | "movie";
+type Source = "s1" | "s2";
 
 export function DonghuaContent() {
+  const [source, setSource] = useState<Source>("s1");
   const [activeTab, setActiveTab] = useState<Tab>("home");
   const [items, setItems] = useState<DonghuaListItem[]>([]);
+  const [secondaryItems, setSecondaryItems] = useState<DonghuaListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
@@ -35,28 +40,58 @@ export function DonghuaContent() {
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(false);
 
-  const loadData = useCallback(async (tab: Tab, pageNum: number = 1) => {
+  const normalize = (list: any[], src: Source): DonghuaListItem[] => {
+    return list.map((item: any) => ({
+      ...item,
+      slug: (item.slug || "").replace(/\/$/, ""),
+      title: item.title?.includes("\t") ? item.title.split("\t")[0] : item.title,
+      source: src,
+    }));
+  };
+
+  const loadData = useCallback(async (src: Source, tab: Tab, pageNum: number = 1) => {
     setLoading(true);
     setError(null);
     try {
       let endpoint = "";
-      if (tab === "home") endpoint = `/api/donghua/home/${pageNum}`;
-      else if (tab === "ongoing") endpoint = `/api/donghua/ongoing/${pageNum}`;
-      else if (tab === "completed") endpoint = `/api/donghua/completed/${pageNum}`;
-      else if (tab === "latest") endpoint = `/api/donghua/latest/${pageNum}`;
+      if (src === "s1") {
+        if (tab === "home") endpoint = `/api/donghua/donghua/home/${pageNum}`;
+        else if (tab === "ongoing") endpoint = `/api/donghua/donghua/ongoing/${pageNum}`;
+        else if (tab === "completed") endpoint = `/api/donghua/donghua/completed/${pageNum}`;
+        else if (tab === "latest") endpoint = `/api/donghua/donghua/latest/${pageNum}`;
+      } else {
+        if (tab === "home") endpoint = `/api/donghua/donghub/home`;
+        else if (tab === "latest") endpoint = `/api/donghua/donghub/latest`;
+        else if (tab === "popular") endpoint = `/api/donghua/donghub/popular`;
+        else if (tab === "movie") endpoint = `/api/donghua/donghub/movie`;
+      }
 
       const res = await fetch(endpoint);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const json = await res.json();
 
-      // Donghua API returns array at root level (latest_release, or direct array)
-      const rawList = json?.latest_release || json?.ongoing || json?.completed || json?.latest || (Array.isArray(json) ? json : []);
-      const list = rawList.map((item: any) => ({ ...item, slug: item.slug?.replace(/\/$/, "") }));
-      
-      if (pageNum === 1) setItems(list);
-      else setItems((prev) => [...prev, ...list]);
-      
-      setHasMore(list.length >= 10);
+      if (src === "s1") {
+        // Server 1: flat response
+        const rawList = json?.latest_release || json?.ongoing || json?.completed || json?.latest || (Array.isArray(json) ? json : []);
+        const list = normalize(rawList, src);
+        setItems(list);
+        setHasMore(list.length >= 10);
+      } else {
+        // Server 2: wrapped in data
+        if (tab === "home") {
+          // Home has slider + popular
+          const popular = normalize(json?.data?.popular || [], src);
+          const slider = normalize(json?.data?.slider || [], src);
+          setItems(popular);
+          setSecondaryItems(slider);
+          setHasMore(false);
+        } else {
+          const rawList = json?.data || (Array.isArray(json?.data) ? json.data : []);
+          const list = normalize(rawList, src);
+          setItems(list);
+          setHasMore(json?.pagination?.has_next ?? list.length >= 10);
+        }
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load");
     } finally {
@@ -64,11 +99,18 @@ export function DonghuaContent() {
     }
   }, []);
 
-  useEffect(() => { loadData("home"); }, [loadData]);
+  useEffect(() => { loadData(source, "home"); }, [loadData, source]);
 
   useEffect(() => {
-    if (activeTab !== "home") { setPage(1); loadData(activeTab, 1); }
-  }, [activeTab, loadData]);
+    if (activeTab !== "home") { setPage(1); loadData(source, activeTab, 1); }
+  }, [activeTab, source, loadData]);
+
+  const handleSourceChange = (newSource: Source) => {
+    setSource(newSource);
+    setActiveTab("home");
+    setPage(1);
+    setSearchQuery("");
+  };
 
   // Search dengan debounce
   useEffect(() => {
@@ -76,21 +118,31 @@ export function DonghuaContent() {
     setSearching(true);
     const timer = setTimeout(async () => {
       try {
-        const res = await fetch(`/api/donghua/search/${encodeURIComponent(searchQuery.trim())}/1`);
+        const endpoint = source === "s1"
+          ? `/api/donghua/donghua/search/${encodeURIComponent(searchQuery.trim())}/1`
+          : `/api/donghua/donghub/search/${encodeURIComponent(searchQuery.trim())}/1`;
+        const res = await fetch(endpoint);
         if (!res.ok) throw new Error("Search failed");
         const json = await res.json();
-        const rawList = json?.results || json?.donghuaList || (Array.isArray(json) ? json : []);
-        const list = rawList.map((item: any) => ({ ...item, slug: item.slug?.replace(/\/$/, "") }));
+        const rawList = source === "s1"
+          ? (json?.data || (Array.isArray(json) ? json : []))
+          : (json?.data || (Array.isArray(json?.data) ? json.data : []));
+        const list = normalize(rawList, source);
         setSearchResults(list);
       } catch { setSearchResults([]); }
       finally { setSearching(false); }
     }, 500);
     return () => clearTimeout(timer);
-  }, [searchQuery]);
+  }, [searchQuery, source]);
 
-  const handleLoadMore = () => { const n = page + 1; setPage(n); loadData(activeTab, n); };
-  const handleRefresh = () => { setPage(1); loadData(activeTab, 1); };
+  const handleLoadMore = () => { const n = page + 1; setPage(n); loadData(source, activeTab, n); };
+  const handleRefresh = () => { setPage(1); loadData(source, activeTab, 1); };
   const showSearch = searchQuery.trim().length > 0;
+
+  // Tab list berdasarkan source
+  const tabs: Tab[] = source === "s1"
+    ? ["home", "ongoing", "completed", "latest"]
+    : ["home", "latest", "popular", "movie"];
 
   return (
     <main className="min-h-screen bg-background">
@@ -110,16 +162,17 @@ export function DonghuaContent() {
             <div className="mb-4 flex items-center gap-2">
               <span className="text-xs text-muted-foreground">Server:</span>
               <div className="flex gap-1 rounded-full bg-muted p-1">
-                <button className="rounded-full bg-blue-500 px-3 py-1 text-xs font-semibold text-white">Server 1</button>
+                <button onClick={() => handleSourceChange("s1")} className={cn("rounded-full px-3 py-1 text-xs font-semibold transition-all", source === "s1" ? "bg-blue-500 text-white" : "text-muted-foreground hover:text-foreground")}>Server 1</button>
+                <button onClick={() => handleSourceChange("s2")} className={cn("rounded-full px-3 py-1 text-xs font-semibold transition-all", source === "s2" ? "bg-purple-500 text-white" : "text-muted-foreground hover:text-foreground")}>Server 2</button>
               </div>
               <button onClick={handleRefresh} className="ml-auto shrink-0 rounded-full p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground" aria-label="Refresh">
                 <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} />
               </button>
             </div>
             <div className="mb-6 flex items-center gap-2 overflow-x-auto pb-2">
-              {(["home", "ongoing", "completed", "latest"] as Tab[]).map((tab) => (
+              {tabs.map((tab) => (
                 <button key={tab} onClick={() => setActiveTab(tab)} className={cn("shrink-0 rounded-full px-4 py-1.5 text-sm font-medium transition-colors", activeTab === tab ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:bg-muted/70")}>
-                  {tab === "home" && "Beranda"}{tab === "ongoing" && "Sedang Tayang"}{tab === "completed" && "Tamat"}{tab === "latest" && "Terbaru"}
+                  {tab === "home" && "Beranda"}{tab === "ongoing" && "Sedang Tayang"}{tab === "completed" && "Tamat"}{tab === "latest" && "Terbaru"}{tab === "popular" && "Populer"}{tab === "movie" && "Movie"}
                 </button>
               ))}
             </div>
@@ -140,9 +193,17 @@ export function DonghuaContent() {
         {!showSearch && activeTab === "home" && !loading && !error && (
           <>
             <div className="mb-6"><a href="/" className="inline-flex items-center gap-2 text-sm text-primary hover:text-primary/80"><ArrowLeft className="h-4 w-4" />Kembali ke Beranda</a></div>
+            {source === "s2" && secondaryItems.length > 0 && (
+              <section className="mb-8">
+                <h2 className="mb-4 text-lg font-bold">🔥 Featured</h2>
+                <div className="grid grid-cols-3 gap-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7">
+                  {secondaryItems.slice(0, 7).map((d) => (<DonghuaCard key={d.slug} donghua={d} />))}
+                </div>
+              </section>
+            )}
             {items.length > 0 && (
               <section>
-                <h2 className="mb-4 text-lg font-bold">🔥 Rilisan Terbaru</h2>
+                <h2 className="mb-4 text-lg font-bold">{source === "s2" ? "🔥 Populer" : "🔥 Rilisan Terbaru"}</h2>
                 <div className="grid grid-cols-3 gap-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7">
                   {items.slice(0, 14).map((d) => (<DonghuaCard key={d.slug} donghua={d} />))}
                 </div>
@@ -152,7 +213,9 @@ export function DonghuaContent() {
         )}
         {!showSearch && activeTab !== "home" && !loading && !error && (
           <section>
-            <h2 className="mb-4 text-lg font-bold">{activeTab === "ongoing" ? "Sedang Tayang" : activeTab === "completed" ? "Tamat" : "Terbaru"}</h2>
+            <h2 className="mb-4 text-lg font-bold">
+              {activeTab === "ongoing" ? "Sedang Tayang" : activeTab === "completed" ? "Tamat" : activeTab === "latest" ? "Terbaru" : activeTab === "popular" ? "Populer" : "Movie"}
+            </h2>
             <div className="grid grid-cols-3 gap-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7">
               {items.map((d) => (<DonghuaCard key={d.slug} donghua={d} />))}
             </div>
