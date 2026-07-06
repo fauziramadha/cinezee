@@ -21,7 +21,7 @@ interface ComicCardProps {
 
 export function ComicCard({ comic }: ComicCardProps) {
   const title = comic.title || "Untitled";
-  // Handle both "thumbnail" (search) and "image" (browse) fields
+  // Handle all possible poster field names: thumbnail, image, poster
   const poster = comic.thumbnail || comic.image || comic.poster || null;
   const slug = (comic.slug || "").replace(/\/$/, "");
   const type = comic.type || "Manga";
@@ -35,9 +35,18 @@ export function ComicCard({ comic }: ComicCardProps) {
     >
       <div className="relative aspect-[2/3] w-full overflow-hidden bg-muted">
         {poster ? (
-          <Image src={poster} alt={title} fill sizes="(max-width: 640px) 45vw, 200px" className="object-cover transition-transform duration-300 group-hover:scale-110" unoptimized />
+          <Image 
+            src={poster} 
+            alt={title} 
+            fill 
+            sizes="(max-width: 640px) 45vw, 200px" 
+            className="object-cover transition-transform duration-300 group-hover:scale-110" 
+            unoptimized 
+          />
         ) : (
-          <div className="flex h-full items-center justify-center text-muted-foreground"><span className="text-xs">No Image</span></div>
+          <div className="flex h-full items-center justify-center text-muted-foreground">
+            <span className="text-xs">No Image</span>
+          </div>
         )}
         <div className="absolute left-1.5 top-1.5">
           <span className={cn("rounded px-1.5 py-0.5 text-[9px] font-bold uppercase backdrop-blur-sm", type === "Manhwa" ? "bg-purple-500/90 text-white" : type === "Manhua" ? "bg-orange-500/90 text-white" : "bg-blue-500/90 text-white")}>{type}</span>
