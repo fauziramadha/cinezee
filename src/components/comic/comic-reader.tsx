@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { Header } from "@/components/cinepro/header";
 import { Footer } from "@/components/cinepro/footer";
@@ -64,17 +63,16 @@ export function ComicReader({ chapterSlug }: ComicReaderProps) {
         </div>
 
         {/* Reader: Vertical scroll, images stacked */}
+        {/* Using standard <img> tag to fully bypass hotlink protection with referrerPolicy */}
         <div className="mx-auto max-w-3xl space-y-1">
           {images.map((imgUrl: string, idx: number) => (
             <div key={idx} className="relative w-full">
-              <Image
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
                 src={imgUrl}
                 alt={`Page ${idx + 1}`}
-                width={800}
-                height={1200}
                 className="h-auto w-full"
-                unoptimized
-                priority={idx < 2}
+                loading={idx < 2 ? "eager" : "lazy"}
                 referrerPolicy="no-referrer"
               />
             </div>
