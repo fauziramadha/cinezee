@@ -82,10 +82,10 @@ export function ComicContent() {
 
       // Different endpoints use different field names for the array
       let rawList: any[] = [];
-      if (tab === "home") {
-        // Homepage: { popular: [], latest: [], ranking: [] }
-        rawList = json?.latest || json?.popular || json?.ranking || [];
-      } else if (tab === "terbaru" || tab === "populer") {
+      if (tab === "home" || tab === "terbaru" || tab === "populer") {
+        // terbaru/populer: { comics: [] }
+        rawList = json?.comics || json?.data || [];
+      } else if (tab === "trending") {
         // terbaru/populer: { comics: [] }
         rawList = json?.comics || json?.data || [];
       } else if (tab === "trending") {
