@@ -42,6 +42,7 @@ export function ComicCard({ comic }: ComicCardProps) {
             sizes="(max-width: 640px) 45vw, 200px" 
             className="object-cover transition-transform duration-300 group-hover:scale-110" 
             unoptimized 
+            referrerPolicy="no-referrer"
           />
         ) : (
           <div className="flex h-full items-center justify-center text-muted-foreground">
