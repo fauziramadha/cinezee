@@ -52,30 +52,24 @@ export function ComicListContent({ type }: ComicListContentProps) {
       let hasMore = false;
 
       if (type === "manga" || type === "manhwa" || type === "manhua") {
-        // Fetch 2 pages from pustaka to get ~20 items, then filter to get enough for 1 page (15 items)
-        const [res1, res2] = await Promise.all([
-          fetch(`/api/comic/pustaka/${pageNum * 2 - 1}`),
-          fetch(`/api/comic/pustaka/${pageNum * 2}`),
+        // FIX: Fetch 3 pages of pustaka per pagination page to get enough filtered items
+        const startPage = (pageNum - 1) * 3 + 1;
+        const responses = await Promise.all([
+          fetch(`/api/comic/pustaka/${startPage}`),
+          fetch(`/api/comic/pustaka/${startPage + 1}`),
+          fetch(`/api/comic/pustaka/${startPage + 2}`),
         ]);
 
-        const json1 = res1.ok ? await res1.json() : {};
-        const json2 = res2.ok ? await res2.json() : {};
-
-        const allResults = [
-          ...(json1?.results || []),
-          ...(json2?.results || []),
-        ];
+        const jsons = await Promise.all(responses.map(res => res.ok ? res.json() : {}));
+        const allResults = jsons.flatMap(json => json?.results || []);
 
         const filtered = allResults.filter(
           (item: any) => (item.type || "").toLowerCase() === type.toLowerCase()
         );
 
-        // Take top 15 for the current page
-        rawList = filtered.slice(0, 15);
-        
-        // Check if there are more items
-        const hasMorePustaka = json1?.pagination?.has_more || json2?.pagination?.has_more;
-        hasMore = hasMorePustaka || filtered.length > 15;
+        rawList = filtered;
+        // hasMore is true if any of the fetched pages indicate there are more pages
+        hasMore = jsons.some(json => json?.pagination?.has_more);
       } else {
         // Fetch from terbaru/populer/trending with pagination
         const res = await fetch(`/api/comic/${type}?page=${pageNum}`);
