@@ -9,17 +9,20 @@ interface ComicCardProps {
     title: string;
     slug?: string;
     thumbnail?: string;
+    image?: string;
     poster?: string;
     type?: string;
     genre?: string;
     status?: string;
+    chapter?: string;
     description?: string;
   };
 }
 
 export function ComicCard({ comic }: ComicCardProps) {
   const title = comic.title || "Untitled";
-  const poster = comic.thumbnail || comic.poster || null;
+  // Handle both "thumbnail" (search) and "image" (browse) fields
+  const poster = comic.thumbnail || comic.image || comic.poster || null;
   const slug = (comic.slug || "").replace(/\/$/, "");
   const type = comic.type || "Manga";
 
@@ -39,6 +42,11 @@ export function ComicCard({ comic }: ComicCardProps) {
         <div className="absolute left-1.5 top-1.5">
           <span className={cn("rounded px-1.5 py-0.5 text-[9px] font-bold uppercase backdrop-blur-sm", type === "Manhwa" ? "bg-purple-500/90 text-white" : type === "Manhua" ? "bg-orange-500/90 text-white" : "bg-blue-500/90 text-white")}>{type}</span>
         </div>
+        {comic.chapter && (
+          <div className="absolute right-1.5 top-1.5">
+            <span className="rounded bg-black/70 px-1.5 py-0.5 text-[9px] font-semibold text-white backdrop-blur-sm">{comic.chapter}</span>
+          </div>
+        )}
       </div>
       <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/95 via-black/70 to-transparent p-2.5 pt-8">
         <h3 className="line-clamp-2 text-xs font-semibold text-white sm:text-sm">{title}</h3>
