@@ -199,23 +199,29 @@ export function AnimePlayerContent({
     fetch(`/api/anime/animasu/detail/${animeId}`)
       .then((res) => res.json())
       .then((json) => {
-        const episodes = json?.detail?.episodes || json?.data?.detail?.episodes || json?.data?.episodes || [];
-        if (Array.isArray(episodes) && episodes.length > 0) {
-          setAnimasuEpisodes(episodes);
+        const rawEpisodes = json?.detail?.episodes || json?.data?.detail?.episodes || json?.data?.episodes || [];
+        if (Array.isArray(rawEpisodes) && rawEpisodes.length > 0) {
+          // Sortir episode dari terlama ke terbaru (ascending) berdasarkan nomor episode
+          // API Animasu default-nya descending (terbaru di atas), jadi harus disortir
+          const sortedEpisodes = [...rawEpisodes].sort((a, b) => {
+            const numA = parseInt((a.name || a.title || "").match(/\d+/)?.[0] || "0", 10);
+            const numB = parseInt((b.name || b.title || "").match(/\d+/)?.[0] || "0", 10);
+            return numA - numB;
+          });
+          setAnimasuEpisodes(sortedEpisodes);
 
-          // Cari index episode saat ini
-          const currentIdx = episodes.findIndex(
+          // Cari index episode saat ini di array yang sudah disortir
+          const currentIdx = sortedEpisodes.findIndex(
             (ep: any) => (ep.slug || ep.episodeId) === episodeId
           );
 
           if (currentIdx !== -1) {
             // Pakai state terpisah, TIDAK tergantung episode state
-            // (hindari race condition saat episode state masih null)
             const prevId = currentIdx > 0
-              ? (episodes[currentIdx - 1].slug || episodes[currentIdx - 1].episodeId)
+              ? (sortedEpisodes[currentIdx - 1].slug || sortedEpisodes[currentIdx - 1].episodeId)
               : null;
-            const nextId = currentIdx < episodes.length - 1
-              ? (episodes[currentIdx + 1].slug || episodes[currentIdx + 1].episodeId)
+            const nextId = currentIdx < sortedEpisodes.length - 1
+              ? (sortedEpisodes[currentIdx + 1].slug || sortedEpisodes[currentIdx + 1].episodeId)
               : null;
             setPrevEpisodeId(prevId);
             setNextEpisodeId(nextId);
