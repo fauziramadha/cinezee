@@ -126,6 +126,6 @@ export const s2 = {
   getEpisode: (slug: string) => fetchDonghuaAPI(`/anime/donghub/episode/${slug}`),
   search: (keyword: string, page = 1) => fetchDonghuaAPI(`/anime/donghub/search/${encodeURIComponent(keyword)}/${page}`),
   getGenres: () => fetchDonghuaAPI(`/anime/donghub/genres`),
-  getByGenre: (slug: string, page = 1) => fetchDonghuaAPI(`/anime/donghub/genre/${slug}/${page}`),
+  getByGenre: (slug: string, page = 1) => fetchDonghuaAPI(`/anime/donghub/list?genre=${slug}&page=${page}`),
   getSchedule: () => fetchDonghuaAPI(`/anime/donghub/schedule`),
 };
