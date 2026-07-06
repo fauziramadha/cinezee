@@ -61,7 +61,6 @@ export function ComicHero({ comics }: ComicHeroProps) {
               <div key={slug || idx} className="relative min-w-0 flex-[0_0_100%]">
                 <div className="absolute inset-0">
                   {poster && (
-                   {poster && (
                     <Image
                       src={`/api/proxy-image?url=${encodeURIComponent(poster)}`}
                       alt={title}
