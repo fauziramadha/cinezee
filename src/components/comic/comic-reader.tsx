@@ -8,41 +8,64 @@ import { SearchModal } from "@/components/cinepro/search-modal";
 import { DetailModal } from "@/components/cinepro/detail-modal";
 import { PlayerModal } from "@/components/cinepro/player-modal";
 import { AuthModal } from "@/components/cinepro/auth-modal";
-import { Loader2, AlertCircle, ArrowLeft, ChevronLeft, ChevronRight, List } from "lucide-react";
+import { Loader2, AlertCircle, ArrowLeft, ChevronLeft, ChevronRight, List, ImageOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 interface ComicReaderProps {
   chapterSlug: string;
 }
 
-// ProxyImage: coba proxy dulu, kalau gagal fallback ke direct URL
+// ProxyImage dengan multi-retry fallback
 function ProxyImage({ src, alt, loading }: { src: string; alt: string; loading?: "eager" | "lazy" }) {
-  const [imgSrc, setImgSrc] = useState(`/api/proxy-image?url=${encodeURIComponent(src)}`);
-  const [failed, setFailed] = useState(false);
+  // State: 0 = proxy, 1 = direct, 2 = proxy retry, 3 = failed
+  const [attempt, setAttempt] = useState(0);
+  const [loaded, setLoaded] = useState(false);
 
-  if (failed) {
-    // Fallback: direct URL dengan referrerPolicy no-referrer
+  const sources = [
+    `/api/proxy-image?url=${encodeURIComponent(src)}`,     // 0: Proxy
+    src,                                                     // 1: Direct URL
+    `/api/proxy-image?url=${encodeURIComponent(src)}&t=2`,  // 2: Proxy retry (cache bypass)
+  ];
+
+  if (attempt >= 3) {
+    // Semua cara gagal - tampilkan placeholder dengan tombol retry
     return (
-      // eslint-disable-next-line @next/next/no-img-element
-      <img
-        src={src}
-        alt={alt}
-        className="h-auto w-full"
-        loading={loading}
-        referrerPolicy="no-referrer"
-      />
+      <div className="flex h-48 w-full items-center justify-center bg-muted text-muted-foreground">
+        <div className="flex flex-col items-center gap-2">
+          <ImageOff className="h-8 w-8" />
+          <p className="text-xs">Gagal memuat gambar</p>
+          <button
+            onClick={() => { setAttempt(0); setLoaded(false); }}
+            className="text-xs text-primary hover:underline"
+          >
+            Coba lagi
+          </button>
+        </div>
+      </div>
     );
   }
 
   return (
-    // eslint-disable-next-line @next/next/no-img-element
-    <img
-      src={imgSrc}
-      alt={alt}
-      className="h-auto w-full"
-      loading={loading}
-      onError={() => setFailed(true)}
-    />
+    <div className="relative w-full bg-muted">
+      {!loaded && (
+        <div className="absolute inset-0 flex items-center justify-center">
+          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        </div>
+      )}
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={sources[attempt]}
+        alt={alt}
+        className={`h-auto w-full transition-opacity duration-300 ${loaded ? "opacity-100" : "opacity-0"}`}
+        loading={loading}
+        referrerPolicy={attempt === 1 ? "no-referrer" : undefined}
+        onLoad={() => setLoaded(true)}
+        onError={() => {
+          setLoaded(false);
+          setAttempt(prev => prev + 1);
+        }}
+      />
+    </div>
   );
 }
 
@@ -95,13 +118,12 @@ export function ComicReader({ chapterSlug }: ComicReaderProps) {
 
         <div className="mx-auto max-w-3xl space-y-1">
           {images.map((imgUrl: string, idx: number) => (
-            <div key={idx} className="relative w-full">
-              <ProxyImage
-                src={imgUrl}
-                alt={`Page ${idx + 1}`}
-                loading={idx < 3 ? "eager" : "lazy"}
-              />
-            </div>
+            <ProxyImage
+              key={idx}
+              src={imgUrl}
+              alt={`Page ${idx + 1}`}
+              loading={idx < 3 ? "eager" : "lazy"}
+            />
           ))}
         </div>
 
