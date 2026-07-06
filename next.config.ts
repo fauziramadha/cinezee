@@ -23,6 +23,7 @@ const nextConfig: NextConfig = {
       { protocol: "https", hostname: "donghub.vip" },
       // Komik (Komiku)
       { protocol: "https", hostname: "thumbnail.komiku.org" },
+      { protocol: "https", hostname: "img.komiku.org" },
       { protocol: "https", hostname: "img1.komiku.org" },
       { protocol: "https", hostname: "img2.komiku.org" },
       { protocol: "https", hostname: "img3.komiku.org" },
