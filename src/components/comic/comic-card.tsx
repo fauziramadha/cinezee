@@ -21,7 +21,9 @@ interface ComicCardProps {
 
 export function ComicCard({ comic }: ComicCardProps) {
   const title = comic.title || "Untitled";
-  const poster = comic.thumbnail || comic.image || comic.poster || null;
+  const rawPoster = comic.thumbnail || comic.image || comic.poster || null;
+  // FIX: Route all images through proxy to bypass hotlink protection
+  const poster = rawPoster ? `/api/proxy-image?url=${encodeURIComponent(rawPoster)}` : null;
   const slug = (comic.slug || "").replace(/\/$/, "");
   const type = comic.type || "Manga";
 
@@ -30,8 +32,6 @@ export function ComicCard({ comic }: ComicCardProps) {
   return (
     <Link
       href={detailHref}
-      // FIX: Removed fixed width (w-28) so it works perfectly in Grid layouts (List & Search)
-      // It will take full width of its parent container
       className="group relative flex w-full flex-col overflow-hidden rounded-lg bg-card text-left transition-all duration-300 hover:scale-105 hover:shadow-2xl hover:shadow-primary/20 hover:ring-2 hover:ring-primary/40"
     >
       <div className="relative aspect-[2/3] w-full overflow-hidden bg-muted">
@@ -43,7 +43,6 @@ export function ComicCard({ comic }: ComicCardProps) {
             sizes="(max-width: 640px) 45vw, 200px" 
             className="object-cover transition-transform duration-300 group-hover:scale-110" 
             unoptimized 
-            referrerPolicy="no-referrer"
           />
         ) : (
           <div className="flex h-full items-center justify-center text-muted-foreground">
