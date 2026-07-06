@@ -15,11 +15,11 @@ interface DonghuaCardProps {
     episode?: string;
     type?: string;
     source?: "s1" | "s2";
+    isEpisode?: boolean;
   };
 }
 
 export function DonghuaCard({ donghua }: DonghuaCardProps) {
-  // Clean title (Donghub sering punya duplikat title)
   const rawTitle = donghua.title || "Untitled";
   const title = rawTitle.includes("\t") ? rawTitle.split("\t")[0] : rawTitle;
   
@@ -28,8 +28,21 @@ export function DonghuaCard({ donghua }: DonghuaCardProps) {
   const slug = (donghua.slug || "").replace(/\/$/, "");
   const currentEp = donghua.current_episode || donghua.episode || "";
   const source = donghua.source || "s1";
+  const isEpisode = donghua.isEpisode || false;
 
-  const detailHref = source === "s2" ? `/donghua/s2/${slug}` : `/donghua/s1/${slug}`;
+  // If isEpisode (from Latest tab), link to watch page
+  // Otherwise link to detail page
+  let detailHref: string;
+  if (isEpisode) {
+    // Episode slug goes directly to watch page
+    // Use episode slug as both animeId and episodeId
+    // Player will extract series slug from navigation
+    detailHref = source === "s2"
+      ? `/donghua/s2/watch/${slug}/${slug}`
+      : `/donghua/s1/watch/${slug}/${slug}`;
+  } else {
+    detailHref = source === "s2" ? `/donghua/s2/${slug}` : `/donghua/s1/${slug}`;
+  }
 
   return (
     <Link
