@@ -27,7 +27,8 @@ interface ComicListItem {
   time_ago?: string;
 }
 
-type Tab = "home" | "terbaru" | "populer" | "trending" | "recommendations";
+// Added "manga", "manhwa", "manhua" to Tab type
+type Tab = "home" | "terbaru" | "populer" | "trending" | "manga" | "manhwa" | "manhua" | "recommendations";
 
 // Extract slug from link: "/manga/naruto/" → "naruto"
 function extractSlug(link: string): string {
@@ -72,14 +73,22 @@ export function ComicContent() {
       else if (tab === "populer") endpoint = `/api/comic/populer`;
       else if (tab === "trending") endpoint = `/api/comic/trending`;
       else if (tab === "recommendations") endpoint = `/api/comic/recommendations`;
+      else if (tab === "manga" || tab === "manhwa" || tab === "manhua") endpoint = `/api/comic/type/${tab}`;
 
       const res = await fetch(endpoint);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const json = await res.json();
 
       let rawList: any[] = [];
-      if (tab === "home" || tab === "terbaru" || tab === "populer") {
-        rawList = json?.comics || json?.data || [];
+      if (tab === "home" || tab === "terbaru" || tab === "populer" || tab === "manga" || tab === "manhwa" || tab === "manhua") {
+        // Handle response from type endpoint which might return array or object
+        if (Array.isArray(json)) rawList = json;
+        else if (json?.comics) rawList = json.comics;
+        else if (json?.data) rawList = json.data;
+        else {
+          // Fallback for weird structures like {'0': {...}}
+          rawList = Object.values(json).filter((v: any) => typeof v === 'object' && v?.title) as any[];
+        }
       } else if (tab === "trending") {
         rawList = json?.trending || json?.comics || json?.data || [];
       } else {
@@ -144,9 +153,16 @@ export function ComicContent() {
               </button>
             </div>
             <div className="mb-6 flex items-center gap-2 overflow-x-auto pb-2">
-              {(["home", "terbaru", "populer", "trending", "recommendations"] as Tab[]).map((tab) => (
+              {(["home", "terbaru", "populer", "trending", "manga", "manhwa", "manhua", "recommendations"] as Tab[]).map((tab) => (
                 <button key={tab} onClick={() => setActiveTab(tab)} className={cn("shrink-0 rounded-full px-4 py-1.5 text-sm font-medium transition-colors", activeTab === tab ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:bg-muted/70")}>
-                  {tab === "home" && "Beranda"}{tab === "terbaru" && "Terbaru"}{tab === "populer" && "Populer"}{tab === "trending" && "Trending"}{tab === "recommendations" && "Rekomendasi"}
+                  {tab === "home" && "Beranda"}
+                  {tab === "terbaru" && "Terbaru"}
+                  {tab === "populer" && "Populer"}
+                  {tab === "trending" && "Trending"}
+                  {tab === "manga" && "Manga"}
+                  {tab === "manhwa" && "Manhwa"}
+                  {tab === "manhua" && "Manhua"}
+                  {tab === "recommendations" && "Rekomendasi"}
                 </button>
               ))}
             </div>
@@ -179,7 +195,9 @@ export function ComicContent() {
         )}
         {!showSearch && activeTab !== "home" && !loading && !error && (
           <section>
-            <h2 className="mb-4 text-lg font-bold">{activeTab === "terbaru" ? "Terbaru" : activeTab === "populer" ? "Populer" : activeTab === "trending" ? "Trending" : "Rekomendasi"}</h2>
+            <h2 className="mb-4 text-lg font-bold">
+              {activeTab === "terbaru" ? "Terbaru" : activeTab === "populer" ? "Populer" : activeTab === "trending" ? "Trending" : activeTab === "manga" ? "Manga" : activeTab === "manhwa" ? "Manhwa" : activeTab === "manhua" ? "Manhua" : "Rekomendasi"}
+            </h2>
             <div className="grid grid-cols-3 gap-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7">
               {items.map((c) => (<ComicCard key={c.slug} comic={c} />))}
             </div>
