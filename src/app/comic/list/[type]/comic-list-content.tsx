@@ -52,22 +52,44 @@ export function ComicListContent({ type }: ComicListContentProps) {
       let hasMore = false;
 
       if (type === "manga" || type === "manhwa" || type === "manhua") {
-        // Fetch from pustaka and filter
-        const res = await fetch(`/api/comic/pustaka/${pageNum}`);
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const json = await res.json();
-        const results = json?.results || [];
-        rawList = results.filter((item: any) => (item.type || "").toLowerCase() === type.toLowerCase());
-        hasMore = json?.pagination?.has_more || results.length >= 10;
+        // Fetch 2 pages from pustaka to get ~20 items, then filter to get enough for 1 page (15 items)
+        const [res1, res2] = await Promise.all([
+          fetch(`/api/comic/pustaka/${pageNum * 2 - 1}`),
+          fetch(`/api/comic/pustaka/${pageNum * 2}`),
+        ]);
+
+        const json1 = res1.ok ? await res1.json() : {};
+        const json2 = res2.ok ? await res2.json() : {};
+
+        const allResults = [
+          ...(json1?.results || []),
+          ...(json2?.results || []),
+        ];
+
+        const filtered = allResults.filter(
+          (item: any) => (item.type || "").toLowerCase() === type.toLowerCase()
+        );
+
+        // Take top 15 for the current page
+        rawList = filtered.slice(0, 15);
+        
+        // Check if there are more items
+        const hasMorePustaka = json1?.pagination?.has_more || json2?.pagination?.has_more;
+        hasMore = hasMorePustaka || filtered.length > 15;
       } else {
-        // Fetch from terbaru/populer/trending
-        const res = await fetch(`/api/comic/${type}`);
+        // Fetch from terbaru/populer/trending with pagination
+        const res = await fetch(`/api/comic/${type}?page=${pageNum}`);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const json = await res.json();
-        if (type === "trending") rawList = json?.trending || [];
-        else rawList = json?.comics || [];
-        // These endpoints don't have pagination in API, so we simulate
-        hasMore = false; 
+
+        if (type === "trending") {
+          rawList = json?.trending || [];
+        } else {
+          rawList = json?.comics || [];
+        }
+
+        // Use API pagination info if available
+        hasMore = json?.pagination?.has_more ?? rawList.length >= 10;
       }
 
       const list = normalize(rawList);
@@ -141,17 +163,15 @@ export function ComicListContent({ type }: ComicListContentProps) {
               {items.map((c) => <ComicCard key={c.slug} comic={c} />)}
             </div>
 
-            {(type === "manga" || type === "manhwa" || type === "manhua") && (
-              <div className="mt-8 flex items-center justify-center gap-3">
-                <Button variant="outline" size="sm" onClick={handlePrevPage} disabled={page === 1 || loading} className="gap-1.5">
-                  <ChevronLeft className="h-4 w-4" />Prev
-                </Button>
-                <span className="px-3 text-sm font-medium text-muted-foreground">Halaman {page}</span>
-                <Button variant="outline" size="sm" onClick={handleNextPage} disabled={!hasNextPage || loading} className="gap-1.5">
-                  Next<ChevronRight className="h-4 w-4" />
-                </Button>
-              </div>
-            )}
+            <div className="mt-8 flex items-center justify-center gap-3">
+              <Button variant="outline" size="sm" onClick={handlePrevPage} disabled={page === 1 || loading} className="gap-1.5">
+                <ChevronLeft className="h-4 w-4" />Prev
+              </Button>
+              <span className="px-3 text-sm font-medium text-muted-foreground">Halaman {page}</span>
+              <Button variant="outline" size="sm" onClick={handleNextPage} disabled={!hasNextPage || loading} className="gap-1.5">
+                Next<ChevronRight className="h-4 w-4" />
+              </Button>
+            </div>
           </>
         )}
 
