@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState } from "react";
 import { Header } from "@/components/cinepro/header";
 import { Footer } from "@/components/cinepro/footer";
 import { SearchModal } from "@/components/cinepro/search-modal";
@@ -9,6 +9,7 @@ import { PlayerModal } from "@/components/cinepro/player-modal";
 import { AuthModal } from "@/components/cinepro/auth-modal";
 import { ComicHero } from "@/components/comic/comic-hero";
 import { ComicRow } from "@/components/comic/comic-row";
+import { ComicCard } from "@/components/comic/comic-card";
 import { Loader2, Search, ArrowLeft } from "lucide-react";
 import { Input } from "@/components/ui/input";
 
@@ -26,6 +27,7 @@ function normalize(list: any[]): any[] {
     slug: item.slug || extractSlug(item.link || item.href || item.url || item.detailUrl || ""),
     thumbnail: item.thumbnail || item.image || item.poster || null,
     image: item.image || item.thumbnail || item.poster || null,
+    poster: item.poster || item.thumbnail || item.image || null,
     type: item.type || "Manga",
     genre: item.genre || undefined,
     chapter: item.chapter || undefined,
@@ -41,42 +43,56 @@ export function ComicContent() {
   const [manhua, setManhua] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<any[]>([]);
+  const [searching, setSearching] = useState(false);
 
   useEffect(() => {
     const fetchAll = async () => {
       setLoading(true);
       try {
-        // Fetch basic endpoints
-        const [terbaruRes, populerRes, trendingRes] = await Promise.all([
-          fetch(`/api/comic/terbaru`),
-          fetch(`/api/comic/populer`),
-          fetch(`/api/comic/trending`),
-        ]);
+        // Fetch basic endpoints one by one (avoid Promise.all failure)
+        try {
+          const res = await fetch(`/api/comic/terbaru`);
+          if (res.ok) {
+            const json = await res.json();
+            setTerbaru(normalize(json?.comics || []));
+          }
+        } catch (e) { console.error("Failed to fetch terbaru:", e); }
 
-        const terbaruJson = await terbaruRes.json();
-        const populerJson = await populerRes.json();
-        const trendingJson = await trendingRes.json();
+        try {
+          const res = await fetch(`/api/comic/populer`);
+          if (res.ok) {
+            const json = await res.json();
+            setPopuler(normalize(json?.comics || []));
+          }
+        } catch (e) { console.error("Failed to fetch populer:", e); }
 
-        setTerbaru(normalize(terbaruJson?.comics || []));
-        setPopuler(normalize(populerJson?.comics || []));
-        setTrending(normalize(trendingJson?.trending || []));
+        try {
+          const res = await fetch(`/api/comic/trending`);
+          if (res.ok) {
+            const json = await res.json();
+            setTrending(normalize(json?.trending || []));
+          }
+        } catch (e) { console.error("Failed to fetch trending:", e); }
 
-        // Fetch pustaka for manga/manhwa/manhua (limit 2 pages for home preview)
-        const [pustaka1Res, pustaka2Res] = await Promise.all([
-          fetch(`/api/comic/pustaka/1`),
-          fetch(`/api/comic/pustaka/2`),
-        ]);
+        // Fetch pustaka for manga/manhwa/manhua
+        try {
+          const [pustaka1Res, pustaka2Res] = await Promise.all([
+            fetch(`/api/comic/pustaka/1`),
+            fetch(`/api/comic/pustaka/2`),
+          ]);
 
-        const pustaka1Json = await pustaka1Res.json();
-        const pustaka2Json = await pustaka2Res.json();
-        const allPustaka = [
-          ...(pustaka1Json?.results || []),
-          ...(pustaka2Json?.results || []),
-        ];
+          const pustaka1Json = pustaka1Res.ok ? await pustaka1Res.json() : {};
+          const pustaka2Json = pustaka2Res.ok ? await pustaka2Res.json() : {};
+          const allPustaka = [
+            ...(pustaka1Json?.results || []),
+            ...(pustaka2Json?.results || []),
+          ];
 
-        setManga(normalize(allPustaka.filter((item: any) => (item.type || "").toLowerCase() === "manga")));
-        setManhwa(normalize(allPustaka.filter((item: any) => (item.type || "").toLowerCase() === "manhwa")));
-        setManhua(normalize(allPustaka.filter((item: any) => (item.type || "").toLowerCase() === "manhua")));
+          setManga(normalize(allPustaka.filter((item: any) => (item.type || "").toLowerCase() === "manga")));
+          setManhwa(normalize(allPustaka.filter((item: any) => (item.type || "").toLowerCase() === "manhwa")));
+          setManhua(normalize(allPustaka.filter((item: any) => (item.type || "").toLowerCase() === "manhua")));
+        } catch (e) { console.error("Failed to fetch pustaka:", e); }
 
       } catch (err) {
         console.error("Failed to load comic home:", err);
@@ -87,10 +103,7 @@ export function ComicContent() {
     fetchAll();
   }, []);
 
-  const showSearch = searchQuery.trim().length > 0;
-  const [searchResults, setSearchResults] = useState<any[]>([]);
-  const [searching, setSearching] = useState(false);
-
+  // Search dengan debounce
   useEffect(() => {
     if (!searchQuery.trim()) { setSearchResults([]); return; }
     setSearching(true);
@@ -105,6 +118,8 @@ export function ComicContent() {
     }, 500);
     return () => clearTimeout(timer);
   }, [searchQuery]);
+
+  const showSearch = searchQuery.trim().length > 0;
 
   if (loading) {
     return (
@@ -133,10 +148,9 @@ export function ComicContent() {
               </a>
             </div>
 
-            <ComicRow title="🔥 Terbaru" comics={terbaru} href="/comic/list/terbaru" />
-            <ComicRow title="📈 Trending" comics={trending} href="/comic/list/trending" />
-            <ComicRow title="⭐ Populer" comics={populer} href="/comic/list/populer" />
-            
+            {terbaru.length > 0 && <ComicRow title="🔥 Terbaru" comics={terbaru} href="/comic/list/terbaru" />}
+            {trending.length > 0 && <ComicRow title="📈 Trending" comics={trending} href="/comic/list/trending" />}
+            {populer.length > 0 && <ComicRow title="⭐ Populer" comics={populer} href="/comic/list/populer" />}
             {manga.length > 0 && <ComicRow title="📖 Manga" comics={manga} href="/comic/list/manga" />}
             {manhwa.length > 0 && <ComicRow title="🇰🇷 Manhwa" comics={manhwa} href="/comic/list/manhwa" />}
             {manhua.length > 0 && <ComicRow title="🇨🇳 Manhua" comics={manhua} href="/comic/list/manhua" />}
@@ -175,6 +189,3 @@ export function ComicContent() {
     </main>
   );
 }
-
-// Import ComicCard di sini agar tersedia untuk search results
-import { ComicCard } from "@/components/comic/comic-card";
