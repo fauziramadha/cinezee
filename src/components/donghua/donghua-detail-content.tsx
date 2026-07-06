@@ -90,7 +90,12 @@ export function DonghuaDetailContent({ slug, source }: DonghuaDetailContentProps
   const genres = detail.genres || [];
   const watchBase = source === "s2" ? `/donghua/s2/watch` : `/donghua/s1/watch`;
   const genreBase = source === "s2" ? `/donghua/s2/genre` : `/donghua/s1/genre`;
-  const firstEpisode = episodeList[0];
+
+  // FIX: S1 returns episodes descending (Ep 148 first), S2 returns ascending (Ep 1 first)
+  // So for S1, take last item; for S2, take first item
+  const firstEpisode = source === "s1"
+    ? episodeList[episodeList.length - 1]
+    : episodeList[0];
 
   // Get episode number for display
   const getEpNum = (ep: any, idx: number): string => {
@@ -98,6 +103,13 @@ export function DonghuaDetailContent({ slug, source }: DonghuaDetailContentProps
     const match = (ep.title || ep.episode_name || "").match(/\d+/);
     return match ? match[0] : String(idx + 1);
   };
+
+  // FIX: Sort episode list ascending by episode number
+  const sortedEpisodes = [...episodeList].sort((a: any, b: any) => {
+    const numA = parseInt((a.episode || a.title || "").match(/\d+/)?.[0] || "0", 10);
+    const numB = parseInt((b.episode || b.title || "").match(/\d+/)?.[0] || "0", 10);
+    return numA - numB;
+  });
 
   return (
     <main className="min-h-screen bg-background">
@@ -135,13 +147,13 @@ export function DonghuaDetailContent({ slug, source }: DonghuaDetailContentProps
               <div className="mb-4"><h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Genre</h3><div className="flex flex-wrap gap-1.5">{genres.map((g: any, idx: number) => <Link key={g.slug || idx} href={`${genreBase}/${g.slug || g.name?.toLowerCase()}`}><Badge variant="outline" className="cursor-pointer hover:border-primary hover:text-primary">{g.name || g.title}</Badge></Link>)}</div></div>
             )}
             {synopsisText && (
-              <div className="mb-6"><h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Synopsis</h3><div className="space-y-2 text-sm leading-relaxed text-foreground/90">{synopsisText.split("\n").filter((p: string) => p.trim()).map((p: string, idx: number) => <p key={idx}>{p}</p>)}</div></div>
+              <div className="mb-6"><h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Synopsis</h3><div className="space-y-2 text-sm leading-relaxed text-foreground/90" style={{ wordBreak: "break-word", overflowWrap: "anywhere" }}>{synopsisText.split("\n").filter((p: string) => p.trim()).map((p: string, idx: number) => <p key={idx}>{p}</p>)}</div></div>
             )}
-            {episodeList.length > 0 && (
-              <div><h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Episode ({episodeList.length})</h3><div className="space-y-1.5">{[...episodeList].reverse().map((ep: any, idx: number) => {
-                const epNum = getEpNum(ep, episodeList.length - 1 - idx);
+            {sortedEpisodes.length > 0 && (
+              <div><h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Episode ({sortedEpisodes.length})</h3><div className="space-y-1.5">{sortedEpisodes.map((ep: any, idx: number) => {
+                const epNum = getEpNum(ep, idx);
                 const epSlug = ep.slug || ep.episodeId || "";
-                return <Link key={epSlug || idx} href={`${watchBase}/${slug}/${epSlug}`} className="flex items-center justify-between gap-2 rounded-lg border border-border bg-card p-3 transition-all hover:border-primary hover:bg-primary/5"><div className="flex min-w-0 flex-1 items-center gap-3"><div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary">{epNum}</div><div className="min-w-0 flex-1"><p className="truncate text-sm font-medium">Episode {epNum}</p>{ep.date && <p className="flex items-center gap-1 text-[10px] text-muted-foreground"><Calendar className="h-2.5 w-2.5" />{ep.date}</p>}</div></div><ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" /></Link>;
+                return <Link key={epSlug || idx} href={`${watchBase}/${slug}/${epSlug}`} className="flex items-center justify-between gap-2 rounded-lg border border-border bg-card p-3 transition-all hover:border-primary hover:bg-primary/5"><div className="flex min-w-0 flex-1 items-center gap-3"><div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary">{epNum}</div><div className="min-w-0 flex-1"><p className="truncate text-sm font-medium" style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>Episode {epNum}</p>{ep.date && <p className="flex items-center gap-1 text-[10px] text-muted-foreground" style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}><Calendar className="h-2.5 w-2.5 shrink-0" />{ep.date}</p>}</div></div><ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" /></Link>;
               })}</div></div>
             )}
           </div>
