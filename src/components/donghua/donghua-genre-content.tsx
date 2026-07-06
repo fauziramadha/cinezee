@@ -28,16 +28,15 @@ export function DonghuaGenreContent({ slug, source }: DonghuaGenreContentProps) 
   const loadData = useCallback(async (pageNum: number) => {
     setLoading(true); setError(null);
     try {
+      // S2 uses /list?genre= endpoint, S1 uses /genres/ endpoint
       const endpoint = source === "s2"
-        ? `/api/donghua/donghub/genre/${slug}/${pageNum}`
+        ? `/api/donghua/donghub/list?genre=${slug}&page=${pageNum}`
         : `/api/donghua/donghua/genres/${slug}/${pageNum}`;
       const res = await fetch(endpoint);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const json = await res.json();
-      // S1: flat or data array, S2: wrapped in data
-      const rawList = source === "s2"
-        ? (json?.data || (Array.isArray(json) ? json : []))
-        : (json?.data || json?.donghuaList || (Array.isArray(json) ? json : []));
+      // Both S1 and S2 wrap data in "data" array
+      const rawList = json?.data || (Array.isArray(json) ? json : []);
       const list = rawList.map((item: any) => ({ ...item, slug: (item.slug || "").replace(/\/$/, ""), source }));
       setItems(list);
       setHasNextPage(source === "s2" ? (json?.pagination?.has_next ?? list.length >= 10) : list.length >= 10);
