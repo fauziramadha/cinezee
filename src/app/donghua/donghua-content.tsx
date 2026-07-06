@@ -77,8 +77,16 @@ export function DonghuaContent() {
       const isEp = tab === "latest";
 
       if (src === "s1") {
-        // Fix: prioritize ongoing/completed (series) over latest_release (episodes)
-        const rawList = json?.ongoing || json?.completed || json?.latest_release || json?.latest || (Array.isArray(json) ? json : []);
+        // Fix: S1 field names are ongoing_donghua, completed_donghua
+        // (not just "ongoing" / "completed")
+        const rawList =
+          json?.ongoing_donghua ||
+          json?.completed_donghua ||
+          json?.ongoing ||
+          json?.completed ||
+          json?.latest_release ||
+          json?.latest ||
+          (Array.isArray(json) ? json : []);
         const list = normalize(rawList, src, isEp);
         setItems(list);
         setHasMore(list.length >= 10);
