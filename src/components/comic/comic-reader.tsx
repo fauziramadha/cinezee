@@ -63,17 +63,16 @@ export function ComicReader({ chapterSlug }: ComicReaderProps) {
         </div>
 
         {/* Reader: Vertical scroll, images stacked */}
-        {/* Using standard <img> tag to fully bypass hotlink protection with referrerPolicy */}
+        {/* Using standard <img> tag with proxy to fully bypass hotlink protection */}
         <div className="mx-auto max-w-3xl space-y-1">
           {images.map((imgUrl: string, idx: number) => (
             <div key={idx} className="relative w-full">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
-                src={imgUrl}
+                src={`/api/proxy-image?url=${encodeURIComponent(imgUrl)}`}
                 alt={`Page ${idx + 1}`}
                 className="h-auto w-full"
                 loading={idx < 2 ? "eager" : "lazy"}
-                referrerPolicy="no-referrer"
               />
             </div>
           ))}
