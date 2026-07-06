@@ -32,12 +32,9 @@ type Tab = "home" | "terbaru" | "populer" | "trending" | "recommendations";
 // Extract slug from link: "/manga/naruto/" → "naruto"
 function extractSlug(link: string): string {
   if (!link) return "";
-  // Remove protocol and domain if full URL
   let path = link.replace(/^https?:\/\/[^/]+/, "");
-  // Remove /manga/ or /detail-komik/ prefix
   path = path.replace(/^\/(manga|detail-komik)\//, "");
-  // Remove trailing slash
-  return path.replace(/\/$/, "").replace(/\/$/, "");
+  return path.replace(/\/$/, "");
 }
 
 export function ComicContent() {
@@ -55,6 +52,7 @@ export function ComicContent() {
       slug: item.slug || extractSlug(item.link || item.href || ""),
       thumbnail: item.thumbnail || item.image || item.poster || null,
       image: item.image || item.thumbnail || item.poster || null,
+      poster: item.poster || item.thumbnail || item.image || null,
       type: item.type || "Manga",
       genre: item.genre || undefined,
       status: item.status || undefined,
@@ -69,7 +67,6 @@ export function ComicContent() {
     setError(null);
     try {
       let endpoint = "";
-            // Homepage API only returns promotional APK, use "terbaru" for real comics
       if (tab === "home") endpoint = `/api/comic/terbaru`;
       else if (tab === "terbaru") endpoint = `/api/comic/terbaru`;
       else if (tab === "populer") endpoint = `/api/comic/populer`;
@@ -80,19 +77,12 @@ export function ComicContent() {
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const json = await res.json();
 
-      // Different endpoints use different field names for the array
       let rawList: any[] = [];
       if (tab === "home" || tab === "terbaru" || tab === "populer") {
-        // terbaru/populer: { comics: [] }
         rawList = json?.comics || json?.data || [];
       } else if (tab === "trending") {
-        // terbaru/populer: { comics: [] }
-        rawList = json?.comics || json?.data || [];
-      } else if (tab === "trending") {
-        // trending: { trending: [] }
         rawList = json?.trending || json?.comics || json?.data || [];
       } else {
-        // recommendations: could be any
         rawList = json?.data || json?.comics || json?.recommendations || [];
       }
 
@@ -122,7 +112,6 @@ export function ComicContent() {
         const res = await fetch(`/api/comic/search?q=${encodeURIComponent(searchQuery.trim())}`);
         if (!res.ok) throw new Error("Search failed");
         const json = await res.json();
-        // Search: { data: [...] }
         const rawList = json?.data || (Array.isArray(json) ? json : []);
         const list = normalize(rawList);
         setSearchResults(list);
