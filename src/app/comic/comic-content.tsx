@@ -17,14 +17,28 @@ interface ComicListItem {
   title: string;
   slug: string;
   thumbnail?: string;
+  image?: string;
   poster?: string;
   type?: string;
   genre?: string;
   status?: string;
+  chapter?: string;
   description?: string;
+  time_ago?: string;
 }
 
 type Tab = "home" | "terbaru" | "populer" | "trending" | "recommendations";
+
+// Extract slug from link: "/manga/naruto/" → "naruto"
+function extractSlug(link: string): string {
+  if (!link) return "";
+  // Remove protocol and domain if full URL
+  let path = link.replace(/^https?:\/\/[^/]+/, "");
+  // Remove /manga/ or /detail-komik/ prefix
+  path = path.replace(/^\/(manga|detail-komik)\//, "");
+  // Remove trailing slash
+  return path.replace(/\/$/, "").replace(/\/$/, "");
+}
 
 export function ComicContent() {
   const [activeTab, setActiveTab] = useState<Tab>("home");
@@ -34,6 +48,21 @@ export function ComicContent() {
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<ComicListItem[]>([]);
   const [searching, setSearching] = useState(false);
+
+  const normalize = (list: any[]): ComicListItem[] => {
+    return list.map((item: any) => ({
+      title: item.title || "Untitled",
+      slug: item.slug || extractSlug(item.link || item.href || ""),
+      thumbnail: item.thumbnail || item.image || item.poster || null,
+      image: item.image || item.thumbnail || item.poster || null,
+      type: item.type || "Manga",
+      genre: item.genre || undefined,
+      status: item.status || undefined,
+      chapter: item.chapter || undefined,
+      description: item.description || undefined,
+      time_ago: item.time_ago || undefined,
+    }));
+  };
 
   const loadData = useCallback(async (tab: Tab) => {
     setLoading(true);
@@ -50,18 +79,23 @@ export function ComicContent() {
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const json = await res.json();
 
-      // Response could be array or wrapped in data
+      // Different endpoints use different field names for the array
       let rawList: any[] = [];
       if (tab === "home") {
-        // Homepage might have multiple sections
-        rawList = json?.data?.latest || json?.data?.popular || json?.data?.terbaru || json?.data || (Array.isArray(json) ? json : []);
+        // Homepage: { popular: [], latest: [], ranking: [] }
+        rawList = json?.latest || json?.popular || json?.ranking || [];
+      } else if (tab === "terbaru" || tab === "populer") {
+        // terbaru/populer: { comics: [] }
+        rawList = json?.comics || json?.data || [];
+      } else if (tab === "trending") {
+        // trending: { trending: [] }
+        rawList = json?.trending || json?.comics || json?.data || [];
       } else {
-        rawList = json?.data || (Array.isArray(json) ? json : []);
+        // recommendations: could be any
+        rawList = json?.data || json?.comics || json?.recommendations || [];
       }
-      const list = rawList.map((item: any) => ({
-        ...item,
-        slug: (item.slug || "").replace(/\/$/, ""),
-      }));
+
+      const list = normalize(rawList);
       setItems(list);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load");
@@ -87,11 +121,9 @@ export function ComicContent() {
         const res = await fetch(`/api/comic/search?q=${encodeURIComponent(searchQuery.trim())}`);
         if (!res.ok) throw new Error("Search failed");
         const json = await res.json();
+        // Search: { data: [...] }
         const rawList = json?.data || (Array.isArray(json) ? json : []);
-        const list = rawList.map((item: any) => ({
-          ...item,
-          slug: (item.slug || "").replace(/\/$/, ""),
-        }));
+        const list = normalize(rawList);
         setSearchResults(list);
       } catch { setSearchResults([]); }
       finally { setSearching(false); }
