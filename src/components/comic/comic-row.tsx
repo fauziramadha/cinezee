@@ -8,7 +8,7 @@ import { ComicCard } from "@/components/comic/comic-card";
 interface ComicRowProps {
   title: string;
   comics: any[];
-  href: string; // URL untuk "Lihat lebih banyak"
+  href: string;
 }
 
 export function ComicRow({ title, comics, href }: ComicRowProps) {
@@ -62,8 +62,11 @@ export function ComicRow({ title, comics, href }: ComicRowProps) {
         className="content-row flex gap-3 overflow-x-auto scroll-smooth px-4 pb-2 sm:px-6 lg:px-8"
         style={{ scrollbarWidth: "none" }}
       >
+        {/* FIX: Wrap ComicCard in a div with fixed width for horizontal scrolling */}
         {comics.map((comic, idx) => (
-          <ComicCard key={comic.slug || idx} comic={comic} />
+          <div key={comic.slug || idx} className="w-28 shrink-0 sm:w-32 md:w-36">
+            <ComicCard comic={comic} />
+          </div>
         ))}
         <div className="w-1 shrink-0" />
       </div>
