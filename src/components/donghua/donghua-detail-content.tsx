@@ -33,8 +33,15 @@ export function DonghuaDetailContent({ slug, source }: DonghuaDetailContentProps
       ? `/api/donghua/donghub/detail/${slug}`
       : `/api/donghua/donghua/detail/${slug}`;
     fetch(endpoint)
-      .then((res) => { if (!res.ok) throw new Error(`HTTP ${res.status}`); return res.json(); })
+      .then((res) => { 
+        if (!res.ok) throw new Error(`HTTP ${res.status}`); 
+        return res.json(); 
+      })
       .then((json) => {
+        // Check if API returned error status
+        if (json?.status === "error" || json?.message?.includes("Error")) {
+          throw new Error(json?.message || "Donghua tidak ditemukan");
+        }
         // S1: flat at root, S2: wrapped in data
         const raw = source === "s2" ? json?.data : json;
         if (raw) {
