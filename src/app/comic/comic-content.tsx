@@ -27,15 +27,17 @@ interface ComicListItem {
   time_ago?: string;
 }
 
-// Added "manga", "manhwa", "manhua" to Tab type
 type Tab = "home" | "terbaru" | "populer" | "trending" | "manga" | "manhwa" | "manhua" | "recommendations";
 
-// Extract slug from link: "/manga/naruto/" → "naruto"
+// FIX: Extract slug from link/url/detailUrl: "/manga/naruto/" or "/detail-komik/naruto" → "naruto"
 function extractSlug(link: string): string {
   if (!link) return "";
   let path = link.replace(/^https?:\/\/[^/]+/, "");
-  path = path.replace(/^\/(manga|detail-komik)\//, "");
-  return path.replace(/\/$/, "");
+  // Remove various path prefixes
+  path = path.replace(/^\/(manga|detail-komik|baca-chapter)\//, "");
+  // Remove trailing slash and any sub-paths (like /1)
+  path = path.replace(/\/$/, "").split("/")[0];
+  return path;
 }
 
 export function ComicContent() {
@@ -50,7 +52,8 @@ export function ComicContent() {
   const normalize = (list: any[]): ComicListItem[] => {
     return list.map((item: any) => ({
       title: item.title || "Untitled",
-      slug: item.slug || extractSlug(item.link || item.href || ""),
+      // FIX: Check for url and detailUrl as well
+      slug: item.slug || extractSlug(item.link || item.href || item.url || item.detailUrl || ""),
       thumbnail: item.thumbnail || item.image || item.poster || null,
       image: item.image || item.thumbnail || item.poster || null,
       poster: item.poster || item.thumbnail || item.image || null,
@@ -67,9 +70,7 @@ export function ComicContent() {
     setLoading(true);
     setError(null);
     try {
-        // For manga/manhwa/manhua tabs, fetch from pustaka and filter client-side
       if (tab === "manga" || tab === "manhwa" || tab === "manhua") {
-        // Fetch multiple pages from pustaka to get enough comics of this type
         const allComics: any[] = [];
         for (let page = 1; page <= 4; page++) {
           const res = await fetch(`/api/comic/pustaka/${page}`);
@@ -77,12 +78,11 @@ export function ComicContent() {
           const json = await res.json();
           const results = json?.results || [];
           if (results.length === 0) break;
-          // Filter by type (case-insensitive)
           const filtered = results.filter((item: any) =>
             (item.type || "").toLowerCase() === tab.toLowerCase()
           );
           allComics.push(...filtered);
-          if (allComics.length >= 24) break; // Stop when we have enough
+          if (allComics.length >= 24) break;
         }
         const list = normalize(allComics);
         setItems(list);
@@ -126,7 +126,6 @@ export function ComicContent() {
 
   const handleRefresh = () => { loadData(activeTab); };
 
-  // Search dengan debounce
   useEffect(() => {
     if (!searchQuery.trim()) { setSearchResults([]); return; }
     setSearching(true);
