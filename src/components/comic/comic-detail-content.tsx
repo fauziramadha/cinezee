@@ -67,7 +67,7 @@ export function ComicDetailContent({ slug }: ComicDetailContentProps) {
     <main className="min-h-screen bg-background overflow-hidden">
       <Header />
       <div className="relative h-[40vh] min-h-[280px] w-full overflow-hidden bg-muted sm:h-[50vh]">
-        {poster && <Image src={poster} alt={title} fill sizes="100vw" className="object-cover opacity-30 blur-sm scale-110" unoptimized priority />}
+        {poster && <Image src={poster} alt={title} fill sizes="100vw" className="object-cover opacity-30 blur-sm scale-110" unoptimized priority referrerPolicy="no-referrer" />}
         <div className="absolute inset-0 bg-gradient-to-t from-background via-background/70 to-background/30" />
       </div>
       <div className="container mx-auto -mt-32 px-4 pb-12 sm:-mt-40">
@@ -75,7 +75,7 @@ export function ComicDetailContent({ slug }: ComicDetailContentProps) {
         
         <div className="flex flex-col gap-6 sm:flex-row sm:items-end">
           <div className="relative mx-auto aspect-[2/3] w-40 shrink-0 overflow-hidden rounded-lg bg-muted shadow-2xl sm:mx-0 sm:w-48 md:w-56">
-            {poster ? <Image src={poster} alt={title} fill sizes="(max-width: 640px) 160px, 224px" className="object-cover" unoptimized priority /> : <div className="flex h-full items-center justify-center text-muted-foreground"><BookOpen className="h-12 w-12" /></div>}
+            {poster ? <Image src={poster} alt={title} fill sizes="(max-width: 640px) 160px, 224px" className="object-cover" unoptimized priority referrerPolicy="no-referrer" /> : <div className="flex h-full items-center justify-center text-muted-foreground"><BookOpen className="h-12 w-12" /></div>}
           </div>
           <div className="flex-1 text-center sm:text-left min-w-0">
             <h1 className="text-2xl font-bold tracking-tight sm:text-3xl md:text-4xl break-words">{title}</h1>
