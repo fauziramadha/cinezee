@@ -82,9 +82,10 @@ export function DonghuaContent() {
         const rawList =
           json?.ongoing_donghua ||
           json?.completed_donghua ||
+          json?.latest_donghua ||
+          json?.latest_release ||
           json?.ongoing ||
           json?.completed ||
-          json?.latest_release ||
           json?.latest ||
           (Array.isArray(json) ? json : []);
         const list = normalize(rawList, src, isEp);
