@@ -5,7 +5,8 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   try {
     const { path } = await params;
     const searchParams = request.nextUrl.searchParams;
-    let endpoint = "/anime/donghua/" + path.join("/");
+    // Path: "donghua/..." (Server 1) atau "donghub/..." (Server 2)
+    let endpoint = "/anime/" + path.join("/");
     const queryString = searchParams.toString();
     if (queryString) endpoint += `?${queryString}`;
     const data = await fetchDonghuaAPI(endpoint);
