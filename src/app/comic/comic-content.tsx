@@ -67,28 +67,42 @@ export function ComicContent() {
     setLoading(true);
     setError(null);
     try {
+        // For manga/manhwa/manhua tabs, fetch from pustaka and filter client-side
+      if (tab === "manga" || tab === "manhwa" || tab === "manhua") {
+        // Fetch multiple pages from pustaka to get enough comics of this type
+        const allComics: any[] = [];
+        for (let page = 1; page <= 4; page++) {
+          const res = await fetch(`/api/comic/pustaka/${page}`);
+          if (!res.ok) break;
+          const json = await res.json();
+          const results = json?.results || [];
+          if (results.length === 0) break;
+          // Filter by type (case-insensitive)
+          const filtered = results.filter((item: any) =>
+            (item.type || "").toLowerCase() === tab.toLowerCase()
+          );
+          allComics.push(...filtered);
+          if (allComics.length >= 24) break; // Stop when we have enough
+        }
+        const list = normalize(allComics);
+        setItems(list);
+        return;
+      }
+
       let endpoint = "";
       if (tab === "home") endpoint = `/api/comic/terbaru`;
       else if (tab === "terbaru") endpoint = `/api/comic/terbaru`;
       else if (tab === "populer") endpoint = `/api/comic/populer`;
       else if (tab === "trending") endpoint = `/api/comic/trending`;
       else if (tab === "recommendations") endpoint = `/api/comic/recommendations`;
-      else if (tab === "manga" || tab === "manhwa" || tab === "manhua") endpoint = `/api/comic/type/${tab}`;
 
       const res = await fetch(endpoint);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const json = await res.json();
 
       let rawList: any[] = [];
-      if (tab === "home" || tab === "terbaru" || tab === "populer" || tab === "manga" || tab === "manhwa" || tab === "manhua") {
-        // Handle response from type endpoint which might return array or object
-        if (Array.isArray(json)) rawList = json;
-        else if (json?.comics) rawList = json.comics;
-        else if (json?.data) rawList = json.data;
-        else {
-          // Fallback for weird structures like {'0': {...}}
-          rawList = Object.values(json).filter((v: any) => typeof v === 'object' && v?.title) as any[];
-        }
+      if (tab === "home" || tab === "terbaru" || tab === "populer") {
+        rawList = json?.comics || json?.data || [];
       } else if (tab === "trending") {
         rawList = json?.trending || json?.comics || json?.data || [];
       } else {
