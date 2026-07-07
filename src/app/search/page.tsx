@@ -1,9 +1,9 @@
 import { Suspense } from "react";
 import { Loader2 } from "lucide-react";
 import { Header } from "@/components/cinepro/header";
-import { UniversalSearchContent } from "./search-content";
+import { SearchContent } from "./search-content";
 
-export default function UniversalSearchPage() {
+export default function SearchPage() {
   return (
     <Suspense
       fallback={
@@ -15,7 +15,7 @@ export default function UniversalSearchPage() {
         </main>
       }
     >
-      <UniversalSearchContent />
+      <SearchContent />
     </Suspense>
   );
 }
