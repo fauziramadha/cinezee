@@ -7,7 +7,12 @@ const API_BASE =
 // sankavollerei.web.id blocks requests that contain CF-Connecting-IP header
 // (which Cloudflare Workers auto-adds to all outgoing fetches).
 // Jina is hosted outside CF, so it can fetch the API without being blocked.
+//
+// Free tier without token: ~5-20 RPM (often returns 429)
+// Free tier with token (sign up at https://jina.ai/): 500 RPM
+// Set JINA_API_TOKEN env var in Cloudflare Workers to use the token
 const PROXY_PREFIX = "https://r.jina.ai/";
+const JINA_API_TOKEN = process.env.JINA_API_TOKEN || "";
 
 const CACHE_TTL = {
   home: 30 * 60,
@@ -78,6 +83,42 @@ function buildCacheKey(endpoint: string): string {
   return `donghua_${normalized}`;
 }
 
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+async function fetchWithRetry(
+  url: string,
+  options: RequestInit,
+  maxRetries = 3
+): Promise<Response> {
+  let lastError: Error | null = null;
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      const response = await fetch(url, options);
+      // Retry on 429 (rate limited) and 5xx (server error)
+      if (response.status === 429 || response.status >= 500) {
+        if (attempt < maxRetries) {
+          // Exponential backoff: 1s, 2s, 4s
+          const delay = Math.pow(2, attempt) * 1000;
+          console.warn(`[Donghua API] Got ${response.status}, retrying in ${delay}ms (attempt ${attempt + 1}/${maxRetries})`);
+          await sleep(delay);
+          continue;
+        }
+      }
+      return response;
+    } catch (err) {
+      lastError = err as Error;
+      if (attempt < maxRetries) {
+        const delay = Math.pow(2, attempt) * 1000;
+        console.warn(`[Donghua API] Fetch error, retrying in ${delay}ms:`, err);
+        await sleep(delay);
+        continue;
+      }
+      throw err;
+    }
+  }
+  throw lastError || new Error("Max retries exceeded");
+}
+
 export async function fetchDonghuaAPI(endpoint: string, options: { forceRefresh?: boolean } = {}): Promise<any> {
   const cacheKey = buildCacheKey(endpoint);
   const ttl = getCacheTtl(endpoint);
@@ -91,14 +132,18 @@ export async function fetchDonghuaAPI(endpoint: string, options: { forceRefresh?
   // Route through Jina Reader proxy to bypass Cloudflare Workers block
   const proxiedUrl = `${PROXY_PREFIX}${originalUrl}`;
 
+  const headers: Record<string, string> = {
+    // Jina returns structured JSON when Accept: application/json is set
+    Accept: "application/json",
+    "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1",
+  };
+  // If JINA_API_TOKEN is set, use it for higher rate limit (500 RPM free)
+  if (JINA_API_TOKEN) {
+    headers["Authorization"] = `Bearer ${JINA_API_TOKEN}`;
+  }
+
   try {
-    const response = await fetch(proxiedUrl, {
-      headers: {
-        // Jina returns structured JSON when Accept: application/json is set
-        Accept: "application/json",
-        "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1",
-      },
-    });
+    const response = await fetchWithRetry(proxiedUrl, { headers }, 3);
     if (!response.ok) throw new Error(`API responded with status ${response.status}`);
 
     const raw = await response.json();
