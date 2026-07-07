@@ -84,18 +84,16 @@ export function Header() {
 
         {/* === Right: Search + Auth + Mobile Menu === */}
         <div className="flex items-center gap-2">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setSearchOpen(true)}
-            className="gap-2 text-muted-foreground hover:text-foreground"
+          <a
+            href="/search"
+            className="flex items-center gap-2 rounded-md px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
           >
             <Search className="h-4 w-4" />
             <span className="hidden text-sm sm:inline">Search...</span>
             <kbd className="hidden rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground sm:inline">
               ⌘K
             </kbd>
-          </Button>
+          </a>
 
           {/* Message Bell */}
           {status === "authenticated" && session?.user && (
