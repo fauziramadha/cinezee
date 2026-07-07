@@ -14,6 +14,8 @@ import { Loader2, Search, ArrowLeft } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { s1 } from "@/lib/donghua-api";
 
+// Anichin API item shape (verified):
+// { title, slug, poster, status, type, current_episode, href, anichinUrl }
 function normalizeS1List(list: any[]): any[] {
   if (!Array.isArray(list)) return [];
   return list.map((item: any) => {
@@ -22,9 +24,9 @@ function normalizeS1List(list: any[]): any[] {
     const slug =
       item.slug ||
       (item.id || "").toString() ||
-      (item.link || item.url || "")
+      (item.link || item.url || item.href || "")
         .replace(/^https?:\/\/[^/]+/, "")
-        .replace(/^\/(anime|donghua|detail)\//, "")
+        .replace(/^\/(anime|donghua|detail|episode)\//, "")
         .replace(/\/$/, "")
         .split("/")[0] ||
       "";
@@ -67,12 +69,6 @@ function pickArray(obj: any, keys: string[]): any[] {
   return [];
 }
 
-function unwrapHomeResponse(res: any) {
-  if (!res) return null;
-  const inner = res.data && typeof res.data === "object" ? res.data : res;
-  return inner;
-}
-
 export function DonghuaS1Content() {
   const [hero, setHero] = useState<any[]>([]);
   const [latest, setLatest] = useState<any[]>([]);
@@ -87,87 +83,39 @@ export function DonghuaS1Content() {
     const fetchAll = async () => {
       setLoading(true);
       try {
+        // Home endpoint shape (verified):
+        // { status, creator, latest_release: [...20], completed_donghua: [...45] }
         const homeRes = await s1.getHome(1).catch((e) => {
           console.error("[Donghua s1] getHome error:", e);
           return null;
         });
 
-        const inner = unwrapHomeResponse(homeRes);
+        if (homeRes) {
+          const latestList = pickArray(homeRes, ["latest_release", "latest", "new_release"]);
+          const latestNormalized = normalizeS1List(latestList);
+          if (latestNormalized.length > 0) setLatest(latestNormalized);
+          if (latestNormalized.length > 0) setHero(latestNormalized.slice(0, 5));
 
-        if (inner) {
-          const heroCandidates = [
-            ...pickArray(inner, ["hero", "featured", "top", "carousel", "slider"]),
-            ...pickArray(inner, ["home", "list"]),
-          ];
-          const heroList =
-            heroCandidates.length > 0
-              ? heroCandidates
-              : pickArray(inner, ["latest", "ongoing", "completed"]);
-          setHero(normalizeS1List(heroList.slice(0, 8)));
-
-          const latestList = pickArray(inner, [
-            "latest",
-            "latest_release",
-            "new_release",
-            "recent",
-          ]);
-          if (latestList.length > 0) setLatest(normalizeS1List(latestList));
-
-          const ongoingList = pickArray(inner, [
-            "ongoing",
-            "on_going",
-            "ongoing_list",
-          ]);
-          if (ongoingList.length > 0) setOngoing(normalizeS1List(ongoingList));
-
-          const completedList = pickArray(inner, [
+          const completedList = pickArray(homeRes, [
+            "completed_donghua",
             "completed",
             "complete",
-            "completed_list",
           ]);
-          if (completedList.length > 0) setCompleted(normalizeS1List(completedList));
+          const completedNormalized = normalizeS1List(completedList);
+          if (completedNormalized.length > 0) setCompleted(completedNormalized);
         }
 
-        if (latest.length === 0) {
-          const latestRes = await s1.getLatest(1).catch(() => null);
-          const latestInner = unwrapHomeResponse(latestRes);
-          const latestList = pickArray(latestInner || latestRes || {}, [
-            "latest",
-            "data",
-            "items",
-            "results",
-            "list",
-          ]);
-          if (latestList.length > 0)
-            setLatest(normalizeS1List(latestList));
-        }
-
-        if (ongoing.length === 0) {
-          const ongoingRes = await s1.getOngoing(1).catch(() => null);
-          const ongoingInner = unwrapHomeResponse(ongoingRes);
-          const ongoingList = pickArray(ongoingInner || ongoingRes || {}, [
+        // Ongoing endpoint shape (verified):
+        // { status, creator, ongoing_donghua: [...20] }
+        const ongoingRes = await s1.getOngoing(1).catch(() => null);
+        if (ongoingRes) {
+          const ongoingList = pickArray(ongoingRes, [
+            "ongoing_donghua",
             "ongoing",
-            "data",
-            "items",
-            "results",
-            "list",
+            "on_going",
           ]);
-          if (ongoingList.length > 0)
-            setOngoing(normalizeS1List(ongoingList));
-        }
-
-        if (completed.length === 0) {
-          const completedRes = await s1.getCompleted(1).catch(() => null);
-          const completedInner = unwrapHomeResponse(completedRes);
-          const completedList = pickArray(completedInner || completedRes || {}, [
-            "completed",
-            "data",
-            "items",
-            "results",
-            "list",
-          ]);
-          if (completedList.length > 0)
-            setCompleted(normalizeS1List(completedList));
+          const ongoingNormalized = normalizeS1List(ongoingList);
+          if (ongoingNormalized.length > 0) setOngoing(ongoingNormalized);
         }
       } catch (err) {
         console.error("Failed to load donghua s1 home:", err);
@@ -176,9 +124,10 @@ export function DonghuaS1Content() {
       }
     };
     fetchAll();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Search endpoint shape (verified):
+  // { creator, data: [...10] }
   useEffect(() => {
     if (!searchQuery.trim()) {
       setSearchResults([]);
@@ -188,16 +137,12 @@ export function DonghuaS1Content() {
     const timer = setTimeout(async () => {
       try {
         const res = await s1.search(searchQuery.trim(), 1).catch(() => null);
-        const inner = unwrapHomeResponse(res);
-        const list = pickArray(inner || res || {}, [
-          "data",
-          "items",
-          "results",
-          "list",
-          "search",
-          "cards",
-        ]);
-        setSearchResults(normalizeS1List(list));
+        if (res) {
+          const list = pickArray(res, ["data", "items", "results", "list", "search"]);
+          setSearchResults(normalizeS1List(list));
+        } else {
+          setSearchResults([]);
+        }
       } catch {
         setSearchResults([]);
       } finally {
@@ -231,9 +176,7 @@ export function DonghuaS1Content() {
 
       {!showSearch ? (
         <>
-          {hero.length > 0 && (
-            <DonghuaHero donghuas={hero} source="s1" />
-          )}
+          {hero.length > 0 && <DonghuaHero donghuas={hero} source="s1" />}
 
           <div className="relative z-10 space-y-6 pb-16 pt-4 sm:space-y-8 sm:pt-6 md:-mt-16 md:space-y-10 md:pt-0 lg:-mt-24">
             <div className="px-4 sm:px-6 lg:px-8">
