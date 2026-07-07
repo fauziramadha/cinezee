@@ -16,11 +16,10 @@ function extractSlug(link: string): string {
   if (!link) return "";
   let path = link.replace(/^https?:\/\/[^/]+/, "");
   path = path.replace(/^\/(manga|detail-komik|baca-chapter)\//, "");
-  path = path.replace(/\/$/, "").split("/")[0];
-  return path;
+  return path.replace(/\/$/, "").split("/")[0];
 }
 
-function normalize(list: any[]): any[] {
+function normalizeSanka(list: any[]): any[] {
   return list.map((item: any) => ({
     title: item.title || "Untitled",
     slug: item.slug || extractSlug(item.link || item.href || item.url || item.detailUrl || ""),
@@ -29,6 +28,18 @@ function normalize(list: any[]): any[] {
     type: item.type || "Manga",
     genre: item.genre || undefined,
     chapter: item.chapter || undefined,
+  }));
+}
+
+function normalizeIndocast(list: any[]): any[] {
+  return list.map((item: any) => ({
+    title: item.title || "Untitled",
+    slug: item.slug || extractSlug(item.link || item.url || ""),
+    thumbnail: item.thumbnail || item.image || null,
+    image: item.thumbnail || item.image || null,
+    type: item.type || "Manga",
+    genre: item.genre || undefined,
+    chapter: item.latestChapter || item.chapter || undefined,
   }));
 }
 
@@ -52,26 +63,25 @@ export function ComicListContent({ type }: ComicListContentProps) {
       let hasMore = false;
 
       if (type === "manga" || type === "manhwa" || type === "manhua") {
-        // FIX: Fetch 3 pages of pustaka per pagination page to get enough filtered items
-        const startPage = (pageNum - 1) * 3 + 1;
-        const responses = await Promise.all([
-          fetch(`/api/comic/pustaka/${startPage}`),
-          fetch(`/api/comic/pustaka/${startPage + 1}`),
-          fetch(`/api/comic/pustaka/${startPage + 2}`),
-        ]);
-
-        const jsons = await Promise.all(responses.map(res => res.ok ? res.json() : {}));
-        const allResults = jsons.flatMap(json => json?.results || []);
-
-        const filtered = allResults.filter(
-          (item: any) => (item.type || "").toLowerCase() === type.toLowerCase()
-        );
-
-        rawList = filtered;
-        // hasMore is true if any of the fetched pages indicate there are more pages
-        hasMore = jsons.some(json => json?.pagination?.has_more);
+        // PAKAI API INDOCAST UNTUK MANGA/MANHWA/MANHUA
+        // Endpoint: /api/indocast/komiku/populer?page=1&orderby=modified&tipe=manga
+        const res = await fetch(`/api/indocast/komiku/populer?page=${pageNum}&orderby=modified&tipe=${type}`);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const json = await res.json();
+        
+        // Struktur Indocast: { success, items: [...] }
+        rawList = json?.items || [];
+        
+        // Karena kita tidak tahu pasti struktur pagination Indocast, 
+        // kita asumsikan ada halaman selanjutnya jika item >= 10
+        hasMore = rawList.length >= 10;
+        
+        const list = normalizeIndocast(rawList);
+        setItems(list);
+        setHasNextPage(hasMore);
+        return;
       } else {
-        // Fetch from terbaru/populer/trending with pagination
+        // PAKAI API SANKA UNTUK TERBARU/POPULER/TRENDING
         const res = await fetch(`/api/comic/${type}?page=${pageNum}`);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const json = await res.json();
@@ -82,13 +92,12 @@ export function ComicListContent({ type }: ComicListContentProps) {
           rawList = json?.comics || [];
         }
 
-        // Use API pagination info if available
         hasMore = json?.pagination?.has_more ?? rawList.length >= 10;
+        
+        const list = normalizeSanka(rawList);
+        setItems(list);
+        setHasNextPage(hasMore);
       }
-
-      const list = normalize(rawList);
-      setItems(list);
-      setHasNextPage(hasMore);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load");
     } finally {
