@@ -13,8 +13,6 @@ import { DonghuaCard } from "@/components/donghua/donghua-card";
 import { Loader2, Search, ArrowLeft } from "lucide-react";
 import { Input } from "@/components/ui/input";
 
-// Anichin API item shape (verified):
-// { title, slug, poster, status, type, current_episode, href, anichinUrl }
 function normalizeS1List(list: any[]): any[] {
   if (!Array.isArray(list)) return [];
   return list.map((item: any) => {
@@ -60,7 +58,6 @@ function normalizeS1List(list: any[]): any[] {
   });
 }
 
-// Defensive: pick first array found among keys
 function pickArray(obj: any, keys: string[]): any[] {
   if (!obj) return [];
   for (const k of keys) {
@@ -69,24 +66,16 @@ function pickArray(obj: any, keys: string[]): any[] {
   return [];
 }
 
-// Defensive: unwrap nested data wrappers (e.g. { data: {...} } or { status, data: {...} })
 function unwrap(res: any): any {
   if (!res) return null;
-  // Common shapes:
-  //   { status: "success", data: {...} }
-  //   { status: "Ok", data: [...] }  (search returns array in data)
-  //   { ...flat... }  (home returns flat)
-  if (res.data !== undefined) {
-    if (res.status === "error" || res.statusCode) return res; // error response, don't unwrap
-    return res.data;
-  }
+  if (res.status === "error" || res.statusCode) return res;
+  if (res.data !== undefined) return res.data;
   return res;
 }
 
-// Fetch helper with cache-busting to avoid stale 403 cache
 async function fetchJSON(url: string): Promise<any> {
   const res = await fetch(url, { cache: "no-store" });
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  if (!res.ok) throw new Error("HTTP " + res.status);
   return res.json();
 }
 
@@ -104,7 +93,6 @@ export function DonghuaS1Content() {
     const fetchAll = async () => {
       setLoading(true);
       try {
-        // Fetch all data via internal routes that already work
         const [homeRes, ongoingRes] = await Promise.all([
           fetchJSON("/api/anime/donghua/home").catch((e) => {
             console.error("[Donghua s1] home error:", e);
@@ -116,7 +104,6 @@ export function DonghuaS1Content() {
           }),
         ]);
 
-        // Home returns: { status, creator, latest_release: [...], completed_donghua: [...] }
         if (homeRes) {
           const homeInner = unwrap(homeRes);
           const latestList = pickArray(homeInner, [
@@ -137,7 +124,6 @@ export function DonghuaS1Content() {
           if (completedNormalized.length > 0) setCompleted(completedNormalized);
         }
 
-        // Ongoing returns: { status, creator, ongoing_donghua: [...] }
         if (ongoingRes) {
           const ongoingInner = unwrap(ongoingRes);
           const ongoingList = pickArray(ongoingInner, [
@@ -157,7 +143,6 @@ export function DonghuaS1Content() {
     fetchAll();
   }, []);
 
-  // Search via internal route
   useEffect(() => {
     if (!searchQuery.trim()) {
       setSearchResults([]);
@@ -166,21 +151,22 @@ export function DonghuaS1Content() {
     setSearching(true);
     const timer = setTimeout(async () => {
       try {
+        const keyword = encodeURIComponent(searchQuery.trim());
         const res = await fetchJSON(
-          `/api/anime/donghua/search/${encodeURIComponent(searchQuery.trim())}`
+          "/api/anime/donghua/search/" + keyword
         ).catch(() => null);
         if (res) {
-          // Search response shape: { creator, data: [...] }
           const inner = unwrap(res);
-          // data could be array directly, or have nested keys
-          const list = Array.isArray(inner) ? inner : pickArray(inner, [
-            "data",
-            "items",
-            "results",
-            "list",
-            "search",
-            "cards",
-          ]);
+          const list = Array.isArray(inner)
+            ? inner
+            : pickArray(inner, [
+                "data",
+                "items",
+                "results",
+                "list",
+                "search",
+                "cards",
+              ]);
           setSearchResults(normalizeS1List(list));
         } else {
           setSearchResults([]);
@@ -260,26 +246,27 @@ export function DonghuaS1Content() {
           <div className="mb-6">
             <h1 className="text-2xl font-bold sm:text-3xl">Donghua</h1>
             <p className="mt-1 text-sm text-muted-foreground">
-              Tonton donghua (anime China) gratis. Server 1 — Anichin.
+              Tonton donghua (anime China) gratis. Server 1 - Anichin.
             </p>
           </div>
+
           <div className="relative mb-6">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               type="text"
-              placeholder="Cari donghua... (misal: Soul Land, Battle Through the Heavens)"
+              placeholder="Cari donghua..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="pl-9"
             />
             {searching && (
               <Loader2 className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-muted-foreground" />
-            />
+            )}
           </div>
 
           <section className="mb-8">
             <h2 className="mb-4 text-lg font-bold">
-              Hasil pencarian: &quot;{searchQuery}&quot;
+              Hasil pencarian: {searchQuery}
             </h2>
             {searching ? (
               <div className="flex h-32 items-center justify-center">
@@ -288,7 +275,7 @@ export function DonghuaS1Content() {
             ) : searchResults.length > 0 ? (
               <div className="grid grid-cols-3 gap-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7">
                 {searchResults.map((d, idx) => (
-                  <div key={d.slug || idx} className="workAnime">
+                  <div key={d.slug || idx} className="w-full">
                     <DonghuaCard
                       donghua={{
                         title: d.title,
