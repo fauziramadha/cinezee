@@ -12,6 +12,7 @@ import { Loader2, Search, RefreshCw, ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+import { useAppStore } from "@/lib/store"; // <-- TAMBAHKAN IMPORT INI
 
 interface DonghuaListItem {
   title: string;
@@ -29,7 +30,10 @@ type Tab = "home" | "ongoing" | "completed" | "latest" | "popular" | "movie";
 type Source = "s1" | "s2";
 
 export function DonghuaContent() {
-  const [source, setSource] = useState<Source>("s1");
+  // FIX: Ambil state server dari global store (useAppStore)
+  const source = useAppStore((s) => s.donghuaServer);
+  const setSource = useAppStore((s) => s.setDonghuaServer);
+
   const [activeTab, setActiveTab] = useState<Tab>("home");
   const [items, setItems] = useState<DonghuaListItem[]>([]);
   const [secondaryItems, setSecondaryItems] = useState<DonghuaListItem[]>([]);
@@ -56,7 +60,6 @@ export function DonghuaContent() {
     setError(null);
     try {
       let endpoint = "";
-      // Fix: S1 home returns episodes, use ongoing for series list
       if (src === "s1") {
         if (tab === "home") endpoint = `/api/donghua/donghua/ongoing/${pageNum}`;
         else if (tab === "ongoing") endpoint = `/api/donghua/donghua/ongoing/${pageNum}`;
@@ -73,12 +76,9 @@ export function DonghuaContent() {
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const json = await res.json();
 
-      // Latest tab returns episodes, mark them as isEpisode
       const isEp = tab === "latest";
 
       if (src === "s1") {
-        // Fix: S1 field names are ongoing_donghua, completed_donghua
-        // (not just "ongoing" / "completed")
         const rawList =
           json?.ongoing_donghua ||
           json?.completed_donghua ||
@@ -119,7 +119,7 @@ export function DonghuaContent() {
   }, [activeTab, source, loadData]);
 
   const handleSourceChange = (newSource: Source) => {
-    setSource(newSource);
+    setSource(newSource); // Ini akan update global state
     setActiveTab("home");
     setPage(1);
     setSearchQuery("");
