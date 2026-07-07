@@ -5,7 +5,9 @@ export const dynamic = "force-dynamic";
 export default async function S1DetailPage({ params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params;
-    return <DonghuaDetailContent slug={id} source="s1" />;
+    // Strip any trailing slashes from slug (API sometimes returns "xxx/")
+    const cleanSlug = decodeURIComponent(id).replace(/\/+$/, "").trim();
+    return <DonghuaDetailContent slug={cleanSlug} source="s1" />;
   } catch (error) {
     console.error("[S1DetailPage] error:", error);
     return (
