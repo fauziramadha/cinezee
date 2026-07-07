@@ -1,360 +1,227 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
-import Image from "next/image";
-import { Search, ArrowLeft, Film, Tv, Loader2, Filter } from "lucide-react";
+import { Search, ArrowLeft, Loader2 } from "lucide-react";
 import { Header } from "@/components/cinepro/header";
 import { Footer } from "@/components/cinepro/footer";
-import { Button } from "@/components/ui/button";
-import { useAppStore, type SelectedMedia } from "@/lib/store";
-import { getImageUrl, type Movie } from "@/lib/tmdb";
-import { useTranslation } from "@/i18n/use-translation";
+import { MovieCard } from "@/components/cinepro/movie-card";
+import { AnimeCard } from "@/components/anime/anime-card";
+import { DonghuaCard } from "@/components/donghua/donghua-card";
+import { ComicCard } from "@/components/comic/comic-card";
+import { Input } from "@/components/ui/input";
+import { cn } from "@/lib/utils";
 
+// Import modal yang diperlukan agar bisa klik card film
 import { DetailModal } from "@/components/cinepro/detail-modal";
 import { PlayerModal } from "@/components/cinepro/player-modal";
-import { SearchModal } from "@/components/cinepro/search-modal";
 import { AuthModal } from "@/components/cinepro/auth-modal";
 
-interface NetworkInfo {
-  id: number;
-  name: string;
-  logo_path: string | null;
-}
+type Category = "all" | "movies" | "anime" | "donghua" | "comic";
 
 export function SearchContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { t } = useTranslation();
-  const setSelectedMedia = useAppStore((s) => s.setSelectedMedia);
+  const initialQuery = searchParams.get("q") || "";
+  const initialCategory = (searchParams.get("cat") as Category) || "all";
 
-  const [results, setResults] = useState<Movie[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [page, setPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
-  const [genres, setGenres] = useState<Record<number, string>>({});
-  const [networkInfo, setNetworkInfo] = useState<NetworkInfo | null>(null);
+  const [query, setQuery] = useState(initialQuery);
+  const [activeCategory, setActiveCategory] = useState<Category>(initialCategory);
+  const [results, setResults] = useState<{ type: string; data: any[] }[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [hasSearched, setHasSearched] = useState(false);
 
-  const query = searchParams.get("q") || "";
-  const type = (searchParams.get("type") as "movie" | "tv") || "movie";
-  const genreId = searchParams.get("genre");
-  const networkId = searchParams.get("network");
+  // Normalisasi slug untuk anime/donghua/komik
+  const normalizeAnime = (list: any[]) => list.map(item => ({ ...item, animeId: item.slug || item.animeId, source: "otakudesu" }));
+  const normalizeDonghua = (list: any[]) => list.map(item => ({ ...item, slug: (item.slug || "").replace(/\/$/, ""), source: "s1" }));
+  const normalizeComic = (list: any[]) => list.map(item => ({ ...item, slug: item.slug || (item.link || "").replace(/^\/(manga|detail-komik)\//, "").replace(/\/$/, "") }));
 
-  const isTextSearch = !!query;
-  const isGenreSearch = !!genreId;
-  const isNetworkSearch = !!networkId;
+  const performSearch = useCallback(async (q: string, cat: Category) => {
+    if (!q.trim()) {
+      setResults([]);
+      setHasSearched(false);
+      return;
+    }
+    setLoading(true);
+    setHasSearched(true);
 
-  useEffect(() => {
-    fetch("/api/genres")
-      .then((res) => res.json())
-      .then((data) => {
-        const genreMap: Record<number, string> = {};
-        if (data.movie) {
-          data.movie.forEach((g: any) => (genreMap[g.id] = g.name));
-        }
-        if (data.tv) {
-          data.tv.forEach((g: any) => (genreMap[g.id] = g.name));
-        }
-        setGenres(genreMap);
-      })
-      .catch(() => {});
+    const searchPromises = [];
+    const typesToSearch: Category[] = cat === "all" ? ["movies", "anime", "donghua", "comic"] : [cat];
+
+    if (typesToSearch.includes("movies")) {
+      searchPromises.push(
+        fetch(`/api/search?q=${encodeURIComponent(q)}`)
+          .then(res => res.json())
+          .then(json => ({ type: "movies", data: json.results || [] }))
+          .catch(() => ({ type: "movies", data: [] }))
+      );
+    }
+    if (typesToSearch.includes("anime")) {
+      searchPromises.push(
+        fetch(`/api/anime/search/${encodeURIComponent(q)}`)
+          .then(res => res.json())
+          .then(json => ({ type: "anime", data: normalizeAnime(json?.data?.animeList || []) }))
+          .catch(() => ({ type: "anime", data: [] }))
+      );
+    }
+    if (typesToSearch.includes("donghua")) {
+      searchPromises.push(
+        fetch(`/api/donghua/donghua/search/${encodeURIComponent(q)}/1`)
+          .then(res => res.json())
+          .then(json => ({ type: "donghua", data: normalizeDonghua(json?.data || []) }))
+          .catch(() => ({ type: "donghua", data: [] }))
+      );
+    }
+    if (typesToSearch.includes("comic")) {
+      searchPromises.push(
+        fetch(`/api/indocast/komiku/search?q=${encodeURIComponent(q)}`)
+          .then(res => res.json())
+          .then(json => ({ type: "comic", data: normalizeComic(json?.items || []) }))
+          .catch(() => ({ type: "comic", data: [] }))
+      );
+    }
+
+    const searchResults = await Promise.all(searchPromises);
+    setResults(searchResults.filter(r => r.data.length > 0));
+    setLoading(false);
   }, []);
 
   useEffect(() => {
-    if (!isNetworkSearch) {
-      setNetworkInfo(null);
-      return;
+    if (initialQuery) {
+      performSearch(initialQuery, initialCategory);
     }
+  }, [initialQuery, initialCategory, performSearch]);
 
-    fetch("/api/networks")
-      .then((res) => res.json())
-      .then((data) => {
-        const found = (data.networks || []).find(
-          (n: NetworkInfo) => n.id === parseInt(networkId!, 10)
-        );
-        setNetworkInfo(found || null);
-      })
-      .catch(() => setNetworkInfo(null));
-  }, [networkId, isNetworkSearch]);
-
-  useEffect(() => {
-    setLoading(true);
-    setError(null);
-
-    const fetchResults = async () => {
-      try {
-        let url = "";
-
-        if (isTextSearch) {
-          url = `/api/search?q=${encodeURIComponent(query)}&page=${page}`;
-        } else if (isNetworkSearch) {
-          url = `/api/discover?type=tv&network=${networkId}&page=${page}&sort=popularity.desc`;
-        } else if (isGenreSearch) {
-          const params = new URLSearchParams({
-            type,
-            genre: genreId!,
-            sort: "popularity.desc",
-            page: String(page),
-          });
-          url = `/api/discover?${params.toString()}`;
-        } else {
-          url = `/api/${type === "tv" ? "tv" : "movies"}/popular?page=${page}`;
-        }
-
-        const res = await fetch(url);
-        if (!res.ok) throw new Error("Failed to fetch results");
-        const data = await res.json();
-
-        setResults(data.results || []);
-        setTotalPages(Math.min(data.total_pages || 1, 10));
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Unknown error");
-        setResults([]);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchResults();
-  }, [query, type, genreId, networkId, page, isTextSearch, isGenreSearch, isNetworkSearch]);
-
-  useEffect(() => {
-    setPage(1);
-  }, [query, type, genreId, networkId]);
-
-  const handleMovieClick = (movie: Movie) => {
-    const mediaType: "movie" | "tv" =
-      movie.media_type || (movie.title ? "movie" : "tv");
-    const title = movie.title || movie.name || "Untitled";
-    const selected: SelectedMedia = {
-      id: movie.id,
-      type: mediaType,
-      title,
-      posterPath: movie.poster_path,
-      backdropPath: movie.backdrop_path,
-    };
-    setSelectedMedia(selected);
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setQuery(value);
+    const params = new URLSearchParams(window.location.search);
+    if (value.trim()) params.set("q", value);
+    else params.delete("q");
+    window.history.replaceState(null, "", `/search?${params.toString()}`);
   };
 
-  const getPageTitle = () => {
-    if (isTextSearch) return `"${query}"`;
-    if (isNetworkSearch) {
-      return networkInfo?.name || "Network";
-    }
-    if (isGenreSearch) {
-      const genreName = genres[parseInt(genreId!, 10)] || "Genre";
-      return `${genreName} ${type === "tv" ? "TV Shows" : "Movies"}`;
-    }
-    return t("popular_movies");
+  const handleCategoryChange = (cat: Category) => {
+    setActiveCategory(cat);
+    const params = new URLSearchParams(window.location.search);
+    if (cat !== "all") params.set("cat", cat);
+    else params.delete("cat");
+    window.history.replaceState(null, "", `/search?${params.toString()}`);
+    performSearch(query, cat);
   };
 
-  const handleBack = () => {
-    router.push("/");
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    performSearch(query, activeCategory);
   };
+
+  const categoryLabels: Record<Category, string> = {
+    all: "Semua",
+    movies: "Film & TV",
+    anime: "Anime",
+    donghua: "Donghua",
+    comic: "Komik",
+  };
+
+  const totalResults = results.reduce((sum, r) => sum + r.data.length, 0);
 
   return (
     <main className="min-h-screen bg-background">
       <Header />
+      <div className="container mx-auto px-4 py-8 pt-24">
+        <button onClick={() => router.push("/")} className="mb-4 flex items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground">
+          <ArrowLeft className="h-4 w-4" />
+          Kembali ke Beranda
+        </button>
 
-      {/* Header Section */}
-      <div className="border-b border-border bg-card/30 pt-20">
-        <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
-          <button
-            onClick={handleBack}
-            className="mb-4 flex items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            {t("back")}
-          </button>
-
-          <div className="flex flex-wrap items-center gap-3">
-            <h1 className="flex items-center gap-2 text-2xl font-bold tracking-tight sm:text-3xl">
-              <Search className="h-6 w-6 text-primary sm:h-7 sm:w-7" />
-              {getPageTitle()}
-            </h1>
-
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="flex items-center gap-1 rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary">
-                {type === "tv" ? <Tv className="h-3 w-3" /> : <Film className="h-3 w-3" />}
-                {type === "tv" ? "TV Shows" : "Movies"}
-              </span>
-
-              {isNetworkSearch && networkInfo && (
-                <span className="flex items-center gap-1.5 rounded-full bg-muted px-3 py-1 text-xs font-medium">
-                  {networkInfo.logo_path ? (
-                    <div className="relative h-3 w-8">
-                      <Image
-                        src={getImageUrl(networkInfo.logo_path, "w92")}
-                        alt={networkInfo.name}
-                        fill
-                        className="object-contain"
-                        unoptimized
-                        sizes="32px"
-                      />
-                    </div>
-                  ) : (
-                    <Tv className="h-3 w-3" />
-                  )}
-                  {networkInfo.name}
-                </span>
-              )}
-
-              {isGenreSearch && genres[parseInt(genreId!, 10)] && (
-                <span className="flex items-center gap-1 rounded-full bg-muted px-3 py-1 text-xs font-medium">
-                  <Filter className="h-3 w-3" />
-                  {genres[parseInt(genreId!, 10)]}
-                </span>
-              )}
-            </div>
-          </div>
-
-          {!loading && results.length > 0 && (
-            <p className="mt-2 text-sm text-muted-foreground">
-              {results.length} results {page > 1 && `· Page ${page}`}
-            </p>
-          )}
+        <div className="mb-6">
+          <h1 className="flex items-center gap-2 text-2xl font-bold sm:text-3xl">
+            <Search className="h-6 w-6 text-primary" />
+            Pencarian CineStream
+          </h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Cari film, anime, donghua, dan komik dalam satu tempat.
+          </p>
         </div>
-      </div>
 
-      {/* Results Grid */}
-      <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
-        {loading && (
-          <div className="flex h-96 items-center justify-center">
-            <div className="flex flex-col items-center gap-3">
-              <Loader2 className="h-8 w-8 animate-spin text-primary" />
-              <p className="text-sm text-muted-foreground">{t("loading")}</p>
-            </div>
+        {/* Search Form */}
+        <form onSubmit={handleSubmit} className="relative mb-6">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            type="text"
+            placeholder="Ketik judul... (misal: One Piece, Naruto, Avengers)"
+            value={query}
+            onChange={handleInputChange}
+            className="pl-9 h-12 text-base"
+            autoFocus
+          />
+        </form>
+
+        {/* Category Filter */}
+        <div className="mb-8 flex items-center gap-2 overflow-x-auto pb-2">
+          {(["all", "movies", "anime", "donghua", "comic"] as Category[]).map((cat) => (
+            <button
+              key={cat}
+              onClick={() => handleCategoryChange(cat)}
+              className={cn(
+                "shrink-0 rounded-full px-4 py-1.5 text-sm font-medium transition-colors",
+                activeCategory === cat
+                  ? "bg-primary text-primary-foreground"
+                  : "bg-muted text-muted-foreground hover:bg-muted/70"
+              )}
+            >
+              {categoryLabels[cat]}
+            </button>
+          ))}
+        </div>
+
+        {/* Results */}
+        {loading ? (
+          <div className="flex h-64 items-center justify-center">
+            <Loader2 className="h-8 w-8 animate-spin text-primary" />
           </div>
-        )}
-
-        {error && !loading && (
-          <div className="flex h-96 flex-col items-center justify-center gap-3 text-center">
-            <p className="text-sm text-destructive">{error}</p>
-            <Button variant="secondary" size="sm" onClick={() => window.location.reload()}>
-              {t("retry_button")}
-            </Button>
-          </div>
-        )}
-
-        {!loading && !error && results.length === 0 && (
-          <div className="flex h-96 flex-col items-center justify-center gap-3 text-center">
+        ) : hasSearched && totalResults === 0 ? (
+          <div className="flex h-64 flex-col items-center justify-center gap-3 text-center">
             <Search className="h-12 w-12 text-muted-foreground/50" />
             <div>
-              <p className="text-sm font-medium text-foreground">
-                {isTextSearch ? "No results found" : "No content available"}
-              </p>
+              <p className="text-sm font-medium">Tidak ada hasil ditemukan</p>
               <p className="mt-1 text-xs text-muted-foreground">
-                {isTextSearch
-                  ? `Try different keywords for "${query}"`
-                  : "Try selecting a different filter"}
+                Coba kata kunci lain atau periksa ejaan.
               </p>
             </div>
-            <Button variant="secondary" size="sm" onClick={handleBack} className="mt-2 gap-1.5">
-              <ArrowLeft className="h-3.5 w-3.5" />
-              {t("back")} to Home
-            </Button>
+          </div>
+        ) : (
+          <div className="space-y-8">
+            {results.map((result) => (
+              <section key={result.type}>
+                <h2 className="mb-4 text-lg font-bold capitalize">
+                  {categoryLabels[result.type as Category] || result.type}
+                  <span className="ml-2 text-sm font-normal text-muted-foreground">
+                    ({result.data.length} hasil)
+                  </span>
+                </h2>
+                <div className="grid grid-cols-3 gap-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7">
+                  {result.type === "movies" && result.data.map((item) => (
+                    <MovieCard key={`${item.id}-${item.media_type}`} movie={item} />
+                  ))}
+                  {result.type === "anime" && result.data.map((item) => (
+                    <AnimeCard key={item.animeId} anime={item} />
+                  ))}
+                  {result.type === "donghua" && result.data.map((item) => (
+                    <DonghuaCard key={item.slug} donghua={item} />
+                  ))}
+                  {result.type === "comic" && result.data.map((item) => (
+                    <ComicCard key={item.slug} comic={item} />
+                  ))}
+                </div>
+              </section>
+            ))}
           </div>
         )}
-
-        {!loading && !error && results.length > 0 && (
-          <>
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
-              {results.map((movie) => {
-                const title = movie.title || movie.name || "Untitled";
-                const year = (movie.release_date || movie.first_air_date || "").split("-")[0];
-                const mediaType: "movie" | "tv" =
-                  movie.media_type || (movie.title ? "movie" : "tv");
-                const rating = movie.vote_average?.toFixed(1) || "N/A";
-
-                return (
-                  <button
-                    key={`${movie.id}-${mediaType}`}
-                    onClick={() => handleMovieClick(movie)}
-                    className="group relative aspect-[2/3] overflow-hidden rounded-lg bg-card text-left transition-all hover:ring-2 hover:ring-primary"
-                  >
-                    {movie.poster_path ? (
-                      <Image
-                        src={getImageUrl(movie.poster_path, "w500")}
-                        alt={title}
-                        fill
-                        sizes="(max-width: 640px) 50vw, (max-width: 1024px) 25vw, 200px"
-                        className="object-cover transition-transform group-hover:scale-105"
-                        unoptimized
-                      />
-                    ) : (
-                      <div className="flex h-full items-center justify-center bg-muted">
-                        {mediaType === "tv" ? (
-                          <Tv className="h-8 w-8 text-muted-foreground" />
-                        ) : (
-                          <Film className="h-8 w-8 text-muted-foreground" />
-                        )}
-                      </div>
-                    )}
-
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent" />
-
-                    <div className="absolute left-2 top-2 flex items-center gap-1">
-                      <span className="rounded bg-primary/90 px-1 text-[8px] font-bold uppercase text-primary-foreground backdrop-blur-sm">
-                        {mediaType}
-                      </span>
-                    </div>
-
-                    <div className="absolute right-2 top-2">
-                      <span className="flex items-center gap-0.5 rounded bg-black/60 px-1 py-0.5 text-[8px] font-semibold text-yellow-400 backdrop-blur-sm">
-                        ★ {rating}
-                      </span>
-                    </div>
-
-                    <div className="absolute bottom-0 left-0 right-0 p-2">
-                      <h3 className="line-clamp-2 text-[11px] font-semibold text-white sm:text-xs">
-                        {title}
-                      </h3>
-                      {year && (
-                        <p className="mt-0.5 text-[9px] text-white/60">{year}</p>
-                      )}
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-
-            {totalPages > 1 && (
-              <div className="mt-8 flex items-center justify-center gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={page === 1}
-                  onClick={() => setPage(page - 1)}
-                  className="gap-1.5"
-                >
-                  <ArrowLeft className="h-3.5 w-3.5" />
-                  {t("previous")}
-                </Button>
-
-                <span className="px-3 text-sm text-muted-foreground">
-                  {page} / {totalPages}
-                </span>
-
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={page === totalPages}
-                  onClick={() => setPage(page + 1)}
-                  className="gap-1.5"
-                >
-                  {t("next")}
-                  <ArrowLeft className="h-3.5 w-3.5 rotate-180" />
-                </Button>
-              </div>
-            )}
-          </>
-        )}
       </div>
-
       <Footer />
-
-      <SearchModal />
+      
+      {/* Render modals agar MovieCard bisa diklik */}
       <DetailModal />
       <PlayerModal />
       <AuthModal />
