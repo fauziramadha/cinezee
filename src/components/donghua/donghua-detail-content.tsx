@@ -87,22 +87,49 @@ export function DonghuaDetailContent({ slug, source }: DonghuaDetailContentProps
   const watchBase = source === "s2" ? `/donghua/s2/watch` : `/donghua/s1/watch`;
   const genreBase = source === "s2" ? `/donghua/s2/genre` : `/donghua/s1/genre`;
 
-  // FIX: Extract ONLY the number from the episode string and parse to integer
-  // API can return: { episode: "04" } OR { episode: "Title Episode 4 Subtitle" }
-  // We need to handle "04" -> 4, "4" -> 4, "148" -> 148
+  // FIX: Extract episode number from string like:
+  // "Little Fairy Yao Episode 40 Tamat Subtitle Indonesia"
+  // We use 3 strategies in order: pattern "Episode N", slug "episode-N", fallback any number
   const getEpNum = (ep: any, idx: number): string => {
-    const rawValue = ep.episode || ep.title || ep.episode_name || "";
-    const match = String(rawValue).match(/\d+/);
-    if (match) return String(parseInt(match[0], 10));
+    const rawValue = String(ep.episode || ep.title || ep.episode_name || "");
+    const slugValue = String(ep.slug || "");
+
+    // Strategy 1: Match "Episode <number>" pattern (case insensitive)
+    const epMatch = rawValue.match(/episode\s+(\d+)/i);
+    if (epMatch) return String(parseInt(epMatch[1], 10));
+
+    // Strategy 2: Match "episode-<number>" in slug
+    const slugMatch = slugValue.match(/episode-(\d+)/i);
+    if (slugMatch) return String(parseInt(slugMatch[1], 10));
+
+    // Strategy 3: Any number in the string
+    const numMatch = rawValue.match(/\d+/);
+    if (numMatch) return String(parseInt(numMatch[0], 10));
+
+    // Last resort: index + 1
     return String(idx + 1);
   };
 
+  // Sort key: extract episode number for sorting (ascending)
+  const getSortKey = (ep: any): number => {
+    const rawValue = String(ep.episode || ep.title || "");
+    const slugValue = String(ep.slug || "");
+
+    const epMatch = rawValue.match(/episode\s+(\d+)/i);
+    if (epMatch) return parseInt(epMatch[1], 10);
+
+    const slugMatch = slugValue.match(/episode-(\d+)/i);
+    if (slugMatch) return parseInt(slugMatch[1], 10);
+
+    const numMatch = rawValue.match(/\d+/);
+    if (numMatch) return parseInt(numMatch[0], 10);
+
+    return 0;
+  };
+
   // Sort episode list ascending by parsed integer episode number
-  // This handles "04" vs "4" correctly (both become 4)
   const sortedEpisodes = [...episodeList].sort((a: any, b: any) => {
-    const numA = parseInt((a.episode || a.title || "").match(/\d+/)?.[0] || "0", 10);
-    const numB = parseInt((b.episode || b.title || "").match(/\d+/)?.[0] || "0", 10);
-    return numA - numB;
+    return getSortKey(a) - getSortKey(b);
   });
 
   // After sorting, Episode 1 is always at index 0 for both servers
