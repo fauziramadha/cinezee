@@ -58,6 +58,14 @@ function normalizeS1List(list: any[]): any[] {
   });
 }
 
+// Extract series slug from episode slug
+// e.g. "100-000-years-of-refining-qi-episode-355-subtitle-indonesia" → "100-000-years-of-refining-qi"
+function extractSeriesSlug(episodeSlug: string): string {
+  const match = episodeSlug.match(/^(.+)-episode-\d+-subtitle-indonesia$/);
+  if (match) return match[1];
+  return episodeSlug;
+}
+
 function pickArray(obj: any, keys: string[]): any[] {
   if (!obj) return [];
   for (const k of keys) {
@@ -111,7 +119,11 @@ export function DonghuaS1Content() {
             "latest",
             "new_release",
           ]);
-          const latestNormalized = normalizeS1List(latestList);
+          // Extract series slug from episode slug, so clicking goes to detail page
+          const latestNormalized = normalizeS1List(latestList).map((item) => ({
+            ...item,
+            slug: extractSeriesSlug(item.slug),
+          }));
           if (latestNormalized.length > 0) setLatest(latestNormalized);
           if (latestNormalized.length > 0) setHero(latestNormalized.slice(0, 5));
 
@@ -221,14 +233,15 @@ export function DonghuaS1Content() {
               <DonghuaRow
                 title="🔥 Episode Terbaru"
                 donghuas={latest}
+                href="/donghua/s1/list/latest"
                 source="s1"
-                isEpisode
               />
             )}
             {ongoing.length > 0 && (
               <DonghuaRow
                 title="▶️ Sedang Berjalan"
                 donghuas={ongoing}
+                href="/donghua/s1/list/ongoing"
                 source="s1"
               />
             )}
@@ -236,6 +249,7 @@ export function DonghuaS1Content() {
               <DonghuaRow
                 title="✅ Tamat"
                 donghuas={completed}
+                href="/donghua/s1/list/completed"
                 source="s1"
               />
             )}
