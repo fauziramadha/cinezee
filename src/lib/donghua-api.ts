@@ -3,6 +3,12 @@ import { getCloudflareContext } from "@opennextjs/cloudflare";
 const API_BASE =
   process.env.ANIME_API_BASE || "https://www.sankavollerei.web.id";
 
+// Jina Reader API acts as a proxy to bypass Cloudflare Workers block.
+// sankavollerei.web.id blocks requests that contain CF-Connecting-IP header
+// (which Cloudflare Workers auto-adds to all outgoing fetches).
+// Jina is hosted outside CF, so it can fetch the API without being blocked.
+const PROXY_PREFIX = "https://r.jina.ai/";
+
 const CACHE_TTL = {
   home: 30 * 60,
   ongoing: 30 * 60,
@@ -80,11 +86,35 @@ export async function fetchDonghuaAPI(endpoint: string, options: { forceRefresh?
     if (cached) { console.log(`[Donghua API] Cache HIT: ${endpoint}`); return cached; }
   }
   console.log(`[Donghua API] Cache MISS, fetching: ${endpoint}`);
-  const url = `${API_BASE}${endpoint.startsWith("/") ? "" : "/"}${endpoint}`;
+
+  const originalUrl = `${API_BASE}${endpoint.startsWith("/") ? "" : "/"}${endpoint}`;
+  // Route through Jina Reader proxy to bypass Cloudflare Workers block
+  const proxiedUrl = `${PROXY_PREFIX}${originalUrl}`;
+
   try {
-    const response = await fetch(url, { headers: { Accept: "application/json", "User-Agent": "CineStream/1.0" } });
+    const response = await fetch(proxiedUrl, {
+      headers: {
+        // Jina returns structured JSON when Accept: application/json is set
+        Accept: "application/json",
+        "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1",
+      },
+    });
     if (!response.ok) throw new Error(`API responded with status ${response.status}`);
-    const data = await response.json();
+
+    const raw = await response.json();
+
+    // Jina response shape: { code, status, data: { title, description, url, content } }
+    // `content` is the original JSON as a string — we need to parse it
+    let data: any = raw;
+    if (raw && typeof raw === "object" && raw.data && typeof raw.data.content === "string") {
+      try {
+        data = JSON.parse(raw.data.content);
+      } catch {
+        // If content isn't valid JSON, fall back to raw response
+        data = raw.data;
+      }
+    }
+
     if (ttl > 0) await setCached(cacheKey, endpoint, data, ttl);
     return data;
   } catch (error) {
