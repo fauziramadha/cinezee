@@ -18,7 +18,8 @@ function normalizeS1List(list: any[]): any[] {
   return list.map((item: any) => {
     const rawTitle = item.title || item.name || "Untitled";
     const title = rawTitle.includes("\t") ? rawTitle.split("\t")[0] : rawTitle;
-    const slug =
+    // Extract slug from multiple sources, then strip trailing slash
+    let slug =
       item.slug ||
       (item.id || "").toString() ||
       (item.link || item.url || item.href || "")
@@ -27,6 +28,8 @@ function normalizeS1List(list: any[]): any[] {
         .replace(/\/$/, "")
         .split("/")[0] ||
       "";
+    // CRITICAL: strip trailing slash from slug (API returns "xxx/")
+    slug = slug.toString().replace(/\/+$/, "").trim();
     const poster =
       item.poster ||
       item.thumbnail ||
@@ -48,7 +51,7 @@ function normalizeS1List(list: any[]): any[] {
       "";
     return {
       title,
-      slug: slug.toString().replace(/\/$/, ""),
+      slug,
       poster,
       status,
       current_episode: current_episode ? String(current_episode) : "",
