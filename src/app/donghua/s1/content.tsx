@@ -12,7 +12,6 @@ import { DonghuaRow } from "@/components/donghua/donghua-row";
 import { DonghuaCard } from "@/components/donghua/donghua-card";
 import { Loader2, Search, ArrowLeft } from "lucide-react";
 import { Input } from "@/components/ui/input";
-import { s1 } from "@/lib/donghua-api";
 
 // Anichin API item shape (verified):
 // { title, slug, poster, status, type, current_episode, href, anichinUrl }
@@ -61,12 +60,34 @@ function normalizeS1List(list: any[]): any[] {
   });
 }
 
+// Defensive: pick first array found among keys
 function pickArray(obj: any, keys: string[]): any[] {
   if (!obj) return [];
   for (const k of keys) {
     if (Array.isArray(obj[k])) return obj[k];
   }
   return [];
+}
+
+// Defensive: unwrap nested data wrappers (e.g. { data: {...} } or { status, data: {...} })
+function unwrap(res: any): any {
+  if (!res) return null;
+  // Common shapes:
+  //   { status: "success", data: {...} }
+  //   { status: "Ok", data: [...] }  (search returns array in data)
+  //   { ...flat... }  (home returns flat)
+  if (res.data !== undefined) {
+    if (res.status === "error" || res.statusCode) return res; // error response, don't unwrap
+    return res.data;
+  }
+  return res;
+}
+
+// Fetch helper with cache-busting to avoid stale 403 cache
+async function fetchJSON(url: string): Promise<any> {
+  const res = await fetch(url, { cache: "no-store" });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
 }
 
 export function DonghuaS1Content() {
@@ -83,20 +104,31 @@ export function DonghuaS1Content() {
     const fetchAll = async () => {
       setLoading(true);
       try {
-        // Home endpoint shape (verified):
-        // { status, creator, latest_release: [...20], completed_donghua: [...45] }
-        const homeRes = await s1.getHome(1).catch((e) => {
-          console.error("[Donghua s1] getHome error:", e);
-          return null;
-        });
+        // Fetch all data via internal routes that already work
+        const [homeRes, ongoingRes] = await Promise.all([
+          fetchJSON("/api/anime/donghua/home").catch((e) => {
+            console.error("[Donghua s1] home error:", e);
+            return null;
+          }),
+          fetchJSON("/api/anime/donghua/ongoing/1").catch((e) => {
+            console.error("[Donghua s1] ongoing error:", e);
+            return null;
+          }),
+        ]);
 
+        // Home returns: { status, creator, latest_release: [...], completed_donghua: [...] }
         if (homeRes) {
-          const latestList = pickArray(homeRes, ["latest_release", "latest", "new_release"]);
+          const homeInner = unwrap(homeRes);
+          const latestList = pickArray(homeInner, [
+            "latest_release",
+            "latest",
+            "new_release",
+          ]);
           const latestNormalized = normalizeS1List(latestList);
           if (latestNormalized.length > 0) setLatest(latestNormalized);
           if (latestNormalized.length > 0) setHero(latestNormalized.slice(0, 5));
 
-          const completedList = pickArray(homeRes, [
+          const completedList = pickArray(homeInner, [
             "completed_donghua",
             "completed",
             "complete",
@@ -105,11 +137,10 @@ export function DonghuaS1Content() {
           if (completedNormalized.length > 0) setCompleted(completedNormalized);
         }
 
-        // Ongoing endpoint shape (verified):
-        // { status, creator, ongoing_donghua: [...20] }
-        const ongoingRes = await s1.getOngoing(1).catch(() => null);
+        // Ongoing returns: { status, creator, ongoing_donghua: [...] }
         if (ongoingRes) {
-          const ongoingList = pickArray(ongoingRes, [
+          const ongoingInner = unwrap(ongoingRes);
+          const ongoingList = pickArray(ongoingInner, [
             "ongoing_donghua",
             "ongoing",
             "on_going",
@@ -126,8 +157,7 @@ export function DonghuaS1Content() {
     fetchAll();
   }, []);
 
-  // Search endpoint shape (verified):
-  // { creator, data: [...10] }
+  // Search via internal route
   useEffect(() => {
     if (!searchQuery.trim()) {
       setSearchResults([]);
@@ -136,9 +166,21 @@ export function DonghuaS1Content() {
     setSearching(true);
     const timer = setTimeout(async () => {
       try {
-        const res = await s1.search(searchQuery.trim(), 1).catch(() => null);
+        const res = await fetchJSON(
+          `/api/anime/donghua/search/${encodeURIComponent(searchQuery.trim())}`
+        ).catch(() => null);
         if (res) {
-          const list = pickArray(res, ["data", "items", "results", "list", "search"]);
+          // Search response shape: { creator, data: [...] }
+          const inner = unwrap(res);
+          // data could be array directly, or have nested keys
+          const list = Array.isArray(inner) ? inner : pickArray(inner, [
+            "data",
+            "items",
+            "results",
+            "list",
+            "search",
+            "cards",
+          ]);
           setSearchResults(normalizeS1List(list));
         } else {
           setSearchResults([]);
@@ -232,7 +274,7 @@ export function DonghuaS1Content() {
             />
             {searching && (
               <Loader2 className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-muted-foreground" />
-            )}
+            />
           </div>
 
           <section className="mb-8">
@@ -246,7 +288,7 @@ export function DonghuaS1Content() {
             ) : searchResults.length > 0 ? (
               <div className="grid grid-cols-3 gap-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7">
                 {searchResults.map((d, idx) => (
-                  <div key={d.slug || idx} className="w-full">
+                  <div key={d.slug || idx} className="workAnime">
                     <DonghuaCard
                       donghua={{
                         title: d.title,
