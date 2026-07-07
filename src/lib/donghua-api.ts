@@ -3,35 +3,19 @@ import { getCloudflareContext } from "@opennextjs/cloudflare";
 const API_BASE =
   process.env.ANIME_API_BASE || "https://www.sankavollerei.web.id";
 
-// Jina Reader API acts as a proxy to bypass Cloudflare Workers block.
-// sankavollerei.web.id blocks requests that contain CF-Connecting-IP header
-// (which Cloudflare Workers auto-adds to all outgoing fetches).
-// Jina is hosted outside CF, so it can fetch the API without being blocked.
-//
-// IMPORTANT: Anichin API has rate limit of 50 RPM (5 warnings → BAN PERMANEN)
-// We use long TTL cache to minimize requests, and serve stale cache on error
-// to avoid hammering the API when users navigate around.
-//
-// Free tier without token: ~5-20 RPM (often returns 429)
-// Free tier with token (sign up at https://jina.ai/): 500 RPM
-// Set JINA_API_TOKEN env var in Cloudflare Workers to use the token
-const PROXY_PREFIX = "https://r.jina.ai/";
-const JINA_API_TOKEN = process.env.JINA_API_TOKEN || "";
-
-// Longer TTLs to avoid hitting Anichin API rate limit (50 RPM, ban after 5 warnings)
 const CACHE_TTL = {
-  home: 2 * 60 * 60,           // 2 hours (was 30 min)
-  ongoing: 6 * 60 * 60,        // 6 hours (was 30 min)
-  completed: 6 * 60 * 60,       // 6 hours (was 30 min)
-  latest: 1 * 60 * 60,          // 1 hour (was 30 min)
-  popular: 12 * 60 * 60,        // 12 hours
-  movie: 12 * 60 * 60,          // 12 hours
-  detail: 12 * 60 * 60,         // 12 hours (was 6 hours)
-  episode: 6 * 60 * 60,         // 6 hours
-  search: 30 * 60,              // 30 min (was 5 min)
-  genres: 24 * 60 * 60,         // 24 hours
-  genreBrowse: 6 * 60 * 60,     // 6 hours (was 1 hour)
-  schedule: 6 * 60 * 60,        // 6 hours
+  home: 30 * 60,
+  ongoing: 30 * 60,
+  completed: 30 * 60,
+  latest: 30 * 60,
+  popular: 60 * 60,
+  movie: 60 * 60,
+  detail: 6 * 60 * 60,
+  episode: 60 * 60,
+  search: 5 * 60,
+  genres: 24 * 60 * 60,
+  genreBrowse: 60 * 60,
+  schedule: 60 * 60,
 } as const;
 
 async function getD1(): Promise<D1Database> {
@@ -40,15 +24,17 @@ async function getD1(): Promise<D1Database> {
   throw new Error('D1 database binding "DB" not found.');
 }
 
-async function getCached(key: string): Promise<{ data: any; isFresh: boolean } | null> {
+async function getCached(key: string): Promise<any | null> {
   try {
     const d1 = await getD1();
     const row = await d1.prepare("SELECT response_data, expires_at FROM api_cache WHERE cache_key = ?").bind(key).first();
     if (!row) return null;
     const expiresAt = new Date(row.expires_at as string).getTime();
-    const isFresh = Date.now() <= expiresAt;
-    // Even if expired, we keep the row to serve as stale fallback
-    return { data: JSON.parse(row.response_data as string), isFresh };
+    if (Date.now() > expiresAt) {
+      await d1.prepare("DELETE FROM api_cache WHERE cache_key = ?").bind(key).run();
+      return null;
+    }
+    return JSON.parse(row.response_data as string);
   } catch { return null; }
 }
 
@@ -78,7 +64,7 @@ function getCacheTtl(endpoint: string): number {
   if (endpoint.includes("/genres") && !endpoint.includes("/genres/")) return CACHE_TTL.genres;
   if (endpoint.includes("/genres/") || endpoint.includes("/genre/")) return CACHE_TTL.genreBrowse;
   if (endpoint.includes("/schedule")) return CACHE_TTL.schedule;
-  return 30 * 60;
+  return 5 * 60;
 }
 
 function buildCacheKey(endpoint: string): string {
@@ -86,107 +72,28 @@ function buildCacheKey(endpoint: string): string {
   return `donghua_${normalized}`;
 }
 
-const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-
-async function fetchWithRetry(
-  url: string,
-  options: RequestInit,
-  maxRetries = 2
-): Promise<Response> {
-  let lastError: Error | null = null;
-  for (let attempt = 0; attempt <= maxRetries; attempt++) {
-    try {
-      const response = await fetch(url, options);
-      if (response.status === 429 || response.status >= 500) {
-        if (attempt < maxRetries) {
-          const delay = Math.pow(2, attempt + 1) * 1000;
-          console.warn(`[Donghua API] Got ${response.status}, retrying in ${delay}ms (attempt ${attempt + 1}/${maxRetries})`);
-          await sleep(delay);
-          continue;
-        }
-      }
-      return response;
-    } catch (err) {
-      lastError = err as Error;
-      if (attempt < maxRetries) {
-        const delay = Math.pow(2, attempt + 1) * 1000;
-        console.warn(`[Donghua API] Fetch error, retrying in ${delay}ms:`, err);
-        await sleep(delay);
-        continue;
-      }
-      throw err;
-    }
-  }
-  throw lastError || new Error("Max retries exceeded");
-}
-
 export async function fetchDonghuaAPI(endpoint: string, options: { forceRefresh?: boolean } = {}): Promise<any> {
   const cacheKey = buildCacheKey(endpoint);
   const ttl = getCacheTtl(endpoint);
-
-  // Check cache first
-  const cached = await getCached(cacheKey);
-  if (cached) {
-    if (cached.isFresh && !options.forceRefresh) {
-      console.log(`[Donghua API] Cache HIT (fresh): ${endpoint}`);
-      return cached.data;
-    }
-    console.log(`[Donghua API] Cache HIT (stale), will refresh: ${endpoint}`);
-  } else {
-    console.log(`[Donghua API] Cache MISS, fetching: ${endpoint}`);
+  if (!options.forceRefresh && ttl > 0) {
+    const cached = await getCached(cacheKey);
+    if (cached) { console.log(`[Donghua API] Cache HIT: ${endpoint}`); return cached; }
   }
-
-  const originalUrl = `${API_BASE}${endpoint.startsWith("/") ? "" : "/"}${endpoint}`;
-  const proxiedUrl = `${PROXY_PREFIX}${originalUrl}`;
-
-  const headers: Record<string, string> = {
-    Accept: "application/json",
-    "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1",
-  };
-  if (JINA_API_TOKEN) {
-    headers["Authorization"] = `Bearer ${JINA_API_TOKEN}`;
-  }
-
+  console.log(`[Donghua API] Cache MISS, fetching: ${endpoint}`);
+  const url = `${API_BASE}${endpoint.startsWith("/") ? "" : "/"}${endpoint}`;
   try {
-    const response = await fetchWithRetry(proxiedUrl, { headers }, 2);
-    if (!response.ok) {
-      throw new Error(`API responded with status ${response.status}`);
-    }
-
-    const raw = await response.json();
-
-    let data: any = raw;
-    if (raw && typeof raw === "object" && raw.data && typeof raw.data.content === "string") {
-      try {
-        data = JSON.parse(raw.data.content);
-      } catch {
-        data = raw.data;
-      }
-    }
-
+    const response = await fetch(url, { headers: { Accept: "application/json", "User-Agent": "CineStream/1.0" } });
+    if (!response.ok) throw new Error(`API responded with status ${response.status}`);
+    const data = await response.json();
     if (ttl > 0) await setCached(cacheKey, endpoint, data, ttl);
     return data;
   } catch (error) {
     console.error(`[Donghua API] Fetch error for ${endpoint}:`, error);
-    // Serve stale cache if we have one (even if expired)
-    if (cached) {
-      console.log(`[Donghua API] Serving stale cache for: ${endpoint}`);
-      return cached.data;
-    }
-    // No cache available — last resort: try fetching without Jina proxy
     try {
-      console.log(`[Donghua API] Trying direct fetch (last resort): ${endpoint}`);
-      const directRes = await fetch(originalUrl, {
-        headers: { Accept: "application/json" },
-      });
-      if (directRes.ok) {
-        const data = await directRes.json();
-        if (ttl > 0) await setCached(cacheKey, endpoint, data, ttl);
-        return data;
-      }
-    } catch (directErr) {
-      console.error(`[Donghua API] Direct fetch also failed:`, directErr);
-    }
+      const d1 = await getD1();
+      const row = await d1.prepare("SELECT response_data FROM api_cache WHERE cache_key = ?").bind(cacheKey).first();
+      if (row) { console.log(`[Donghua API] Returning stale cache for: ${endpoint}`); return JSON.parse(row.response_data as string); }
+    } catch {}
     throw error;
   }
 }
