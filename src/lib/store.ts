@@ -49,6 +49,13 @@ interface AppState {
   removeFromHistory: (id: number) => void;
   clearHistory: () => void;
   loadHistory: () => void;
+
+  // === TAMBAHAN: Anime & Donghua Server Selection ===
+  // Global state for SearchModal to know which server is active
+  animeServer: "otakudesu" | "animasu";
+  setAnimeServer: (server: "otakudesu" | "animasu") => void;
+  donghuaServer: "s1" | "s2";
+  setDonghuaServer: (server: "s1" | "s2") => void;
 }
 
 export const useAppStore = create<AppState>((set, get) => ({
@@ -113,4 +120,10 @@ export const useAppStore = create<AppState>((set, get) => ({
       // ignore parse errors
     }
   },
+
+  // === IMPLEMENTASI: Anime & Donghua Server Selection ===
+  animeServer: "otakudesu", // Default Server 1
+  setAnimeServer: (server) => set({ animeServer: server }),
+  donghuaServer: "s1", // Default Server 1
+  setDonghuaServer: (server) => set({ donghuaServer: server }),
 }));
