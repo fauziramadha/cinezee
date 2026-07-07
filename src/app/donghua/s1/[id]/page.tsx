@@ -1,5 +1,20 @@
 import { DonghuaDetailContent } from "@/components/donghua/donghua-detail-content";
+
+export const dynamic = "force-dynamic";
+
 export default async function S1DetailPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params;
-  return <DonghuaDetailContent slug={id} source="s1" />;
+  try {
+    const { id } = await params;
+    return <DonghuaDetailContent slug={id} source="s1" />;
+  } catch (error) {
+    console.error("[S1DetailPage] error:", error);
+    return (
+      <main className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-center">
+          <p className="text-sm text-destructive mb-4">Failed to load detail page</p>
+          <a href="/donghua" className="text-sm text-primary hover:underline">Kembali ke Donghua</a>
+        </div>
+      </main>
+    );
+  }
 }
