@@ -21,16 +21,15 @@ function extractSlug(link: string): string {
   return path;
 }
 
-function normalize(list: any[]): any[] {
+function normalizeIndocast(list: any[]): any[] {
   return list.map((item: any) => ({
     title: item.title || "Untitled",
-    slug: item.slug || extractSlug(item.link || item.href || item.url || item.detailUrl || ""),
-    thumbnail: item.thumbnail || item.image || item.poster || null,
-    image: item.image || item.thumbnail || item.poster || null,
-    poster: item.poster || item.thumbnail || item.image || null,
+    slug: item.slug || extractSlug(item.link || item.url || ""),
+    thumbnail: item.thumbnail || item.image || null,
+    image: item.thumbnail || item.image || null,
     type: item.type || "Manga",
     genre: item.genre || undefined,
-    chapter: item.chapter || undefined,
+    chapter: item.latestChapter || item.chapter || undefined,
   }));
 }
 
@@ -50,49 +49,38 @@ export function ComicContent() {
     const fetchAll = async () => {
       setLoading(true);
       try {
-        // Fetch basic endpoints one by one (avoid Promise.all failure)
-        try {
-          const res = await fetch(`/api/comic/terbaru`);
-          if (res.ok) {
-            const json = await res.json();
-            setTerbaru(normalize(json?.comics || []));
+        // Helper to fetch multiple pages and combine results
+        const fetchMultiplePages = async (baseUrl: string, pages: number) => {
+          const promises = [];
+          for (let p = 1; p <= pages; p++) {
+            promises.push(fetch(`${baseUrl}&page=${p}`).then(res => res.ok ? res.json() : null).catch(() => null));
           }
-        } catch (e) { console.error("Failed to fetch terbaru:", e); }
+          const results = await Promise.all(promises);
+          const allItems = results.flatMap(json => json?.items || []);
+          return normalizeIndocast(allItems);
+        };
 
-        try {
-          const res = await fetch(`/api/comic/populer`);
-          if (res.ok) {
-            const json = await res.json();
-            setPopuler(normalize(json?.comics || []));
-          }
-        } catch (e) { console.error("Failed to fetch populer:", e); }
+        // Fetch Terbaru, Populer, Trending (1 page is usually enough, ~20 items)
+        const [terbaruRes, populerRes, trendingRes] = await Promise.all([
+          fetch(`/api/indocast/komiku/populer?page=1&orderby=date`).then(res => res.ok ? res.json() : null).catch(() => null),
+          fetch(`/api/indocast/komiku/populer?page=1&orderby=meta_value_num`).then(res => res.ok ? res.json() : null).catch(() => null),
+          fetch(`/api/indocast/komiku/populer?page=1&orderby=modified`).then(res => res.ok ? res.json() : null).catch(() => null),
+        ]);
 
-        try {
-          const res = await fetch(`/api/comic/trending`);
-          if (res.ok) {
-            const json = await res.json();
-            setTrending(normalize(json?.trending || []));
-          }
-        } catch (e) { console.error("Failed to fetch trending:", e); }
+        setTerbaru(normalizeIndocast(terbaruRes?.items || []));
+        setPopuler(normalizeIndocast(populerRes?.items || []));
+        setTrending(normalizeIndocast(trendingRes?.items || []));
 
-        // Fetch pustaka for manga/manhwa/manhua
-        try {
-          const [pustaka1Res, pustaka2Res] = await Promise.all([
-            fetch(`/api/comic/pustaka/1`),
-            fetch(`/api/comic/pustaka/2`),
-          ]);
+        // Fetch 2 pages for Manga, Manhwa, Manhua to ensure we get enough posters (10-20 items)
+        const [mangaData, manhwaData, manhuaData] = await Promise.all([
+          fetchMultiplePages(`/api/indocast/komiku/populer?orderby=modified&tipe=manga`, 2),
+          fetchMultiplePages(`/api/indocast/komiku/populer?orderby=modified&tipe=manhwa`, 2),
+          fetchMultiplePages(`/api/indocast/komiku/populer?orderby=modified&tipe=manhua`, 2),
+        ]);
 
-          const pustaka1Json = pustaka1Res.ok ? await pustaka1Res.json() : {};
-          const pustaka2Json = pustaka2Res.ok ? await pustaka2Res.json() : {};
-          const allPustaka = [
-            ...(pustaka1Json?.results || []),
-            ...(pustaka2Json?.results || []),
-          ];
-
-          setManga(normalize(allPustaka.filter((item: any) => (item.type || "").toLowerCase() === "manga")));
-          setManhwa(normalize(allPustaka.filter((item: any) => (item.type || "").toLowerCase() === "manhwa")));
-          setManhua(normalize(allPustaka.filter((item: any) => (item.type || "").toLowerCase() === "manhua")));
-        } catch (e) { console.error("Failed to fetch pustaka:", e); }
+        setManga(mangaData);
+        setManhwa(manhwaData);
+        setManhua(manhuaData);
 
       } catch (err) {
         console.error("Failed to load comic home:", err);
@@ -103,16 +91,16 @@ export function ComicContent() {
     fetchAll();
   }, []);
 
-  // Search dengan debounce
+  // Search dengan debounce (pakai indocast search)
   useEffect(() => {
     if (!searchQuery.trim()) { setSearchResults([]); return; }
     setSearching(true);
     const timer = setTimeout(async () => {
       try {
-        const res = await fetch(`/api/comic/search?q=${encodeURIComponent(searchQuery.trim())}`);
+        const res = await fetch(`/api/indocast/komiku/search?q=${encodeURIComponent(searchQuery.trim())}`);
         if (!res.ok) throw new Error("Search failed");
         const json = await res.json();
-        setSearchResults(normalize(json?.data || []));
+        setSearchResults(normalizeIndocast(json?.items || []));
       } catch { setSearchResults([]); }
       finally { setSearching(false); }
     }, 500);
