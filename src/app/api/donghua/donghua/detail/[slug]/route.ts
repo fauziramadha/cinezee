@@ -9,7 +9,6 @@ export async function GET(
 ) {
   try {
     const { slug } = await params;
-    // Clean slug (remove trailing slash if any)
     const cleanSlug = slug.replace(/\/$/, "");
     const data = await s1.getDetail(cleanSlug);
     return NextResponse.json(data);
