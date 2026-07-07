@@ -193,7 +193,6 @@ export function DonghuaS1Content() {
               <DonghuaRow
                 title="🔥 Episode Terbaru"
                 donghuas={latest}
-                href="/donghua/s1/genre/latest"
                 source="s1"
                 isEpisode
               />
@@ -202,7 +201,6 @@ export function DonghuaS1Content() {
               <DonghuaRow
                 title="▶️ Sedang Berjalan"
                 donghuas={ongoing}
-                href="/donghua/s1/genre/ongoing"
                 source="s1"
               />
             )}
@@ -210,7 +208,6 @@ export function DonghuaS1Content() {
               <DonghuaRow
                 title="✅ Tamat"
                 donghuas={completed}
-                href="/donghua/s1/genre/completed"
                 source="s1"
               />
             )}
