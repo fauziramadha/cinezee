@@ -31,7 +31,7 @@ export function DonghuaDetailContent({ slug, source }: DonghuaDetailContentProps
     setError(null);
     const endpoint = source === "s2"
       ? `/api/donghua/donghub/detail/${slug}`
-      : `/api/donghua/donghua/detail/${slug}`;
+      : `/api/anime/donghua/detail/${slug}`;
     fetch(endpoint)
       .then((res) => { 
         if (!res.ok) throw new Error(`HTTP ${res.status}`); 
