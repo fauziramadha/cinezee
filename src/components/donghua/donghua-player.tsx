@@ -41,7 +41,7 @@ export function DonghuaPlayer({ animeId, episodeId, source }: DonghuaPlayerProps
 
   useEffect(() => {
     setLoading(true); setError(null); setStreamUrl(""); setIframeLoading(true); setIframeError(false); setShowOpenInNewTab(false);
-    const endpoint = source === "s2" ? `/api/donghua/donghub/episode/${episodeId}` : `/api/donghua/donghua/episode/${episodeId}`;
+    const endpoint = source === "s2" ? `/api/donghua/donghub/episode/${episodeId}` : `/api/anime/donghua/episode/${episodeId}`;
     fetch(endpoint)
       .then((res) => { if (!res.ok) throw new Error(`HTTP ${res.status}`); return res.json(); })
       .then((json) => {
