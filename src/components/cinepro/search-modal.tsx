@@ -26,7 +26,8 @@ type TabView = "results" | "genres" | "networks";
 export function SearchModal() {
   const router = useRouter();
   const pathname = usePathname();
-  const { searchOpen, setSearchOpen, setSelectedMedia } = useAppStore();
+  // Ambil state global dari store, termasuk server yang dipilih
+  const { searchOpen, setSearchOpen, setSelectedMedia, animeServer, donghuaServer } = useAppStore();
   
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<any[]>([]); 
@@ -48,9 +49,6 @@ export function SearchModal() {
                 : pathname.startsWith("/donghua") ? "donghua" 
                 : pathname.startsWith("/comic") ? "comic" 
                 : "movie";
-
-  // State for Anime/Donghua Server selection
-  const [selectedServer, setSelectedServer] = useState<"s1" | "s2">("s1");
 
   // Fetch Genres & Networks (only if context is movie)
   useEffect(() => {
@@ -100,8 +98,8 @@ export function SearchModal() {
           setResults(data.results || []);
         } 
         else if (context === "anime") {
-          // Server 1 (Otakudesu) vs Server 2 (Animasu)
-          const endpoint = selectedServer === "s2"
+          // Baca state global animeServer
+          const endpoint = animeServer === "animasu"
             ? `/api/anime/animasu/search/${encodeURIComponent(query)}`
             : `/api/anime/search/${encodeURIComponent(query)}`;
           const res = await fetch(endpoint);
@@ -109,19 +107,19 @@ export function SearchModal() {
           data = await res.json();
           
           // Normalize for AnimeCard
-          const rawList = selectedServer === "s2"
+          const rawList = animeServer === "animasu"
             ? (data?.animes || data?.data || [])
             : (data?.data?.animeList || []);
           const list = rawList.map((item: any) => ({ 
             ...item, 
             animeId: item.slug || item.animeId, 
-            source: selectedServer === "s2" ? "animasu" : "otakudesu" 
+            source: animeServer === "animasu" ? "animasu" : "otakudesu" 
           }));
           setResults(list);
         }
         else if (context === "donghua") {
-          // Server 1 (Anichin) vs Server 2 (Donghub)
-          const endpoint = selectedServer === "s2"
+          // Baca state global donghuaServer
+          const endpoint = donghuaServer === "s2"
             ? `/api/donghua/donghub/search/${encodeURIComponent(query)}/1`
             : `/api/donghua/donghua/search/${encodeURIComponent(query)}/1`;
           const res = await fetch(endpoint);
@@ -129,13 +127,13 @@ export function SearchModal() {
           data = await res.json();
           
           // Normalize for DonghuaCard
-          const rawList = selectedServer === "s2"
+          const rawList = donghuaServer === "s2"
             ? (data?.data || [])
             : (data?.data || []);
           const list = rawList.map((item: any) => ({ 
             ...item, 
             slug: (item.slug || "").replace(/\/$/, ""), 
-            source: selectedServer === "s2" ? "s2" : "s1" 
+            source: donghuaServer === "s2" ? "s2" : "s1" 
           }));
           setResults(list);
         }
@@ -159,8 +157,9 @@ export function SearchModal() {
       }
     }, 400);
 
+    // Tambahkan animeServer & donghuaServer ke dependency array
     return () => clearTimeout(timer);
-  }, [query, activeTab, context, selectedServer]);
+  }, [query, activeTab, context, animeServer, donghuaServer]);
 
   // Reset state when modal closes or context changes
   useEffect(() => {
@@ -170,7 +169,6 @@ export function SearchModal() {
       setActiveTab("results");
       setSelectedGenre(null);
       setType("movie");
-      setSelectedServer("s1"); // Reset server to 1 on close
     }
   }, [searchOpen, context]);
 
@@ -215,7 +213,7 @@ export function SearchModal() {
           <DialogTitle>Search {context}</DialogTitle>
         </DialogHeader>
 
-        {/* Search Input & Server Toggle */}
+        {/* Search Input */}
         <div className="shrink-0 border-b border-border">
           <div className="flex items-center gap-3 px-4 py-3">
             <Search className="h-5 w-5 shrink-0 text-muted-foreground" />
@@ -233,31 +231,22 @@ export function SearchModal() {
               <X className="h-4 w-4" />
             </button>
           </div>
-
-          {/* Server Toggle (Only for Anime & Donghua) */}
+          
+          {/* Indikator Server Aktif (Hanya tampilan teks, tidak bisa diklik di sini) */}
           {(context === "anime" || context === "donghua") && (
             <div className="flex items-center gap-2 px-4 pb-2">
-              <span className="text-xs text-muted-foreground">Server:</span>
-              <div className="flex gap-1 rounded-full bg-muted p-1">
-                <button
-                  onClick={() => setSelectedServer("s1")}
-                  className={cn(
-                    "rounded-full px-3 py-1 text-xs font-semibold transition-all",
-                    selectedServer === "s1" ? "bg-blue-500 text-white" : "text-muted-foreground hover:text-foreground"
-                  )}
-                >
-                  Server 1
-                </button>
-                <button
-                  onClick={() => setSelectedServer("s2")}
-                  className={cn(
-                    "rounded-full px-3 py-1 text-xs font-semibold transition-all",
-                    selectedServer === "s2" ? "bg-purple-500 text-white" : "text-muted-foreground hover:text-foreground"
-                  )}
-                >
-                  Server 2
-                </button>
-              </div>
+              <span className="text-xs text-muted-foreground">Mencari di:</span>
+              <span className={cn(
+                "rounded-full px-3 py-1 text-xs font-semibold",
+                (context === "anime" && animeServer === "animasu") || (context === "donghua" && donghuaServer === "s2")
+                  ? "bg-purple-500/90 text-white"
+                  : "bg-blue-500/90 text-white"
+              )}>
+                {context === "anime" 
+                  ? (animeServer === "animasu" ? "Server 2" : "Server 1")
+                  : (donghuaServer === "s2" ? "Server 2" : "Server 1")
+                }
+              </span>
             </div>
           )}
         </div>
