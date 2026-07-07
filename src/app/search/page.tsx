@@ -1,21 +1,21 @@
 import { Suspense } from "react";
-import { Header } from "@/components/cinepro/header";
 import { Loader2 } from "lucide-react";
-import { SearchContent } from "./search-content";
+import { Header } from "@/components/cinepro/header";
+import { UniversalSearchContent } from "./search-content";
 
-export default function SearchPage() {
+export default function UniversalSearchPage() {
   return (
     <Suspense
       fallback={
         <main className="min-h-screen bg-background">
           <Header />
-          <div className="flex h-96 items-center justify-center">
+          <div className="flex h-[60vh] items-center justify-center pt-20">
             <Loader2 className="h-8 w-8 animate-spin text-primary" />
           </div>
         </main>
       }
     >
-      <SearchContent />
+      <UniversalSearchContent />
     </Suspense>
   );
 }
