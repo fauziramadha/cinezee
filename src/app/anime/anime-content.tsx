@@ -12,6 +12,7 @@ import { Loader2, Search, RefreshCw, ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+import { useAppStore } from "@/lib/store";
 
 interface AnimeListItem {
   title: string;
@@ -28,7 +29,11 @@ type Tab = "home" | "ongoing" | "completed" | "popular" | "movies" | "latest";
 type Source = "otakudesu" | "animasu";
 
 export function AnimeContent() {
-  const [source, setSource] = useState<Source>("otakudesu");
+  // FIX: Ambil state server dari global store (useAppStore)
+  // agar sinkron dengan SearchModal
+  const source = useAppStore((s) => s.animeServer);
+  const setSource = useAppStore((s) => s.setAnimeServer);
+  
   const [activeTab, setActiveTab] = useState<Tab>("home");
   const [ongoing, setOngoing] = useState<AnimeListItem[]>([]);
   const [completed, setCompleted] = useState<AnimeListItem[]>([]);
