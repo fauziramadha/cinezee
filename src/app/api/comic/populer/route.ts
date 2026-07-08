@@ -7,7 +7,15 @@ export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
     const page = searchParams.get("page") || "1";
-    const data = await comic.getPopuler(parseInt(page, 10));
+    const tipe = searchParams.get("tipe") || "";
+    const orderby = searchParams.get("orderby") || "";
+
+    // Build endpoint with all relevant params
+    let endpoint = `/populer?page=${page}`;
+    if (tipe) endpoint += `&tipe=${encodeURIComponent(tipe)}`;
+    if (orderby) endpoint += `&orderby=${encodeURIComponent(orderby)}`;
+
+    const data = await comic.getPopulerFiltered(endpoint);
     return NextResponse.json(data);
   } catch (error: any) {
     console.error("[API comic/populer] Error:", error);
