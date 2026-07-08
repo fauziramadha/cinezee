@@ -13,8 +13,6 @@ import { ComicCard } from "@/components/comic/comic-card";
 import { Loader2, Search, ArrowLeft } from "lucide-react";
 import { Input } from "@/components/ui/input";
 
-// Normalize new Indocast Komiku shape → format yang dipakai ComicCard
-// New shape: { title, slug, thumbnail, type, genre, views, latestChapter, chapterNumber, isColored, description }
 function normalizeKomiku(list: any[]): any[] {
   if (!Array.isArray(list)) return [];
   return list.map((item: any) => ({
@@ -58,17 +56,25 @@ export function ComicContent() {
     const fetchAll = async () => {
       setLoading(true);
       try {
-        // Fetch populer page 1, 2, 3 secara paralel untuk dapat variasi type (Manga/Manhwa/Manhua)
-        const [populer1, populer2, populer3] = await Promise.all([
+        // Fetch populer (semua type) + tiap type secara paralel
+        const [
+          populerAll1,
+          populerAll2,
+          mangaRes,
+          manhwaRes,
+          manhuaRes,
+        ] = await Promise.all([
           fetchJSON("/api/comic/populer?page=1").catch(() => null),
           fetchJSON("/api/comic/populer?page=2").catch(() => null),
-          fetchJSON("/api/comic/populer?page=3").catch(() => null),
+          fetchJSON("/api/comic/populer?tipe=manga&page=1").catch(() => null),
+          fetchJSON("/api/comic/populer?tipe=manhwa&page=1").catch(() => null),
+          fetchJSON("/api/comic/populer?tipe=manhua&page=1").catch(() => null),
         ]);
 
-        // Combine semua items, dedupe by slug
+        // Combine populer (semua type) untuk hero + populer row + trending
         const allPopuler: any[] = [];
         const seenSlugs = new Set<string>();
-        for (const res of [populer1, populer2, populer3]) {
+        for (const res of [populerAll1, populerAll2]) {
           if (res) {
             const inner = unwrap(res);
             const items = normalizeKomiku(inner?.items || []);
@@ -83,7 +89,6 @@ export function ComicContent() {
 
         if (allPopuler.length > 0) {
           setPopuler(allPopuler);
-          // Trending: sort by views desc, ambil 10
           setTrending(
             [...allPopuler]
               .sort((a, b) => {
@@ -95,7 +100,7 @@ export function ComicContent() {
           );
         }
 
-        // Coba fetch terbaru, kalau 522 fallback ke populer
+        // Fetch terbaru, fallback ke populer
         const terbaruRes = await fetchJSON("/api/comic/terbaru?page=1").catch(() => null);
         let terbaruItems: any[] = [];
         if (terbaruRes) {
@@ -103,25 +108,26 @@ export function ComicContent() {
           terbaruItems = normalizeKomiku(inner?.items || []);
         }
         if (terbaruItems.length === 0) {
-          // Fallback: pakai populer page 1 (10 item pertama)
           terbaruItems = allPopuler.slice(0, 10);
         }
         setTerbaru(terbaruItems);
 
-        // Klasifikasi type (Manga/Manhwa/Manhua) dari semua data populer
-        const mangaList = allPopuler.filter((item) =>
-          (item.type || "").toLowerCase().includes("manga")
-        );
-        const manhwaList = allPopuler.filter((item) =>
-          (item.type || "").toLowerCase().includes("manhwa")
-        );
-        const manhuaList = allPopuler.filter((item) =>
-          (item.type || "").toLowerCase().includes("manhua")
-        );
-
-        if (mangaList.length > 0) setManga(mangaList);
-        if (manhwaList.length > 0) setManhwa(manhwaList);
-        if (manhuaList.length > 0) setManhua(manhuaList);
+        // Set manga, manhwa, manhua dari endpoint filtered
+        if (mangaRes) {
+          const inner = unwrap(mangaRes);
+          const items = normalizeKomiku(inner?.items || []);
+          if (items.length > 0) setManga(items);
+        }
+        if (manhwaRes) {
+          const inner = unwrap(manhwaRes);
+          const items = normalizeKomiku(inner?.items || []);
+          if (items.length > 0) setManhwa(items);
+        }
+        if (manhuaRes) {
+          const inner = unwrap(manhuaRes);
+          const items = normalizeKomiku(inner?.items || []);
+          if (items.length > 0) setManhua(items);
+        }
       } catch (err) {
         console.error("Failed to load comic home:", err);
       } finally {
@@ -131,7 +137,6 @@ export function ComicContent() {
     fetchAll();
   }, []);
 
-  // Search dengan debounce
   useEffect(() => {
     if (!searchQuery.trim()) {
       setSearchResults([]);
