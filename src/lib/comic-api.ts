@@ -159,6 +159,9 @@ export const comic = {
   // Komik populer
   getPopuler: (page = 1) => fetchComicAPI(`/populer?page=${page}`),
 
+  // Komik populer dengan filter (tipe, orderby)
+  getPopulerFiltered: (endpoint: string) => fetchComicAPI(endpoint),
+  
   // Search komik
   search: (keyword: string) =>
     fetchComicAPI(`/search?q=${encodeURIComponent(keyword)}`),
