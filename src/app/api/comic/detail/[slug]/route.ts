@@ -10,6 +10,7 @@ export async function GET(
   try {
     const { slug } = await params;
     const cleanSlug = slug.replace(/\/+$/, "").trim();
+    // Indocast expects ?slug= query parameter (not path param)
     const data = await comic.getDetail(cleanSlug);
     return NextResponse.json(data);
   } catch (error: any) {
