@@ -4,9 +4,8 @@ import { useEffect, useState, useCallback } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import useEmblaCarousel from "embla-carousel-react";
-import { Play, Star, ChevronLeft, ChevronRight } from "lucide-react";
+import { Play, Star, ChevronLeft, ChevronRight, Info } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
 
 interface ComicHeroProps {
   comics: any[];
@@ -46,6 +45,11 @@ export function ComicHero({ comics }: ComicHeroProps) {
     router.push(`/comic/${slug}`);
   };
 
+  const handleMoreInfo = (comic: any) => {
+    const slug = comic.slug || (comic.link || comic.url || "").replace(/^\/(manga|detail-komik)\//, "").replace(/\/$/, "");
+    router.push(`/comic/${slug}`);
+  };
+
   return (
     <section className="relative h-[60vh] min-h-[400px] w-full overflow-hidden md:h-[75vh] lg:h-[80vh]">
       <div ref={emblaRef} className="h-full overflow-hidden">
@@ -62,7 +66,7 @@ export function ComicHero({ comics }: ComicHeroProps) {
                 <div className="absolute inset-0">
                   {poster && (
                     <Image
-                      src={`/api/proxy-image?url=${encodeURIComponent(poster)}`}
+                      src={poster}
                       alt={title}
                       fill
                       priority={idx === 0}
@@ -90,6 +94,11 @@ export function ComicHero({ comics }: ComicHeroProps) {
                     <h1 className="slide-in text-2xl font-extrabold tracking-tight text-white drop-shadow-lg sm:text-3xl md:text-5xl lg:text-6xl">
                       {title}
                     </h1>
+                    {comic.description && (
+                      <p className="mt-3 line-clamp-2 max-w-xl text-xs text-white/80 drop-shadow sm:text-sm md:text-base">
+                        {comic.description}
+                      </p>
+                    )}
                     <div className="mt-3 flex flex-wrap gap-2 sm:mt-6 sm:gap-3">
                       <Button
                         size="lg"
@@ -98,6 +107,15 @@ export function ComicHero({ comics }: ComicHeroProps) {
                       >
                         <Play className="h-4 w-4 fill-current sm:h-5 sm:w-5" />
                         Baca Sekarang
+                      </Button>
+                      <Button
+                        size="lg"
+                        variant="secondary"
+                        onClick={() => handleMoreInfo(comic)}
+                        className="h-9 gap-2 bg-white/10 px-4 text-xs font-semibold text-white backdrop-blur-sm hover:bg-white/20 sm:h-12 sm:px-6 sm:text-base"
+                      >
+                        <Info className="h-4 w-4 sm:h-5 sm:w-5" />
+                        More Info
                       </Button>
                     </div>
                   </div>
