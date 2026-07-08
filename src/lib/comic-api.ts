@@ -166,11 +166,11 @@ export const comic = {
   search: (keyword: string) =>
     fetchComicAPI(`/search?q=${encodeURIComponent(keyword)}`),
 
-  // Detail komik
-  getDetail: (slug: string) => fetchComicAPI(`/detail/${slug}`),
+  // Detail komik (Indocast expects ?slug= query parameter)
+  getDetail: (slug: string) => fetchComicAPI(`/detail?slug=${encodeURIComponent(slug)}`),
 
-  // Baca chapter (view)
-  getView: (slug: string) => fetchComicAPI(`/view/${slug}`),
+  // Baca chapter (view) — Indocast expects ?slug= query parameter
+  getView: (slug: string) => fetchComicAPI(`/view?slug=${encodeURIComponent(slug)}`),
 
   // Filters (genre list, dll)
   getFilters: () => fetchComicAPI("/filters"),
