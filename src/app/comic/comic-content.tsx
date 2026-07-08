@@ -25,6 +25,8 @@ function normalizeKomiku(list: any[]): any[] {
     type: item.type || "Manga",
     genre: item.genre || undefined,
     chapter: item.latestChapter || item.chapterNumber || item.chapter || undefined,
+    views: item.views || undefined,
+    description: item.description || undefined,
   }));
 }
 
@@ -56,22 +58,34 @@ export function ComicContent() {
     const fetchAll = async () => {
       setLoading(true);
       try {
-        // Populer adalah endpoint yang paling stabil (home & terbaru sering 522)
-        // Pakai populer sebagai sumber utama untuk hero + populer + trending
-        const populerRes = await fetchJSON("/api/comic/populer?page=1").catch(() => null);
+        // Fetch populer page 1, 2, 3 secara paralel untuk dapat variasi type (Manga/Manhwa/Manhua)
+        const [populer1, populer2, populer3] = await Promise.all([
+          fetchJSON("/api/comic/populer?page=1").catch(() => null),
+          fetchJSON("/api/comic/populer?page=2").catch(() => null),
+          fetchJSON("/api/comic/populer?page=3").catch(() => null),
+        ]);
 
-        let populerItems: any[] = [];
-        if (populerRes) {
-          const inner = unwrap(populerRes);
-          populerItems = normalizeKomiku(inner?.items || []);
+        // Combine semua items, dedupe by slug
+        const allPopuler: any[] = [];
+        const seenSlugs = new Set<string>();
+        for (const res of [populer1, populer2, populer3]) {
+          if (res) {
+            const inner = unwrap(res);
+            const items = normalizeKomiku(inner?.items || []);
+            for (const item of items) {
+              if (item.slug && !seenSlugs.has(item.slug)) {
+                seenSlugs.add(item.slug);
+                allPopuler.push(item);
+              }
+            }
+          }
         }
 
-        if (populerItems.length > 0) {
-          setPopuler(populerItems);
-          // Hero pakai 5 item pertama dari populer
-          // Trending pakai item dengan views tertinggi (sort by views desc)
+        if (allPopuler.length > 0) {
+          setPopuler(allPopuler);
+          // Trending: sort by views desc, ambil 10
           setTrending(
-            [...populerItems]
+            [...allPopuler]
               .sort((a, b) => {
                 const va = parseFloat(String(a.views || "0").replace(/[^\d.]/g, "")) || 0;
                 const vb = parseFloat(String(b.views || "0").replace(/[^\d.]/g, "")) || 0;
@@ -83,49 +97,25 @@ export function ComicContent() {
 
         // Coba fetch terbaru, kalau 522 fallback ke populer
         const terbaruRes = await fetchJSON("/api/comic/terbaru?page=1").catch(() => null);
+        let terbaruItems: any[] = [];
         if (terbaruRes) {
           const inner = unwrap(terbaruRes);
-          const items = normalizeKomiku(inner?.items || []);
-          if (items.length > 0) {
-            setTerbaru(items);
-          } else {
-            setTerbaru(populerItems);
-          }
-        } else {
-          // Fallback: pakai populer sebagai terbaru
-          setTerbaru(populerItems);
+          terbaruItems = normalizeKomiku(inner?.items || []);
         }
-
-        // Coba fetch home untuk dapat data tambahan
-        const homeRes = await fetchJSON("/api/comic/home").catch(() => null);
-        if (homeRes) {
-          const inner = unwrap(homeRes);
-          // Home mungkin punya struktur berbeda, coba pick array dari berbagai key
-          const homeItems = normalizeKomiku(
-            inner?.items || inner?.terbaru || inner?.populer || inner?.data || []
-          );
-          if (homeItems.length > 0 && terbaru.length === 0) {
-            setTerbaru(homeItems);
-          }
+        if (terbaruItems.length === 0) {
+          // Fallback: pakai populer page 1 (10 item pertama)
+          terbaruItems = allPopuler.slice(0, 10);
         }
+        setTerbaru(terbaruItems);
 
-        // Klasifikasi berdasarkan type (Manga/Manhwa/Manhua)
-        // Filter dari populer + terbaru yang sudah ada
-        const allItems = [...populerItems, ...terbaru];
-        const seen = new Set<string>();
-        const unique = allItems.filter((item) => {
-          if (seen.has(item.slug)) return false;
-          seen.add(item.slug);
-          return true;
-        });
-
-        const mangaList = unique.filter((item) =>
+        // Klasifikasi type (Manga/Manhwa/Manhua) dari semua data populer
+        const mangaList = allPopuler.filter((item) =>
           (item.type || "").toLowerCase().includes("manga")
         );
-        const manhwaList = unique.filter((item) =>
+        const manhwaList = allPopuler.filter((item) =>
           (item.type || "").toLowerCase().includes("manhwa")
         );
-        const manhuaList = unique.filter((item) =>
+        const manhuaList = allPopuler.filter((item) =>
           (item.type || "").toLowerCase().includes("manhua")
         );
 
@@ -206,12 +196,12 @@ export function ComicContent() {
               </a>
             </div>
 
-          {terbaru.length > 0 && <ComicRow title="🔥 Terbaru" comics={terbaru} href="/comic/list/terbaru" />}
-          {trending.length > 0 && <ComicRow title="📈 Trending" comics={trending} href="/comic/list/trending" />}
-          {populer.length > 0 && <ComicRow title="⭐ Populer" comics={populer} href="/comic/list/populer" />}
-          {manga.length > 0 && <ComicRow title="📖 Manga" comics={manga} href="/comic/list/manga" />}
-          {manhwa.length > 0 && <ComicRow title="🇰🇷 Manhwa" comics={manhwa} href="/comic/list/manhwa" />}
-          {manhua.length > 0 && <ComicRow title="🇨🇳 Manhua" comics={manhua} href="/comic/list/manhua" />}
+            {terbaru.length > 0 && <ComicRow title="🔥 Terbaru" comics={terbaru} href="/comic/list/terbaru" />}
+            {trending.length > 0 && <ComicRow title="📈 Trending" comics={trending} href="/comic/list/trending" />}
+            {populer.length > 0 && <ComicRow title="⭐ Populer" comics={populer} href="/comic/list/populer" />}
+            {manga.length > 0 && <ComicRow title="📖 Manga" comics={manga} href="/comic/list/manga" />}
+            {manhwa.length > 0 && <ComicRow title="🇰🇷 Manhwa" comics={manhwa} href="/comic/list/manhwa" />}
+            {manhua.length > 0 && <ComicRow title="🇨🇳 Manhua" comics={manhua} href="/comic/list/manhua" />}
           </div>
         </>
       ) : (
