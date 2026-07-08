@@ -169,8 +169,9 @@ export const comic = {
   // Detail komik (Indocast expects ?slug= query parameter)
   getDetail: (slug: string) => fetchComicAPI(`/detail?slug=${encodeURIComponent(slug)}`),
 
-  // Baca chapter (view) — Indocast expects ?slug= query parameter
-  getView: (slug: string) => fetchComicAPI(`/view?slug=${encodeURIComponent(slug)}`),
+    // Baca chapter (view) — Indocast expects ?slug=<comic-slug>&chapter=<chapter-num>
+  getView: (comicSlug: string, chapter: string) =>
+    fetchComicAPI(`/view?slug=${encodeURIComponent(comicSlug)}&chapter=${encodeURIComponent(chapter)}`),
 
   // Filters (genre list, dll)
   getFilters: () => fetchComicAPI("/filters"),
