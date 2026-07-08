@@ -27,10 +27,16 @@ export function ComicDetailContent({ slug }: ComicDetailContentProps) {
   useEffect(() => {
     setLoading(true);
     setError(null);
-    fetch(`/api/comic/comic/${slug}`)
-      .then((res) => { if (!res.ok) throw new Error(`HTTP ${res.status}`); return res.json(); })
+    // FIX: Pakai route /api/comic/detail/[slug] yang baru
+    fetch("/api/comic/detail/" + slug)
+      .then((res) => { if (!res.ok) throw new Error("HTTP " + res.status); return res.json(); })
       .then((json) => {
-        if (json?.title) {
+        // Shape dari Indocast: { success, ...detail fields, chapters: [...] }
+        // atau mungkin { success, data: {...detail} }
+        const raw = json?.success ? json : json?.data;
+        if (raw && (raw.title || raw.name)) {
+          setDetail(raw);
+        } else if (json?.title) {
           setDetail(json);
         } else {
           throw new Error("Komik tidak ditemukan");
@@ -47,17 +53,18 @@ export function ComicDetailContent({ slug }: ComicDetailContentProps) {
     return (<main className="min-h-screen bg-background"><Header /><div className="flex h-[60vh] flex-col items-center justify-center gap-3 pt-20 text-center"><AlertCircle className="h-10 w-10 text-destructive" /><p className="text-sm text-destructive">{error || "Tidak ditemukan"}</p><Button variant="secondary" size="sm" onClick={() => router.push("/comic")} className="gap-1.5"><ArrowLeft className="h-3.5 w-3.5" />Kembali</Button></div><Footer /><SearchModal /><DetailModal /><PlayerModal /><AuthModal /></main>);
   }
 
-  const title = detail.title;
-  const poster = detail.image;
-  const synopsis = detail.synopsis || detail.synopsis_full || detail.summary || "";
-  const genres = detail.genres || [];
-  const chapters = detail.chapters || [];
-  const meta = detail.metadata || {};
+  // Defensive: handle berbagai kemungkinan field name dari API baru
+  const title = detail.title || detail.name || "Untitled";
+  const poster = detail.thumbnail || detail.image || detail.poster || null;
+  const synopsis = detail.synopsis || detail.synopsis_full || detail.summary || detail.description || "";
+  const genres = detail.genres || detail.genre_list || [];
+  const chapters = detail.chapters || detail.episodes || detail.chapter_list || [];
+  const meta = detail.metadata || detail.info || {};
 
   // Sort chapters ascending by chapter number
   const sortedChapters = [...chapters].sort((a, b) => {
-    const numA = parseInt((a.chapter || "").match(/\d+/)?.[0] || "0", 10);
-    const numB = parseInt((b.chapter || "").match(/\d+/)?.[0] || "0", 10);
+    const numA = parseInt((a.chapter || a.name || a.title || "").match(/\d+/)?.[0] || "0", 10);
+    const numB = parseInt((b.chapter || b.name || b.title || "").match(/\d+/)?.[0] || "0", 10);
     return numA - numB;
   });
 
@@ -86,7 +93,7 @@ export function ComicDetailContent({ slug }: ComicDetailContentProps) {
               {meta.author && <Badge variant="secondary" className="gap-1"><User className="h-3 w-3" />{meta.author}</Badge>}
             </div>
             <div className="mt-4 flex flex-wrap justify-center gap-2 sm:justify-start">
-              {firstChapter && <Button size="sm" onClick={() => router.push(`/comic/read/${firstChapter.slug}`)} className="gap-2"><BookOpen className="h-4 w-4" />Baca Chapter 1</Button>}
+              {firstChapter && <Button size="sm" onClick={() => router.push("/comic/read/" + firstChapter.slug)} className="gap-2"><BookOpen className="h-4 w-4" />Baca Chapter 1</Button>}
             </div>
           </div>
         </div>
@@ -97,7 +104,7 @@ export function ComicDetailContent({ slug }: ComicDetailContentProps) {
               <div className="mb-4">
                 <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Genre</h3>
                 <div className="flex flex-wrap gap-1.5">
-                  {genres.map((g: any, idx: number) => <Link key={g.slug || idx} href={`/comic/genre/${g.slug}`}><Badge variant="outline" className="cursor-pointer hover:border-primary hover:text-primary">{g.name}</Badge></Link>)}
+                  {genres.map((g: any, idx: number) => <Link key={g.slug || idx} href={"/comic/genre/" + (g.slug || g.name?.toLowerCase())}><Badge variant="outline" className="cursor-pointer hover:border-primary hover:text-primary">{g.name || g.title}</Badge></Link>)}
                 </div>
               </div>
             )}
@@ -115,9 +122,9 @@ export function ComicDetailContent({ slug }: ComicDetailContentProps) {
                 <div className="max-h-[500px] space-y-1.5 overflow-y-auto pr-2">
                   {sortedChapters.map((ch: any, idx: number) => {
                     const chSlug = ch.slug || "";
-                    const chTitle = ch.chapter || `Chapter ${idx + 1}`;
+                    const chTitle = ch.chapter || ch.name || ch.title || ("Chapter " + (idx + 1));
                     return (
-                      <Link key={chSlug || idx} href={`/comic/read/${chSlug}`} className="flex items-center justify-between gap-2 rounded-lg border border-border bg-card p-3 transition-all hover:border-primary hover:bg-primary/5">
+                      <Link key={chSlug || idx} href={"/comic/read/" + chSlug} className="flex items-center justify-between gap-2 rounded-lg border border-border bg-card p-3 transition-all hover:border-primary hover:bg-primary/5">
                         <div className="flex min-w-0 flex-1 items-center gap-3">
                           <div className="min-w-0 flex-1">
                             <p className="text-sm font-medium" style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{chTitle}</p>
