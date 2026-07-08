@@ -12,35 +12,26 @@ import { ComicCard } from "@/components/comic/comic-card";
 import { Loader2, ArrowLeft, ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
-function extractSlug(link: string): string {
-  if (!link) return "";
-  let path = link.replace(/^https?:\/\/[^/]+/, "");
-  path = path.replace(/^\/(manga|detail-komik|baca-chapter)\//, "");
-  return path.replace(/\/$/, "").split("/")[0];
-}
-
-function normalizeSanka(list: any[]): any[] {
+// Normalize Indocast Komiku shape → format ComicCard
+function normalizeKomiku(list: any[]): any[] {
+  if (!Array.isArray(list)) return [];
   return list.map((item: any) => ({
     title: item.title || "Untitled",
-    slug: item.slug || extractSlug(item.link || item.href || item.url || item.detailUrl || ""),
-    thumbnail: item.thumbnail || item.image || item.poster || null,
-    image: item.image || item.thumbnail || item.poster || null,
-    type: item.type || "Manga",
-    genre: item.genre || undefined,
-    chapter: item.chapter || undefined,
-  }));
-}
-
-function normalizeIndocast(list: any[]): any[] {
-  return list.map((item: any) => ({
-    title: item.title || "Untitled",
-    slug: item.slug || extractSlug(item.link || item.url || ""),
+    slug: (item.slug || "").toString().replace(/\/+$/, "").trim(),
     thumbnail: item.thumbnail || item.image || null,
     image: item.thumbnail || item.image || null,
     type: item.type || "Manga",
     genre: item.genre || undefined,
-    chapter: item.latestChapter || item.chapter || undefined,
+    chapter: item.latestChapter || item.chapterNumber || item.chapter || undefined,
+    views: item.views || undefined,
+    description: item.description || undefined,
   }));
+}
+
+function unwrap(res: any): any {
+  if (!res) return null;
+  if (res.status === "error" || res.statusCode) return res;
+  return res;
 }
 
 interface ComicListContentProps {
@@ -59,46 +50,48 @@ export function ComicListContent({ type }: ComicListContentProps) {
     setLoading(true);
     setError(null);
     try {
-      let rawList: any[] = [];
-      let hasMore = false;
+      let endpoint = "";
+      let sort = false;
 
       if (type === "manga" || type === "manhwa" || type === "manhua") {
-        // PAKAI API INDOCAST UNTUK MANGA/MANHWA/MANHUA
-        // Endpoint: /api/indocast/komiku/populer?page=1&orderby=modified&tipe=manga
-        const res = await fetch(`/api/indocast/komiku/populer?page=${pageNum}&orderby=modified&tipe=${type}`);
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const json = await res.json();
-        
-        // Struktur Indocast: { success, items: [...] }
-        rawList = json?.items || [];
-        
-        // Karena kita tidak tahu pasti struktur pagination Indocast, 
-        // kita asumsikan ada halaman selanjutnya jika item >= 10
-        hasMore = rawList.length >= 10;
-        
-        const list = normalizeIndocast(rawList);
-        setItems(list);
-        setHasNextPage(hasMore);
-        return;
+        // Type-based: pakai endpoint populer dengan filter tipe
+        endpoint = "/api/comic/populer?tipe=" + type + "&page=" + pageNum;
+      } else if (type === "terbaru") {
+        endpoint = "/api/comic/terbaru?page=" + pageNum;
+      } else if (type === "populer") {
+        endpoint = "/api/comic/populer?page=" + pageNum;
+      } else if (type === "trending") {
+        // Trending: fetch populer, sort by views
+        endpoint = "/api/comic/populer?page=" + pageNum;
+        sort = true;
       } else {
-        // PAKAI API SANKA UNTUK TERBARU/POPULER/TRENDING
-        const res = await fetch(`/api/comic/${type}?page=${pageNum}`);
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const json = await res.json();
-
-        if (type === "trending") {
-          rawList = json?.trending || [];
-        } else {
-          rawList = json?.comics || [];
-        }
-
-        hasMore = json?.pagination?.has_more ?? rawList.length >= 10;
-        
-        const list = normalizeSanka(rawList);
-        setItems(list);
-        setHasNextPage(hasMore);
+        // Default: populer
+        endpoint = "/api/comic/populer?page=" + pageNum;
       }
+
+      const res = await fetch(endpoint, { cache: "no-store" });
+      if (!res.ok) throw new Error("HTTP " + res.status);
+      const json = await res.json();
+
+      const inner = unwrap(json);
+      const rawList = inner?.items || [];
+      let list = normalizeKomiku(rawList);
+
+      // Sort by views untuk trending
+      if (sort) {
+        list = list.sort((a, b) => {
+          const va = parseFloat(String(a.views || "0").replace(/[^\d.]/g, "")) || 0;
+          const vb = parseFloat(String(b.views || "0").replace(/[^\d.]/g, "")) || 0;
+          return vb - va;
+        });
+      }
+
+      setItems(list);
+      // hasNext: cek field hasNext dari API, atau fallback ke length >= 10
+      const hasNext = inner?.hasNext ?? list.length >= 10;
+      setHasNextPage(hasNext);
     } catch (err) {
+      console.error("[ComicList] error:", err);
       setError(err instanceof Error ? err.message : "Failed to load");
     } finally {
       setLoading(false);
@@ -149,6 +142,7 @@ export function ComicListContent({ type }: ComicListContentProps) {
 
         <div className="mb-6">
           <h1 className="text-2xl font-bold sm:text-3xl">Komik {pageTitle}</h1>
+          <p className="mt-1 text-sm text-muted-foreground">Halaman {page}</p>
         </div>
 
         {loading && <div className="flex h-64 items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>}
