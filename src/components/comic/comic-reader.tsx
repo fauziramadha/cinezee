@@ -17,18 +17,16 @@ interface ComicReaderProps {
 
 // ProxyImage dengan multi-retry fallback
 function ProxyImage({ src, alt, loading }: { src: string; alt: string; loading?: "eager" | "lazy" }) {
-  // State: 0 = proxy, 1 = direct, 2 = proxy retry, 3 = failed
   const [attempt, setAttempt] = useState(0);
   const [loaded, setLoaded] = useState(false);
 
   const sources = [
-    `/api/proxy-image?url=${encodeURIComponent(src)}`,     // 0: Proxy
-    src,                                                     // 1: Direct URL
-    `/api/proxy-image?url=${encodeURIComponent(src)}&t=2`,  // 2: Proxy retry (cache bypass)
+    `/api/proxy-image?url=${encodeURIComponent(src)}`,
+    src,
+    `/api/proxy-image?url=${encodeURIComponent(src)}&t=2`,
   ];
 
   if (attempt >= 3) {
-    // Semua cara gagal - tampilkan placeholder dengan tombol retry
     return (
       <div className="flex h-48 w-full items-center justify-center bg-muted text-muted-foreground">
         <div className="flex flex-col items-center gap-2">
@@ -78,10 +76,15 @@ export function ComicReader({ chapterSlug }: ComicReaderProps) {
   useEffect(() => {
     setLoading(true);
     setError(null);
-    fetch(`/api/comic/chapter/${chapterSlug}`)
-      .then((res) => { if (!res.ok) throw new Error(`HTTP ${res.status}`); return res.json(); })
+    // FIX: Pakai route /api/comic/view/[slug] yang baru
+    fetch("/api/comic/view/" + chapterSlug)
+      .then((res) => { if (!res.ok) throw new Error("HTTP " + res.status); return res.json(); })
       .then((json) => {
-        if (json?.images) {
+        // Defensive unwrap: bisa flat atau { success, data: {...} }
+        const raw = json?.success ? json : json?.data;
+        if (raw && (raw.images || raw.image_list || raw.pages)) {
+          setChapterData(raw);
+        } else if (json?.images) {
           setChapterData(json);
         } else {
           throw new Error("Chapter tidak ditemukan");
@@ -98,16 +101,22 @@ export function ComicReader({ chapterSlug }: ComicReaderProps) {
     return (<main className="min-h-screen bg-background"><Header /><div className="flex h-[60vh] flex-col items-center justify-center gap-3 pt-20 text-center"><AlertCircle className="h-10 w-10 text-destructive" /><p className="text-sm text-destructive">{error || "Tidak ditemukan"}</p><Button variant="secondary" size="sm" onClick={() => router.push("/comic")} className="gap-1.5"><ArrowLeft className="h-3.5 w-3.5" />Kembali</Button></div><Footer /><SearchModal /><DetailModal /><PlayerModal /><AuthModal /></main>);
   }
 
-  const title = chapterData.manga_title || "Comic";
-  const chapterTitle = chapterData.chapter_title || "Chapter";
-  const images = chapterData.images || [];
-  const nav = chapterData.navigation || {};
+  // Defensive: handle berbagai kemungkinan field name
+  const title = chapterData.manga_title || chapterData.title || chapterData.comic_title || "Comic";
+  const chapterTitle = chapterData.chapter_title || chapterData.chapter || chapterData.name || "Chapter";
+  const images = chapterData.images || chapterData.image_list || chapterData.pages || [];
+  const nav = chapterData.navigation || chapterData.nav || {};
+
+  // Defensive navigation: handle berbagai nama field
+  const prevSlug = nav.previousChapter || nav.prev || nav.prev_chapter || nav.previous || null;
+  const nextSlug = nav.nextChapter || nav.next || nav.next_chapter || null;
+  const listSlug = nav.chapterList || nav.chapter_list || nav.list || null;
 
   return (
     <main className="min-h-screen bg-background">
       <Header />
       <div className="container mx-auto px-4 py-6 pt-20">
-        <button onClick={() => nav.chapterList ? router.push(`/comic/${nav.chapterList}`) : router.push("/comic")} className="mb-4 flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground">
+        <button onClick={() => listSlug ? router.push("/comic/" + listSlug) : router.push("/comic")} className="mb-4 flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground">
           <ArrowLeft className="h-4 w-4" />Kembali ke Daftar Chapter
         </button>
         
@@ -121,7 +130,7 @@ export function ComicReader({ chapterSlug }: ComicReaderProps) {
             <ProxyImage
               key={idx}
               src={imgUrl}
-              alt={`Page ${idx + 1}`}
+              alt={"Page " + (idx + 1)}
               loading={idx < 3 ? "eager" : "lazy"}
             />
           ))}
@@ -131,8 +140,8 @@ export function ComicReader({ chapterSlug }: ComicReaderProps) {
           <Button
             variant="outline"
             size="sm"
-            onClick={() => nav.previousChapter && router.push(`/comic/read/${nav.previousChapter}`)}
-            disabled={!nav.previousChapter}
+            onClick={() => prevSlug && router.push("/comic/read/" + prevSlug)}
+            disabled={!prevSlug}
             className="gap-1.5"
           >
             <ChevronLeft className="h-4 w-4" />
@@ -142,7 +151,7 @@ export function ComicReader({ chapterSlug }: ComicReaderProps) {
           <Button
             variant="outline"
             size="sm"
-            onClick={() => nav.chapterList ? router.push(`/comic/${nav.chapterList}`) : router.push("/comic")}
+            onClick={() => listSlug ? router.push("/comic/" + listSlug) : router.push("/comic")}
             className="gap-1.5"
           >
             <List className="h-4 w-4" />
@@ -152,8 +161,8 @@ export function ComicReader({ chapterSlug }: ComicReaderProps) {
           <Button
             variant="outline"
             size="sm"
-            onClick={() => nav.nextChapter && router.push(`/comic/read/${nav.nextChapter}`)}
-            disabled={!nav.nextChapter}
+            onClick={() => nextSlug && router.push("/comic/read/" + nextSlug)}
+            disabled={!nextSlug}
             className="gap-1.5"
           >
             Next
