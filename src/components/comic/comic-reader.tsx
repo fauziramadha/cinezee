@@ -12,10 +12,10 @@ import { Loader2, AlertCircle, ArrowLeft, ChevronLeft, ChevronRight, List, Image
 import { Button } from "@/components/ui/button";
 
 interface ComicReaderProps {
-  chapterSlug: string;
+  comicSlug: string;
+  chapterNumber: string;
 }
 
-// ProxyImage dengan multi-retry fallback
 function ProxyImage({ src, alt, loading }: { src: string; alt: string; loading?: "eager" | "lazy" }) {
   const [attempt, setAttempt] = useState(0);
   const [loaded, setLoaded] = useState(false);
@@ -67,7 +67,7 @@ function ProxyImage({ src, alt, loading }: { src: string; alt: string; loading?:
   );
 }
 
-export function ComicReader({ chapterSlug }: ComicReaderProps) {
+export function ComicReader({ comicSlug, chapterNumber }: ComicReaderProps) {
   const router = useRouter();
   const [chapterData, setChapterData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -76,11 +76,10 @@ export function ComicReader({ chapterSlug }: ComicReaderProps) {
   useEffect(() => {
     setLoading(true);
     setError(null);
-    // FIX: Pakai route /api/comic/view/[slug] yang baru
-    fetch("/api/comic/view/" + chapterSlug)
+    // Endpoint: /api/comic/view/<comic-slug>/<chapter-number>
+    fetch("/api/comic/view/" + comicSlug + "/" + chapterNumber)
       .then((res) => { if (!res.ok) throw new Error("HTTP " + res.status); return res.json(); })
       .then((json) => {
-        // Defensive unwrap: bisa flat atau { success, data: {...} }
         const raw = json?.success ? json : json?.data;
         if (raw && (raw.images || raw.image_list || raw.pages)) {
           setChapterData(raw);
@@ -92,31 +91,33 @@ export function ComicReader({ chapterSlug }: ComicReaderProps) {
       })
       .catch((err) => setError(err instanceof Error ? err.message : "Failed to load"))
       .finally(() => setLoading(false));
-  }, [chapterSlug]);
+  }, [comicSlug, chapterNumber]);
 
   if (loading) {
     return (<main className="min-h-screen bg-background"><Header /><div className="flex h-[60vh] items-center justify-center pt-20"><Loader2 className="h-10 w-10 animate-spin text-primary" /></div><Footer /><SearchModal /><DetailModal /><PlayerModal /><AuthModal /></main>);
   }
   if (error || !chapterData) {
-    return (<main className="min-h-screen bg-background"><Header /><div className="flex h-[60vh] flex-col items-center justify-center gap-3 pt-20 text-center"><AlertCircle className="h-10 w-10 text-destructive" /><p className="text-sm text-destructive">{error || "Tidak ditemukan"}</p><Button variant="secondary" size="sm" onClick={() => router.push("/comic")} className="gap-1.5"><ArrowLeft className="h-3.5 w-3.5" />Kembali</Button></div><Footer /><SearchModal /><DetailModal /><PlayerModal /><AuthModal /></main>);
+    return (<main className="min-h-screen bg-background"><Header /><div className="flex h-[60vh] flex-col items-center justify-center gap-3 pt-20 text-center"><AlertCircle className="h-10 w-10 text-destructive" /><p className="text-sm text-destructive">{error || "Tidak ditemukan"}</p><Button variant="secondary" size="sm" onClick={() => router.push("/comic/" + comicSlug)} className="gap-1.5"><ArrowLeft className="h-3.5 w-3.5" />Kembali</Button></div><Footer /><SearchModal /><DetailModal /><PlayerModal /><AuthModal /></main>);
   }
 
-  // Defensive: handle berbagai kemungkinan field name
   const title = chapterData.manga_title || chapterData.title || chapterData.comic_title || "Comic";
-  const chapterTitle = chapterData.chapter_title || chapterData.chapter || chapterData.name || "Chapter";
+  const chapterTitle = chapterData.chapter_title || chapterData.chapter || chapterData.name || "Chapter " + chapterNumber;
   const images = chapterData.images || chapterData.image_list || chapterData.pages || [];
   const nav = chapterData.navigation || chapterData.nav || {};
 
   // Defensive navigation: handle berbagai nama field
-  const prevSlug = nav.previousChapter || nav.prev || nav.prev_chapter || nav.previous || null;
-  const nextSlug = nav.nextChapter || nav.next || nav.next_chapter || null;
-  const listSlug = nav.chapterList || nav.chapter_list || nav.list || null;
+  // Indocast biasanya return: { prev: "319", next: "321" } atau { previous: "319", next: "321" }
+  const prevChapter = nav.prev || nav.previous || nav.prev_chapter || nav.previousChapter || null;
+  const nextChapter = nav.next || nav.next_chapter || nav.nextChapter || null;
+
+  // Build reader URL dengan comicSlug + chapter
+  const buildReaderUrl = (ch: string) => "/comic/read/" + comicSlug + "/" + ch;
 
   return (
     <main className="min-h-screen bg-background">
       <Header />
       <div className="container mx-auto px-4 py-6 pt-20">
-        <button onClick={() => listSlug ? router.push("/comic/" + listSlug) : router.push("/comic")} className="mb-4 flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground">
+        <button onClick={() => router.push("/comic/" + comicSlug)} className="mb-4 flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground">
           <ArrowLeft className="h-4 w-4" />Kembali ke Daftar Chapter
         </button>
         
@@ -140,8 +141,8 @@ export function ComicReader({ chapterSlug }: ComicReaderProps) {
           <Button
             variant="outline"
             size="sm"
-            onClick={() => prevSlug && router.push("/comic/read/" + prevSlug)}
-            disabled={!prevSlug}
+            onClick={() => prevChapter && router.push(buildReaderUrl(prevChapter))}
+            disabled={!prevChapter}
             className="gap-1.5"
           >
             <ChevronLeft className="h-4 w-4" />
@@ -151,7 +152,7 @@ export function ComicReader({ chapterSlug }: ComicReaderProps) {
           <Button
             variant="outline"
             size="sm"
-            onClick={() => listSlug ? router.push("/comic/" + listSlug) : router.push("/comic")}
+            onClick={() => router.push("/comic/" + comicSlug)}
             className="gap-1.5"
           >
             <List className="h-4 w-4" />
@@ -161,8 +162,8 @@ export function ComicReader({ chapterSlug }: ComicReaderProps) {
           <Button
             variant="outline"
             size="sm"
-            onClick={() => nextSlug && router.push("/comic/read/" + nextSlug)}
-            disabled={!nextSlug}
+            onClick={() => nextChapter && router.push(buildReaderUrl(nextChapter))}
+            disabled={!nextChapter}
             className="gap-1.5"
           >
             Next
