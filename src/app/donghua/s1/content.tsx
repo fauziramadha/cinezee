@@ -18,7 +18,6 @@ function normalizeS1List(list: any[]): any[] {
   return list.map((item: any) => {
     const rawTitle = item.title || item.name || "Untitled";
     const title = rawTitle.includes("\t") ? rawTitle.split("\t")[0] : rawTitle;
-    // Extract slug from multiple sources, then strip trailing slash
     let slug =
       item.slug ||
       (item.id || "").toString() ||
