@@ -9,11 +9,13 @@ export async function GET(req: NextRequest) {
     const page = searchParams.get("page") || "1";
     const tipe = searchParams.get("tipe") || "";
     const orderby = searchParams.get("orderby") || "";
+    const genre = searchParams.get("genre") || "";
 
     // Build endpoint with all relevant params
     let endpoint = `/populer?page=${page}`;
     if (tipe) endpoint += `&tipe=${encodeURIComponent(tipe)}`;
     if (orderby) endpoint += `&orderby=${encodeURIComponent(orderby)}`;
+    if (genre) endpoint += `&genre=${encodeURIComponent(genre)}`;
 
     const data = await comic.getPopulerFiltered(endpoint);
     return NextResponse.json(data);
