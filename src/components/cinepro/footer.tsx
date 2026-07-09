@@ -17,7 +17,7 @@ export function Footer() {
                 Cine<span className="text-primary">Stream</span>
               </p>
               <p className="text-[10px] text-muted-foreground">
-                Built with Next.js • Deploy on Cloudflare Workers
+                Tempatnya streaming terlengkap GRATIS
               </p>
             </div>
           </div>
