@@ -130,7 +130,7 @@ export function TVContent() {
         <div className="mb-6">
           <h1 className="text-2xl font-bold sm:text-3xl">TV Shows</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Serial TV populer dari TMDB. Halaman {page} dari {totalPages}
+            Serial TV populer dari seluruh dunia. Halaman {page} dari {totalPages}
           </p>
         </div>
 
