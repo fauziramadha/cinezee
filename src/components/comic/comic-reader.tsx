@@ -20,7 +20,10 @@ function ProxyImage({ src, alt, loading }: { src: string; alt: string; loading?:
   const [attempt, setAttempt] = useState(0);
   const [loaded, setLoaded] = useState(false);
 
-  // Try in order: proxy-image (our), direct, proxy-image with cache bypass
+  // Strategy:
+  // 0: Our proxy-image (primary, work for thumbnails)
+  // 1: Direct URL with no-referrer
+  // 2: Our proxy-image with cache bypass (retry)
   const sources = [
     `/api/proxy-image?url=${encodeURIComponent(src)}`,
     src,
@@ -103,28 +106,28 @@ export function ComicReader({ comicSlug, chapterNumber }: ComicReaderProps) {
   const title = chapterData.mangaTitle || chapterData.manga_title || chapterData.title || chapterData.comic_title || "Comic";
   const chapterTitle = chapterData.chapterTitle || chapterData.chapter_title || chapterData.chapter || chapterData.name || ("Chapter " + chapterNumber);
   
-  // CRITICAL: Indocast returns images as array of objects, not strings
-  // Each image: { src, fallbackSrc, url_proxy, fallbackSrc_proxy, alt, id }
-  // We prefer url_proxy (Indocast official proxy, more reliable)
+  // CRITICAL: Indocast returns images as array of objects
+  // { src, fallbackSrc, url_proxy, fallbackSrc_proxy, alt, id }
+  // 
+  // Strategy: prefer `src` (direct komiku URL) + our own proxy-image route
+  // (same approach as comic-card.tsx that works for thumbnails).
+  // Avoid `url_proxy` (Indocast proxy) karena sering 522/error per kata admin.
   const rawImages = chapterData.images || chapterData.image_list || chapterData.pages || [];
   const images: string[] = rawImages.map((img: any) => {
     if (typeof img === "string") return img;
-    // Prefer url_proxy (Indocast proxy), fallback to src
-    return img.url_proxy || img.fallbackSrc_proxy || img.src || img.fallbackSrc || "";
+    // Prioritize direct `src` (komiku URL) - akan dipass ke proxy-image kita
+    return img.src || img.fallbackSrc || img.url_proxy || img.fallbackSrc_proxy || "";
   }).filter((url: string) => url);
 
   const nav = chapterData.navigation || chapterData.nav || {};
 
   // Defensive navigation: handle berbagai nama field
-  // Indocast: { prevChapter: null, nextChapter: { apiLink, slug, chapter } }
   const prevChapterObj = nav.prevChapter || nav.previous || nav.prev_chapter || nav.previousChapter;
   const nextChapterObj = nav.nextChapter || nav.next_chapter || nav.nextChapter;
   
-  // Extract chapter number from object (if it's an object with 'chapter' field)
   const prevChapter = prevChapterObj ? (typeof prevChapterObj === "string" ? prevChapterObj : prevChapterObj.chapter) : null;
   const nextChapter = nextChapterObj ? (typeof nextChapterObj === "string" ? nextChapterObj : nextChapterObj.chapter) : null;
 
-  // Build reader URL dengan comicSlug + chapter
   const buildReaderUrl = (ch: string) => "/comic/read/" + comicSlug + "/" + ch;
 
   return (
