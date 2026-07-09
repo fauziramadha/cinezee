@@ -20,6 +20,7 @@ function ProxyImage({ src, alt, loading }: { src: string; alt: string; loading?:
   const [attempt, setAttempt] = useState(0);
   const [loaded, setLoaded] = useState(false);
 
+  // Try in order: proxy-image (our), direct, proxy-image with cache bypass
   const sources = [
     `/api/proxy-image?url=${encodeURIComponent(src)}`,
     src,
@@ -76,7 +77,6 @@ export function ComicReader({ comicSlug, chapterNumber }: ComicReaderProps) {
   useEffect(() => {
     setLoading(true);
     setError(null);
-    // Endpoint: /api/comic/view/<comic-slug>/<chapter-number>
     fetch("/api/comic/view/" + comicSlug + "/" + chapterNumber)
       .then((res) => { if (!res.ok) throw new Error("HTTP " + res.status); return res.json(); })
       .then((json) => {
@@ -100,15 +100,29 @@ export function ComicReader({ comicSlug, chapterNumber }: ComicReaderProps) {
     return (<main className="min-h-screen bg-background"><Header /><div className="flex h-[60vh] flex-col items-center justify-center gap-3 pt-20 text-center"><AlertCircle className="h-10 w-10 text-destructive" /><p className="text-sm text-destructive">{error || "Tidak ditemukan"}</p><Button variant="secondary" size="sm" onClick={() => router.push("/comic/" + comicSlug)} className="gap-1.5"><ArrowLeft className="h-3.5 w-3.5" />Kembali</Button></div><Footer /><SearchModal /><DetailModal /><PlayerModal /><AuthModal /></main>);
   }
 
-  const title = chapterData.manga_title || chapterData.title || chapterData.comic_title || "Comic";
-  const chapterTitle = chapterData.chapter_title || chapterData.chapter || chapterData.name || "Chapter " + chapterNumber;
-  const images = chapterData.images || chapterData.image_list || chapterData.pages || [];
+  const title = chapterData.mangaTitle || chapterData.manga_title || chapterData.title || chapterData.comic_title || "Comic";
+  const chapterTitle = chapterData.chapterTitle || chapterData.chapter_title || chapterData.chapter || chapterData.name || ("Chapter " + chapterNumber);
+  
+  // CRITICAL: Indocast returns images as array of objects, not strings
+  // Each image: { src, fallbackSrc, url_proxy, fallbackSrc_proxy, alt, id }
+  // We prefer url_proxy (Indocast official proxy, more reliable)
+  const rawImages = chapterData.images || chapterData.image_list || chapterData.pages || [];
+  const images: string[] = rawImages.map((img: any) => {
+    if (typeof img === "string") return img;
+    // Prefer url_proxy (Indocast proxy), fallback to src
+    return img.url_proxy || img.fallbackSrc_proxy || img.src || img.fallbackSrc || "";
+  }).filter((url: string) => url);
+
   const nav = chapterData.navigation || chapterData.nav || {};
 
   // Defensive navigation: handle berbagai nama field
-  // Indocast biasanya return: { prev: "319", next: "321" } atau { previous: "319", next: "321" }
-  const prevChapter = nav.prev || nav.previous || nav.prev_chapter || nav.previousChapter || null;
-  const nextChapter = nav.next || nav.next_chapter || nav.nextChapter || null;
+  // Indocast: { prevChapter: null, nextChapter: { apiLink, slug, chapter } }
+  const prevChapterObj = nav.prevChapter || nav.previous || nav.prev_chapter || nav.previousChapter;
+  const nextChapterObj = nav.nextChapter || nav.next_chapter || nav.nextChapter;
+  
+  // Extract chapter number from object (if it's an object with 'chapter' field)
+  const prevChapter = prevChapterObj ? (typeof prevChapterObj === "string" ? prevChapterObj : prevChapterObj.chapter) : null;
+  const nextChapter = nextChapterObj ? (typeof nextChapterObj === "string" ? nextChapterObj : nextChapterObj.chapter) : null;
 
   // Build reader URL dengan comicSlug + chapter
   const buildReaderUrl = (ch: string) => "/comic/read/" + comicSlug + "/" + ch;
