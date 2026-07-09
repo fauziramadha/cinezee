@@ -130,7 +130,7 @@ export function MoviesContent() {
         <div className="mb-6">
           <h1 className="text-2xl font-bold sm:text-3xl">Movies</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Film populer dari TMDB. Halaman {page} dari {totalPages}
+            Film populer dari seluruh dunia. Halaman {page} dari {totalPages}
           </p>
         </div>
 
