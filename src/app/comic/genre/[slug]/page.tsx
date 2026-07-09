@@ -1,4 +1,6 @@
-import { ComicGenreContent } from "./comic-genre-content";
+import { ComicGenreContent } from "./content";
+
+export const dynamic = "force-dynamic";
 
 export default async function ComicGenrePage({
   params,
@@ -6,5 +8,6 @@ export default async function ComicGenrePage({
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = await params;
-  return <ComicGenreContent slug={slug} />;
+  const cleanSlug = decodeURIComponent(slug).replace(/\/+$/, "").trim();
+  return <ComicGenreContent slug={cleanSlug} />;
 }
