@@ -35,7 +35,7 @@ export function Footer() {
             </a>
             <span className="flex items-center gap-1.5">
               <Shield className="h-3.5 w-3.5" />
-              No tracking
+              Website ini masih tahap beta, bantu website ini berkembang untuk donasi hubungi admin
             </span>
             <span className="flex items-center gap-1.5">
               Made with <Heart className="h-3 w-3 fill-primary text-primary" /> for
