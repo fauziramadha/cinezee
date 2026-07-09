@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { usePathname } from "next/navigation";
 import { useSafeSession } from "@/lib/use-safe-session";
 import {
   Search,
@@ -16,18 +17,20 @@ import { MobileSidebar } from "@/components/cinepro/mobile-sidebar";
 import { cn } from "@/lib/utils";
 
 const NAV_ITEMS = [
-  { label: "Home", href: "/", active: true },
-  { label: "Movies", href: "/movies", active: false },
-  { label: "TV Shows", href: "/tv", active: false },
-  { label: "Anime", href: "/anime", active: false },
-  { label: "Donghua", href: "/donghua", active: false },
-  { label: "Komik", href: "/comic", active: false },
-  { label: "New", href: "/new", active: false },
-  { label: "My List", href: "/watchlist", active: false },
+  { label: "Home", href: "/" },
+  { label: "Movies", href: "/movies" },
+  { label: "TV Shows", href: "/tv" },
+  { label: "Anime", href: "/anime" },
+  { label: "Donghua", href: "/donghua" },
+  { label: "Komik", href: "/comic" },
+  { label: "Novel", href: "/novel" },
+  { label: "New", href: "/new" },
+  { label: "My List", href: "/watchlist" },
 ];
 
 export function Header() {
   const [scrolled, setScrolled] = useState(false);
+  const pathname = usePathname();
   const { data: session, status } = useSafeSession();
   const setSearchOpen = useAppStore((s) => s.setSearchOpen);
   const setAuthModalOpen = useAppStore((s) => s.setAuthModalOpen);
@@ -38,6 +41,12 @@ export function Header() {
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
+
+  // Helper: cek apakah nav item sedang active
+  const isActive = (href: string) => {
+    if (href === "/") return pathname === "/";
+    return pathname === href || pathname.startsWith(href + "/");
+  };
 
   return (
     <header
@@ -66,14 +75,16 @@ export function Header() {
           </a>
 
           {/* Desktop nav (md+) */}
-          <nav className="hidden items-center gap-6 md:flex">
+          <nav className="hidden items-center gap-6 lg:flex">
             {NAV_ITEMS.map((item) => (
               <a
                 key={item.label}
                 href={item.href}
                 className={cn(
                   "text-sm font-medium transition-colors hover:text-primary",
-                  item.active ? "text-foreground" : "text-muted-foreground",
+                  isActive(item.href)
+                    ? "text-foreground"
+                    : "text-muted-foreground",
                 )}
               >
                 {item.label}
