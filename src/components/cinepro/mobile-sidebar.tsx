@@ -7,6 +7,7 @@ import {
   Heart,
   LogIn,
 } from "lucide-react";
+import { usePathname } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import {
   Sheet,
@@ -19,12 +20,18 @@ import { useSafeSession } from "@/lib/use-safe-session";
 import { useAppStore } from "@/lib/store";
 import { cn } from "@/lib/utils";
 
+// FIX: Samakan dengan NAV_ITEMS di Header supaya sidebar & header konsisten
 const NAV_ITEMS = [
-  { label: "Home", href: "/", active: true },
-  { label: "Movies", href: "/movies", active: false },
-  { label: "TV Shows", href: "/tv", active: false },
-  { label: "New", href: "/new", active: false },
-  { label: "My List", href: "/watchlist", active: false },
+  { label: "Home", href: "/" },
+  { label: "Movies", href: "/movies" },
+  { label: "TV Shows", href: "/tv" },
+  { label: "Anime", href: "/anime" },
+  { label: "Donghua", href: "/donghua" },
+  { label: "Drakor", href: "/drakor" },
+  { label: "Komik", href: "/comic" },
+  { label: "Novel", href: "/novel" },
+  { label: "New", href: "/new" },
+  { label: "My List", href: "/watchlist" },
 ];
 
 interface MobileSidebarProps {
@@ -33,8 +40,15 @@ interface MobileSidebarProps {
 }
 
 export function MobileSidebar({ open, onOpenChange }: MobileSidebarProps) {
+  const pathname = usePathname();
   const { data: session } = useSafeSession();
   const setAuthModalOpen = useAppStore((s) => s.setAuthModalOpen);
+
+  // Helper: cek apakah nav item sedang active
+  const isActive = (href: string) => {
+    if (href === "/") return pathname === "/";
+    return pathname === href || pathname.startsWith(href + "/");
+  };
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -75,7 +89,7 @@ export function MobileSidebar({ open, onOpenChange }: MobileSidebarProps) {
                 onClick={() => onOpenChange(false)}
                 className={cn(
                   "rounded-md px-4 py-2.5 text-left text-sm font-medium transition-colors",
-                  item.active
+                  isActive(item.href)
                     ? "bg-primary/10 text-primary"
                     : "text-muted-foreground hover:bg-muted hover:text-foreground",
                 )}
