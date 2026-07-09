@@ -22,6 +22,7 @@ const NAV_ITEMS = [
   { label: "TV Shows", href: "/tv" },
   { label: "Anime", href: "/anime" },
   { label: "Donghua", href: "/donghua" },
+  { label: "Drakor", href: "/drakor" },
   { label: "Komik", href: "/comic" },
   { label: "Novel", href: "/novel" },
   { label: "New", href: "/new" },
