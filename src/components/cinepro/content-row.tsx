@@ -57,8 +57,16 @@ export function ContentRow({ title, movies, className }: ContentRowProps) {
         className="content-row flex gap-3 overflow-x-auto scroll-smooth px-4 pb-2 sm:px-6 lg:px-8"
         style={{ scrollbarWidth: "none" }}
       >
+        {/* FIX: Bungkus MovieCard dengan wrapper yang punya lebar tetap.
+            MovieCard sekarang pakai w-full, jadi harus dibungkus supaya
+            di row horizontal card-nya tidak mengecil. */}
         {movies.map((movie) => (
-          <MovieCard key={`${movie.id}-${movie.media_type || "m"}`} movie={movie} />
+          <div
+            key={`${movie.id}-${movie.media_type || "m"}`}
+            className="w-28 shrink-0 sm:w-32 md:w-36 lg:w-40"
+          >
+            <MovieCard movie={movie} />
+          </div>
         ))}
         {/* Spacer at end */}
         <div className="w-1 shrink-0" />
