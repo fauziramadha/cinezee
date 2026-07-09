@@ -11,22 +11,26 @@ interface MovieCardProps {
   movie: Movie;
   className?: string;
   size?: "sm" | "md" | "lg";
+  type?: "movie" | "tv";
 }
 
+// FIX: Sekarang card pakai w-full supaya mengikuti lebar kolom grid.
+// Sebelumnya pakai width tetap (w-36 sm:w-40 md:w-44) yang bikin berdempetan di grid.
 const sizeClasses = {
-  sm: "w-28 sm:w-32",
-  md: "w-36 sm:w-40 md:w-44",
-  lg: "w-44 sm:w-52 md:w-56",
+  sm: "w-full",
+  md: "w-full",
+  lg: "w-full",
 };
 
-export function MovieCard({ movie, className, size = "md" }: MovieCardProps) {
+export function MovieCard({ movie, className, size = "md", type }: MovieCardProps) {
   const [imageLoaded, setImageLoaded] = useState(false);
   const setSelectedMedia = useAppStore((s) => s.setSelectedMedia);
 
   const title = movie.title || movie.name || "Untitled";
   const year = (movie.release_date || movie.first_air_date || "").split("-")[0];
   const rating = movie.vote_average?.toFixed(1) || "N/A";
-  const mediaType: "movie" | "tv" = movie.media_type || (movie.title ? "movie" : "tv");
+  // FIX: Prioritaskan prop `type`, lalu movie.media_type, lalu deteksi dari title vs name
+  const mediaType: "movie" | "tv" = type || movie.media_type || (movie.title ? "movie" : "tv");
 
   const handleClick = () => {
     const selected: SelectedMedia = {
@@ -43,7 +47,7 @@ export function MovieCard({ movie, className, size = "md" }: MovieCardProps) {
     <button
       onClick={handleClick}
       className={cn(
-        "group relative shrink-0 overflow-hidden rounded-lg bg-card text-left transition-all duration-300 hover:scale-105 hover:shadow-2xl hover:shadow-primary/20 hover:ring-2 hover:ring-primary/40 focus:outline-none focus:ring-2 focus:ring-primary",
+        "group relative w-full overflow-hidden rounded-lg bg-card text-left transition-all duration-300 hover:scale-[1.03] hover:shadow-2xl hover:shadow-primary/20 hover:ring-2 hover:ring-primary/40 focus:outline-none focus:ring-2 focus:ring-primary",
         sizeClasses[size],
         className,
       )}
@@ -58,7 +62,7 @@ export function MovieCard({ movie, className, size = "md" }: MovieCardProps) {
             src={getImageUrl(movie.poster_path, "w500")}
             alt={title}
             fill
-            sizes="(max-width: 640px) 50vw, (max-width: 1024px) 25vw, 200px"
+            sizes="(max-width: 640px) 33vw, (max-width: 1024px) 20vw, 16vw"
             className={cn(
               "object-cover transition-opacity duration-300",
               imageLoaded ? "opacity-100" : "opacity-0",
