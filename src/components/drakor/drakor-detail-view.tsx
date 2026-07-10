@@ -177,11 +177,23 @@ export function DrakorDetailView({ detail }: DrakorDetailViewProps) {
               <div className="mb-4">
                 <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Genre</h3>
                 <div className="flex flex-wrap gap-1.5">
-                  {genres.map((g: string, idx: number) => (
-                    <Badge key={idx} variant="outline" className="cursor-default">
-                      {g}
-                    </Badge>
-                  ))}
+                  {genres.map((g: string, idx: number) => {
+                    // Convert genre name to slug (mis. "Romance" → "romance")
+                    const genreSlug = g.toLowerCase().trim();
+                    return (
+                      <Link
+                        key={idx}
+                        href={`/drakor/kategori/${encodeURIComponent(genreSlug)}`}
+                      >
+                        <Badge
+                          variant="outline"
+                          className="cursor-pointer transition-colors hover:border-primary hover:bg-primary/10 hover:text-primary"
+                        >
+                          {g}
+                        </Badge>
+                      </Link>
+                    );
+                  })}
                 </div>
               </div>
             )}
