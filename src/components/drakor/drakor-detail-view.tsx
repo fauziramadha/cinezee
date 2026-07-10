@@ -56,6 +56,17 @@ export function DrakorDetailView({ detail }: DrakorDetailViewProps) {
     Country: details.Country || "",
   };
 
+  // Smart back button: balik ke halaman asal, fallback ke /drakor
+  const handleBack = () => {
+    // Cek apakah ada history (user datang dari halaman lain)
+    if (typeof window !== "undefined" && window.history.length > 1) {
+      router.back();
+    } else {
+      // Tidak ada history (new tab / direct access) → balik ke beranda drakor
+      router.push("/drakor");
+    }
+  };
+
   return (
     <main className="min-h-screen bg-background overflow-hidden">
       <Header />
@@ -74,9 +85,16 @@ export function DrakorDetailView({ detail }: DrakorDetailViewProps) {
         <div className="absolute inset-0 bg-gradient-to-t from-background via-background/70 to-background/30" />
       </div>
       <div className="container mx-auto -mt-32 px-4 pb-12 sm:-mt-40">
-        <button onClick={() => router.push("/drakor")} className="mb-4 flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground">
-          <ArrowLeft className="h-4 w-4" />Kembali ke Drakor
-        </button>
+        {/* FIX: Smart back button — balik ke halaman asal, fallback ke /drakor */}
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={handleBack}
+          className="mb-4 gap-1.5"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          Kembali
+        </Button>
 
         <div className="mb-3">
           <span className="inline-block rounded bg-pink-500/90 px-2 py-0.5 text-[10px] font-bold uppercase text-white">
