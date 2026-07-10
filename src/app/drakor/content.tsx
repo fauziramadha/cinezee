@@ -74,9 +74,16 @@ export function DrakorContent() {
           const items = normalizeDrakor(inner?.items || []);
           if (items.length > 0) setOngoing(items);
         }
+        // FIX: Trending shape berbeda - pakai hari_ini/minggu_ini/bulan_ini (bukan items)
         if (trendingRes) {
           const inner = unwrap(trendingRes);
-          const items = normalizeDrakor(inner?.items || []);
+          const trendingItems =
+            inner?.hari_ini ||
+            inner?.minggu_ini ||
+            inner?.bulan_ini ||
+            inner?.items ||
+            [];
+          const items = normalizeDrakor(trendingItems);
           if (items.length > 0) setTrending(items);
         }
       } catch (err) {
