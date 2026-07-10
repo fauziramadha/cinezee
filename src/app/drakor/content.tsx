@@ -13,8 +13,6 @@ import { DrakorCard } from "@/components/drakor/drakor-card";
 import { Loader2, Search, ArrowLeft } from "lucide-react";
 import { Input } from "@/components/ui/input";
 
-// Normalize DrakorID shape → format DrakorCard
-// API shape: { id, url, imageUrl, title }
 function normalizeDrakor(list: any[]): any[] {
   if (!Array.isArray(list)) return [];
   return list.map((item: any) => ({
@@ -33,7 +31,6 @@ function normalizeDrakor(list: any[]): any[] {
 function unwrap(res: any): any {
   if (!res) return null;
   if (res.status === "error" || res.statusCode) return res;
-  // DrakorID: { code, message, data: {...} }
   if (res.data !== undefined && res.code !== undefined) return res.data;
   return res;
 }
@@ -58,7 +55,6 @@ export function DrakorContent() {
     const fetchAll = async () => {
       setLoading(true);
       try {
-        // Fetch terbaru, ongoing, trending, kategori secara paralel
         const [terbaruRes, ongoingRes, trendingRes, kategoriRes] = await Promise.all([
           fetchJSON("/api/drakor/terbaru?page=1").catch(() => null),
           fetchJSON("/api/drakor/ongoing?page=1").catch(() => null),
@@ -76,7 +72,6 @@ export function DrakorContent() {
           const items = normalizeDrakor(inner?.items || []);
           if (items.length > 0) setOngoing(items);
         }
-        // FIX: Trending shape berbeda - pakai hari_ini/minggu_ini/bulan_ini (bukan item)
         if (trendingRes) {
           const inner = unwrap(trendingRes);
           const trendingItems =
@@ -88,7 +83,6 @@ export function DrakorContent() {
           const items = normalizeDrakor(trendingItems);
           if (items.length > 0) setTrending(items);
         }
-        // Kategori: { total, items: [{ id, url, title, count }] }
         if (kategoriRes) {
           const inner = unwrap(kategoriRes);
           const items = inner?.items || [];
@@ -103,7 +97,6 @@ export function DrakorContent() {
     fetchAll();
   }, []);
 
-  // Search dengan debounce
   useEffect(() => {
     if (!searchQuery.trim()) {
       setSearchResults([]);
@@ -169,37 +162,36 @@ export function DrakorContent() {
 
             {terbaru.length > 0 && (
               <DrakorRow
-                title="🔥 Drakor Terbaru"
+                title="Drakor Terbaru"
                 drakors={terbaru}
                 href="/drakor/list/terbaru"
               />
             )}
             {trending.length > 0 && (
               <DrakorRow
-                title="📈 Trending"
+                title="Trending"
                 drakors={trending}
                 href="/drakor/list/trending"
               />
             )}
             {ongoing.length > 0 && (
               <DrakorRow
-                title="▶️ Sedang Berjalan"
+                title="Sedang Berjalan"
                 drakors={ongoing}
                 href="/drakor/list/ongoing"
               />
             )}
 
-            {/* BARU: Browse by Kategori */}
             {kategori.length > 0 && (
               <section className="px-4 sm:px-6 lg:px-8">
                 <h2 className="mb-3 text-base font-bold tracking-tight sm:text-lg md:text-xl">
-                  🎭 Browse by Kategori
+                  Browse by Kategori
                 </h2>
                 <div className="flex flex-wrap gap-2">
                   {kategori.map((k) => (
                     <a
                       key={k.id}
-                      href={`/drakor/kategori/${k.id}`}
+                      href={"/drakor/kategori/" + k.id}
                       className="rounded-full border border-border bg-card px-4 py-2 text-xs font-medium text-foreground transition-colors hover:border-primary hover:bg-primary/10 hover:text-primary"
                     >
                       {k.title} ({k.count})
@@ -229,7 +221,7 @@ export function DrakorContent() {
             />
             {searching && (
               <Loader2 className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-muted-foreground" />
-            />
+            )}
           </div>
 
           <section className="mb-8">
