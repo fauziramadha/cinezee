@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { Header } from "@/components/cinepro/header";
 import { Footer } from "@/components/cinepro/footer";
@@ -8,8 +8,16 @@ import { SearchModal } from "@/components/cinepro/search-modal";
 import { DetailModal } from "@/components/cinepro/detail-modal";
 import { PlayerModal } from "@/components/cinepro/player-modal";
 import { AuthModal } from "@/components/cinepro/auth-modal";
-import { ArrowLeft, ChevronLeft, ChevronRight, Maximize, ExternalLink, AlertCircle, Loader2 } from "lucide-react";
+import { ArrowLeft, ChevronLeft, ChevronRight, Maximize, AlertCircle, Loader2, Settings } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { cn } from "@/lib/utils";
 
 interface DrakorPlayerViewProps {
   drakorId: string;
@@ -18,106 +26,165 @@ interface DrakorPlayerViewProps {
   detail: any;
 }
 
+const QUALITY_OPTIONS = [
+  { value: "360", label: "360p" },
+  { value: "480", label: "480p" },
+  { value: "720", label: "720p" },
+  { value: "1080", label: "1080p" },
+];
+
 export function DrakorPlayerView({
   drakorId,
   episodeNumber,
-  streamUrl,
+  streamUrl: initialStreamUrl,
   detail,
 }: DrakorPlayerViewProps) {
   const router = useRouter();
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const hlsRef = useRef<any>(null);
+
   const [videoError, setVideoError] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [streamUrl, setStreamUrl] = useState(initialStreamUrl);
+  const [selectedQuality, setSelectedQuality] = useState("720");
+  const [showSettings, setShowSettings] = useState(false);
 
   const title = detail?.title || "Drakor";
   const episodes = Array.isArray(detail?.episodes) ? detail.episodes : [];
   const watchBase = `/drakor/watch/${drakorId}`;
   const detailHref = `/drakor/${drakorId}`;
 
-  // Cari episode prev/next
   const currentEpNum = parseInt(episodeNumber, 10);
   const prevEp = episodes.find((e: any) => e?.number === currentEpNum - 1);
   const nextEp = episodes.find((e: any) => e?.number === currentEpNum + 1);
 
-  // Setup HLS playback (cross-browser)
-  useEffect(() => {
-    const video = videoRef.current;
-    if (!video || !streamUrl) {
-      setLoading(false);
-      return;
+  // Cleanup HLS instance
+  const destroyHls = useCallback(() => {
+    if (hlsRef.current) {
+      hlsRef.current.destroy();
+      hlsRef.current = null;
     }
+  }, []);
 
-    let hls: any = null;
-
-    // Cek apakah browser support HLS native (iPhone Safari, Mac Safari)
-    if (video.canPlayType("application/vnd.apple.mpegurl")) {
-      // Native HLS support - pakai langsung
-      video.src = streamUrl;
-      video.addEventListener("loadedmetadata", () => {
+  // Setup HLS playback
+  const setupVideo = useCallback(
+    (url: string) => {
+      const video = videoRef.current;
+      if (!video || !url) {
         setLoading(false);
-        // Auto-play (muted untuk bypass autoplay policy di beberapa browser)
-        video.play().catch(() => {
-          // Autoplay diblokir, user harus klik play manual
-        });
-      });
-      video.addEventListener("error", () => {
-        setVideoError(true);
-        setLoading(false);
-      });
-    } else {
-      // Browser tidak support native HLS (Android Chrome, Desktop Chrome/Firefox)
-      // Pakai hls.js
-      import("hls.js")
-        .then(({ default: Hls }) => {
-          if (Hls.isSupported()) {
-            hls = new Hls({
-              // Konfigurasi untuk stabilitas
-              enableWorker: true,
-              lowLatencyMode: false,
-              backBufferLength: 90,
-            });
-            hls.loadSource(streamUrl);
-            hls.attachMedia(video);
+        return;
+      }
 
-            hls.on(Hls.Events.MANIFEST_PARSED, () => {
-              setLoading(false);
-              video.play().catch(() => {
-                // Autoplay diblokir
-              });
-            });
+      destroyHls();
+      setVideoError(false);
+      setLoading(true);
 
-            hls.on(Hls.Events.ERROR, (_event: any, data: any) => {
-              if (data.fatal) {
-                console.error("[HLS] Fatal error:", data);
-                setVideoError(true);
-                setLoading(false);
-              }
-            });
-          } else {
-            // Browser tidak support HLS sama sekali
-            setVideoError(true);
-            setLoading(false);
-          }
-        })
-        .catch((err) => {
-          console.error("[HLS] Failed to load hls.js:", err);
+      // Native HLS support (Safari)
+      if (video.canPlayType("application/vnd.apple.mpegurl")) {
+        video.src = url;
+        video.load();
+
+        const onLoaded = () => {
+          setLoading(false);
+          video.play().catch(() => {});
+        };
+        const onError = () => {
           setVideoError(true);
           setLoading(false);
-        });
-    }
+        };
+        video.addEventListener("loadedmetadata", onLoaded, { once: true });
+        video.addEventListener("error", onError, { once: true });
+      } else {
+        // Pakai hls.js
+        import("hls.js")
+          .then(({ default: Hls }) => {
+            if (Hls.isSupported()) {
+              const hls = new Hls({
+                enableWorker: true,
+                lowLatencyMode: false,
+                backBufferLength: 90,
+              });
+              hlsRef.current = hls;
+              hls.loadSource(url);
+              hls.attachMedia(video);
 
-    // Cleanup
+              hls.on(Hls.Events.MANIFEST_PARSED, () => {
+                setLoading(false);
+                video.play().catch(() => {});
+              });
+
+              hls.on(Hls.Events.ERROR, (_event: any, data: any) => {
+                if (data.fatal) {
+                  setVideoError(true);
+                  setLoading(false);
+                }
+              });
+            } else {
+              setVideoError(true);
+              setLoading(false);
+            }
+          })
+          .catch(() => {
+            setVideoError(true);
+            setLoading(false);
+          });
+      }
+    },
+    [destroyHls]
+  );
+
+  // Initial load
+  useEffect(() => {
+    setupVideo(streamUrl);
     return () => {
-      if (hls) {
-        hls.destroy();
-      }
-      if (video) {
-        video.removeEventListener("loadedmetadata", () => {});
-        video.removeEventListener("error", () => {});
-      }
+      destroyHls();
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Re-setup saat streamUrl berubah (quality switch)
+  useEffect(() => {
+    if (streamUrl !== initialStreamUrl) {
+      setupVideo(streamUrl);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [streamUrl]);
+
+  // Handle quality change - fetch new stream URL
+  const handleQualityChange = async (newQuality: string) => {
+    setSelectedQuality(newQuality);
+    setLoading(true);
+
+    try {
+      const res = await fetch("/api/drakor/play", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: drakorId,
+          episode: episodeNumber,
+          quality: newQuality,
+        }),
+      });
+
+      if (!res.ok) throw new Error("HTTP " + res.status);
+
+      const json = await res.json();
+      const playData = json?.data || json;
+      const newUrl = playData?.vid_url || playData?.vid_url_proxy || "";
+
+      if (newUrl) {
+        setStreamUrl(newUrl);
+      } else {
+        setVideoError(true);
+        setLoading(false);
+      }
+    } catch (err) {
+      console.error("[Quality change] error:", err);
+      setVideoError(true);
+      setLoading(false);
+    }
+  };
 
   const toggleFullscreen = () => {
     if (!document.fullscreenElement) {
@@ -148,18 +215,27 @@ export function DrakorPlayerView({
           className="relative aspect-video w-full overflow-hidden rounded-lg bg-black"
           style={{ minHeight: "200px" }}
         >
-          {/* Loading overlay */}
-          {loading && !videoError && (
-            <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-white z-20">
-              <Loader2 className="h-10 w-10 animate-spin text-primary" />
-              <p className="text-sm text-white/70">Memuat video...</p>
-            </div>
-          )}
+          {/* Loading overlay dengan fade transition */}
+          <div
+            className={cn(
+              "absolute inset-0 z-20 flex flex-col items-center justify-center gap-3 bg-black transition-opacity duration-500",
+              loading ? "opacity-100" : "opacity-0 pointer-events-none"
+            )}
+          >
+            <Loader2 className="h-10 w-10 animate-spin text-primary" />
+            <p className="text-sm text-white/70">
+              {streamUrl !== initialStreamUrl ? "Mengganti quality..." : "Memuat video..."}
+            </p>
+          </div>
 
+          {/* Video element */}
           {streamUrl && !videoError ? (
             <video
               ref={videoRef}
-              className="h-full w-full"
+              className={cn(
+                "h-full w-full transition-opacity duration-500",
+                loading ? "opacity-0" : "opacity-100"
+              )}
               controls
               playsInline
               onError={() => {
@@ -173,20 +249,9 @@ export function DrakorPlayerView({
               <div>
                 <p className="mb-1 text-base font-semibold">Playback Error</p>
                 <p className="text-sm text-white/60">
-                  Video tidak bisa diputar. Coba buka di tab baru atau pindah episode.
+                  Video tidak bisa diputar. Coba ganti quality atau pindah episode.
                 </p>
               </div>
-              {streamUrl && (
-                <a
-                  href={streamUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90"
-                >
-                  <ExternalLink className="h-3.5 w-3.5" />
-                  Buka di Tab Baru
-                </a>
-              )}
             </div>
           ) : (
             <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-black p-6 text-center text-white">
@@ -200,14 +265,52 @@ export function DrakorPlayerView({
             </div>
           )}
 
-          {/* Fullscreen button */}
+          {/* Settings button (quality selector) */}
           {streamUrl && !videoError && !loading && (
-            <button
-              onClick={toggleFullscreen}
-              className="absolute right-3 top-3 z-10 flex h-8 w-8 items-center justify-center rounded-full bg-black/60 text-white backdrop-blur-sm hover:bg-primary"
-            >
-              <Maximize className="h-4 w-4" />
-            </button>
+            <div className="absolute right-3 top-3 z-10 flex items-center gap-2">
+              <button
+                onClick={() => setShowSettings(!showSettings)}
+                className="flex h-8 w-8 items-center justify-center rounded-full bg-black/60 text-white backdrop-blur-sm hover:bg-primary"
+                aria-label="Settings"
+              >
+                <Settings className="h-4 w-4" />
+              </button>
+              <button
+                onClick={toggleFullscreen}
+                className="flex h-8 w-8 items-center justify-center rounded-full bg-black/60 text-white backdrop-blur-sm hover:bg-primary"
+                aria-label="Fullscreen"
+              >
+                <Maximize className="h-4 w-4" />
+              </button>
+            </div>
+          )}
+
+          {/* Settings panel (quality selector) */}
+          {showSettings && !loading && !videoError && (
+            <div className="absolute right-3 top-14 z-10 w-40 rounded-lg border border-white/20 bg-black/90 p-3 backdrop-blur-md">
+              <p className="mb-2 text-xs font-semibold text-white/80 uppercase tracking-wide">
+                Quality
+              </p>
+              <div className="flex flex-col gap-1">
+                {QUALITY_OPTIONS.map((q) => (
+                  <button
+                    key={q.value}
+                    onClick={() => {
+                      handleQualityChange(q.value);
+                      setShowSettings(false);
+                    }}
+                    className={cn(
+                      "rounded px-3 py-1.5 text-left text-xs font-medium transition-colors",
+                      selectedQuality === q.value
+                        ? "bg-primary text-primary-foreground"
+                        : "text-white/70 hover:bg-white/10"
+                    )}
+                  >
+                    {q.label}
+                  </button>
+                ))}
+              </div>
+            </div>
           )}
         </div>
 
@@ -233,23 +336,30 @@ export function DrakorPlayerView({
               Next Episode<ChevronRight className="h-4 w-4" />
             </Button>
           </div>
-          {streamUrl && (
-            <a
-              href={streamUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center gap-1.5 text-xs text-primary hover:underline"
-            >
-              <ExternalLink className="h-3.5 w-3.5" />
-              Buka Stream di Tab Baru
-            </a>
-          )}
+
+          {/* Quality selector (di luar player, untuk mobile) */}
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-muted-foreground">Quality:</span>
+            <Select value={selectedQuality} onValueChange={handleQualityChange}>
+              <SelectTrigger className="h-8 w-24 text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {QUALITY_OPTIONS.map((q) => (
+                  <SelectItem key={q.value} value={q.value}>
+                    {q.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
         </div>
 
         {/* Info note */}
         <div className="mt-4 rounded-lg border border-border bg-card p-4">
           <p className="text-xs text-muted-foreground">
-            💡 Tips: Jika mengalami kendala silahkan hubungi admin.
+            💡 Tips: Jika video tidak otomatis diputar, tekan tombol play di video player.
+            Gunakan tombol settings (⚙️) di pojok kanan atas player untuk mengganti quality.
           </p>
         </div>
       </div>
