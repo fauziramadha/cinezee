@@ -111,7 +111,7 @@ export function DrakorDetailView({ detail }: DrakorDetailViewProps) {
         )}
         <div className="absolute inset-0 bg-gradient-to-t from-background via-background/70 to-background/30" />
       </div>
-      <div className="container mx-auto -mt-32 px-4 pb-12 sm:-mt-40">
+      <div className="container mx-auto -mt-32 px-4 pb-12 sm:-mt-40 relative z-10">
          <button
           onClick={handleBack}
           className="mb-4 inline-flex items-center gap-1.5 rounded-full bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-lg transition-colors hover:bg-primary/90"
