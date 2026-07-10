@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { Play, Tv } from "lucide-react";
@@ -23,7 +23,9 @@ interface DrakorCardProps {
 }
 
 export function DrakorCard({ drakor }: DrakorCardProps) {
-  const [imgError, setImgError] = useState(false);
+  const [retryCount, setRetryCount] = useState(0);
+  const MAX_RETRIES = 2;
+
   const title = drakor.title || "Untitled";
   const rawPoster = drakor.imageUrl || drakor.poster || drakor.thumbnail || null;
   const poster = rawPoster ? `/api/proxy-image?url=${encodeURIComponent(rawPoster)}` : null;
@@ -35,28 +37,46 @@ export function DrakorCard({ drakor }: DrakorCardProps) {
 
   const detailHref = slug ? `/drakor/${slug}` : "#";
 
+  // Retry logic: if image fails, try again after delay (up to MAX_RETRIES)
+  const showNoImage = retryCount >= MAX_RETRIES;
+
+  const handleImageError = () => {
+    if (retryCount < MAX_RETRIES) {
+      // Wait 1s then retry
+      setTimeout(() => {
+        setRetryCount((prev) => prev + 1);
+      }, 1000);
+    } else {
+      setRetryCount(MAX_RETRIES);
+    }
+  };
+
+  // Generate unique key to force Image re-mount on retry
+  const imageKey = `${slug}-${retryCount}`;
+
   return (
     <Link
       href={detailHref}
       className="group relative flex w-full flex-col overflow-hidden rounded-lg bg-card text-left transition-all duration-300 hover:scale-[1.03] hover:shadow-2xl hover:shadow-primary/20 hover:ring-2 hover:ring-primary/40"
     >
       <div className="relative aspect-[2/3] w-full overflow-hidden bg-muted">
-        {poster && !imgError ? (
+        {poster && !showNoImage ? (
           <Image
+            key={imageKey}
             src={poster}
             alt={title}
             fill
             sizes="(max-width: 640px) 33vw, (max-width: 1024px) 20vw, 16vw"
             className="object-cover transition-transform duration-300 group-hover:scale-110"
             unoptimized
-            onError={() => setImgError(true)}
+            onError={handleImageError}
           />
-        ) : (
+        ) : showNoImage ? (
           <div className="flex h-full flex-col items-center justify-center gap-2 text-muted-foreground">
             <Tv className="h-8 w-8" />
             <span className="text-[10px] text-center px-2">No Image</span>
           </div>
-        )}
+        ) : null}
 
         {/* Status badge */}
         <div className="absolute left-1.5 top-1.5">
