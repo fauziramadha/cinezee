@@ -10,12 +10,22 @@ import { SearchModal } from "@/components/cinepro/search-modal";
 import { DetailModal } from "@/components/cinepro/detail-modal";
 import { PlayerModal } from "@/components/cinepro/player-modal";
 import { AuthModal } from "@/components/cinepro/auth-modal";
-import { Loader2, AlertCircle, ArrowLeft, Play, Calendar, Tv, Star, ChevronRight } from "lucide-react";
+import { Loader2, AlertCircle, ArrowLeft, Play, Calendar, Tv, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 
 interface DrakorDetailContentProps {
   slug: string;
+}
+
+// Safe string helper - handle mojibake / null / undefined
+function safeStr(val: any): string {
+  if (val === null || val === undefined) return "";
+  try {
+    return String(val);
+  } catch {
+    return "";
+  }
 }
 
 export function DrakorDetailContent({ slug }: DrakorDetailContentProps) {
@@ -30,12 +40,15 @@ export function DrakorDetailContent({ slug }: DrakorDetailContentProps) {
     fetch("/api/drakor/detail/" + slug)
       .then((res) => { if (!res.ok) throw new Error("HTTP " + res.status); return res.json(); })
       .then((json) => {
-        // Shape: { code, message, data: { id, title, poster, synopsis, details, cast, episodes } }
-        const raw = json?.data || json;
-        if (raw && (raw.title || raw.id)) {
-          setDetail(raw);
-        } else {
-          throw new Error("Drakor tidak ditemukan");
+        try {
+          const raw = json?.data || json;
+          if (raw && (raw.title || raw.id)) {
+            setDetail(raw);
+          } else {
+            throw new Error("Drakor tidak ditemukan");
+          }
+        } catch (e) {
+          throw new Error("Format response tidak valid");
         }
       })
       .catch((err) => setError(err instanceof Error ? err.message : "Failed to load"))
@@ -78,28 +91,41 @@ export function DrakorDetailContent({ slug }: DrakorDetailContentProps) {
     );
   }
 
-  const title = detail.title || "Untitled";
+  // Defensive parsing - semua field diprotect dengan safeStr
+  const title = safeStr(detail.title) || "Untitled";
   const poster = detail.poster || detail.imageUrl || null;
-  const synopsis = detail.synopsis || "";
-  const details = detail.details || {};
-  const episodes = detail.episodes || [];
-  const drakorId = detail.id || detail.slug || slug;
+  const synopsis = safeStr(detail.synopsis);
+  const details = (detail.details && typeof detail.details === "object") ? detail.details : {};
+  const episodes = Array.isArray(detail.episodes) ? detail.episodes : [];
+  const drakorId = safeStr(detail.id || detail.slug || slug);
 
-  // Sort episodes ascending by number
-  const sortedEpisodes = [...episodes].sort((a, b) => {
-    const numA = parseInt(String(a.number || a.episode || "0").match(/\d+/)?.[0] || "0", 10);
-    const numB = parseInt(String(b.number || b.episode || "0").match(/\d+/)?.[0] || "0", 10);
-    return numA - numB;
-  });
+  // Sort episodes ascending by number (defensive)
+  let sortedEpisodes: any[] = [];
+  try {
+    sortedEpisodes = [...episodes].sort((a, b) => {
+      const numA = parseInt(String(a?.number || a?.episode || "0").match(/\d+/)?.[0] || "0", 10);
+      const numB = parseInt(String(b?.number || b?.episode || "0").match(/\d+/)?.[0] || "0", 10);
+      return numA - numB;
+    });
+  } catch {
+    sortedEpisodes = episodes;
+  }
 
   const firstEpisode = sortedEpisodes[0];
 
-  // Parse genres from string
-  const genres = (details.Genres || "").split(",").map((g: string) => g.trim()).filter(Boolean);
+  // Parse genres safely
+  let genres: string[] = [];
+  try {
+    const genreStr = safeStr(details.Genres);
+    if (genreStr) {
+      genres = genreStr.split(",").map((g: string) => g.trim()).filter(Boolean);
+    }
+  } catch {
+    genres = [];
+  }
 
-  // Parse aired date
-  const aired = details.Aired || "";
-  const year = aired.split("-")[0]?.trim() || "";
+  // Safe field accessors
+  const getDetail = (key: string): string => safeStr(details[key]);
 
   return (
     <main className="min-h-screen bg-background overflow-hidden">
@@ -107,7 +133,7 @@ export function DrakorDetailContent({ slug }: DrakorDetailContentProps) {
       <div className="relative h-[40vh] min-h-[280px] w-full overflow-hidden bg-muted sm:h-[50vh]">
         {poster && (
           <Image
-            src={`/api/proxy-image?url=${encodeURIComponent(poster)}`}
+            src={`/api/proxy-image?url=${encodeURIComponent(String(poster))}`}
             alt={title}
             fill
             sizes="100vw"
@@ -134,7 +160,7 @@ export function DrakorDetailContent({ slug }: DrakorDetailContentProps) {
           <div className="relative mx-auto aspect-[2/3] w-40 shrink-0 overflow-hidden rounded-lg bg-muted shadow-2xl sm:mx-0 sm:w-48 md:w-56">
             {poster ? (
               <Image
-                src={`/api/proxy-image?url=${encodeURIComponent(poster)}`}
+                src={`/api/proxy-image?url=${encodeURIComponent(String(poster))}`}
                 alt={title}
                 fill
                 sizes="(max-width: 640px) 160px, 224px"
@@ -150,21 +176,20 @@ export function DrakorDetailContent({ slug }: DrakorDetailContentProps) {
           </div>
           <div className="flex-1 text-center sm:text-left min-w-0">
             <h1 className="text-2xl font-bold tracking-tight sm:text-3xl md:text-4xl break-words">{title}</h1>
-            {details["Native Title"] && (
-              <p className="mt-1 text-sm text-muted-foreground break-words">{details["Native Title"]}</p>
+            {getDetail("Format") && (
+              <p className="mt-1 text-sm text-muted-foreground break-words">{getDetail("Format")}</p>
             )}
             <div className="mt-3 flex flex-wrap items-center justify-center gap-2 sm:justify-start">
-              {details.Type && <Badge variant="secondary" className="gap-1"><Tv className="h-3 w-3" />{details.Type}</Badge>}
-              {details.Format && <Badge variant="secondary">{details.Format}</Badge>}
-              {details.Episodes && <Badge variant="secondary">{details.Episodes} Episode</Badge>}
-              {details.Duration && <Badge variant="secondary" className="gap-1"><Calendar className="h-3 w-3" />{details.Duration}</Badge>}
-              {details.Country && <Badge variant="secondary">{details.Country}</Badge>}
+              {getDetail("Type") && <Badge variant="secondary" className="gap-1"><Tv className="h-3 w-3" />{getDetail("Type")}</Badge>}
+              {getDetail("Episodes") && <Badge variant="secondary">{getDetail("Episodes")} Episode</Badge>}
+              {getDetail("Duration") && <Badge variant="secondary" className="gap-1"><Calendar className="h-3 w-3" />{getDetail("Duration")}</Badge>}
+              {getDetail("Country") && <Badge variant="secondary">{getDetail("Country")}</Badge>}
             </div>
             <div className="mt-4 flex flex-wrap justify-center gap-2 sm:justify-start">
               {firstEpisode && (
                 <Button
                   size="sm"
-                  onClick={() => router.push(`/drakor/watch/${drakorId}/${firstEpisode.number}`)}
+                  onClick={() => router.push(`/drakor/watch/${drakorId}/${firstEpisode.number || 1}`)}
                   className="gap-2"
                 >
                   <Play className="h-4 w-4 fill-current" />Tonton Episode 1
@@ -209,8 +234,8 @@ export function DrakorDetailContent({ slug }: DrakorDetailContentProps) {
                 </h3>
                 <div className="max-h-[500px] space-y-1.5 overflow-y-auto pr-2">
                   {sortedEpisodes.map((ep: any, idx: number) => {
-                    const epNum = ep.number || (idx + 1);
-                    const epTitle = ep.episode || ("Episode " + epNum);
+                    const epNum = ep?.number || (idx + 1);
+                    const epTitle = safeStr(ep?.episode) || ("Episode " + epNum);
                     return (
                       <Link
                         key={idx}
@@ -241,64 +266,58 @@ export function DrakorDetailContent({ slug }: DrakorDetailContentProps) {
             <div className="rounded-lg border border-border bg-card p-4">
               <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Informasi</h3>
               <dl className="space-y-2 text-xs">
-                {details.Title && (
+                {getDetail("Title") && (
                   <div className="flex justify-between gap-2">
                     <dt className="text-muted-foreground">Judul</dt>
-                    <dd className="font-medium text-right">{details.Title}</dd>
+                    <dd className="font-medium text-right">{getDetail("Title")}</dd>
                   </div>
                 )}
-                {details.Type && (
+                {getDetail("Type") && (
                   <div className="flex justify-between gap-2">
                     <dt className="text-muted-foreground">Tipe</dt>
-                    <dd className="font-medium text-right">{details.Type}</dd>
+                    <dd className="font-medium text-right">{getDetail("Type")}</dd>
                   </div>
                 )}
-                {details.Format && (
+                {getDetail("Format") && (
                   <div className="flex justify-between gap-2">
                     <dt className="text-muted-foreground">Format</dt>
-                    <dd className="font-medium text-right">{details.Format}</dd>
+                    <dd className="font-medium text-right">{getDetail("Format")}</dd>
                   </div>
                 )}
-                {details.Episodes && (
+                {getDetail("Episodes") && (
                   <div className="flex justify-between gap-2">
                     <dt className="text-muted-foreground">Total Episode</dt>
-                    <dd className="font-medium text-right">{details.Episodes}</dd>
+                    <dd className="font-medium text-right">{getDetail("Episodes")}</dd>
                   </div>
                 )}
-                {details.Duration && (
+                {getDetail("Duration") && (
                   <div className="flex justify-between gap-2">
                     <dt className="text-muted-foreground">Durasi</dt>
-                    <dd className="font-medium text-right">{details.Duration}</dd>
+                    <dd className="font-medium text-right">{getDetail("Duration")}</dd>
                   </div>
                 )}
-                {details.Aired && (
+                {getDetail("Aired") && (
                   <div className="flex justify-between gap-2">
                     <dt className="text-muted-foreground">Tayang</dt>
-                    <dd className="font-medium text-right">{details.Aired}</dd>
+                    <dd className="font-medium text-right">{getDetail("Aired")}</dd>
                   </div>
                 )}
-                {details["Aired On"] && (
+                {getDetail("Aired On") && (
                   <div className="flex justify-between gap-2">
                     <dt className="text-muted-foreground">Jadwal</dt>
-                    <dd className="font-medium text-right">{details["Aired On"]}</dd>
+                    <dd className="font-medium text-right">{getDetail("Aired On")}</dd>
                   </div>
                 )}
-                {details["Original Network"] && (
+                {getDetail("Original Network") && (
                   <div className="flex justify-between gap-2">
                     <dt className="text-muted-foreground">Network</dt>
-                    <dd className="font-medium text-right">{details["Original Network"]}</dd>
+                    <dd className="font-medium text-right">{getDetail("Original Network")}</dd>
                   </div>
                 )}
-                {details.Country && (
+                {getDetail("Country") && (
                   <div className="flex justify-between gap-2">
                     <dt className="text-muted-foreground">Negara</dt>
-                    <dd className="font-medium text-right">{details.Country}</dd>
-                  </div>
-                )}
-                {details["Also Known As"] && (
-                  <div className="flex justify-between gap-2">
-                    <dt className="text-muted-foreground">Juga Dikenal</dt>
-                    <dd className="font-medium text-right text-[10px]">{details["Also Known As"]}</dd>
+                    <dd className="font-medium text-right">{getDetail("Country")}</dd>
                   </div>
                 )}
               </dl>
