@@ -112,8 +112,14 @@ export function DrakorDetailView({ detail }: DrakorDetailViewProps) {
         <div className="absolute inset-0 bg-gradient-to-t from-background via-background/70 to-background/30" />
       </div>
       <div className="container mx-auto -mt-32 px-4 pb-12 sm:-mt-40 relative z-10">
-        <Button variant="secondary" size="sm" className="mb-4 gap-1.5 shadow-lg">
-         <ArrowLeft />Kembali
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={handleBack}
+          className="mb-4 gap-1.5 shadow-lg"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          Kembali
         </Button>
 
         <div className="mb-3">
