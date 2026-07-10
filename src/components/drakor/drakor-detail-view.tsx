@@ -9,12 +9,40 @@ import { SearchModal } from "@/components/cinepro/search-modal";
 import { DetailModal } from "@/components/cinepro/detail-modal";
 import { PlayerModal } from "@/components/cinepro/player-modal";
 import { AuthModal } from "@/components/cinepro/auth-modal";
-import { ArrowLeft, Play, Calendar, Tv, ChevronRight } from "lucide-react";
+import { ArrowLeft, Play, Calendar, Tv, ChevronRight, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 
 interface DrakorDetailViewProps {
   detail: any;
+}
+
+// Helper: ambil inisial dari nama
+function getInitials(name: string): string {
+  if (!name) return "?";
+  const parts = name.trim().split(/\s+/);
+  if (parts.length === 1) return parts[0].charAt(0).toUpperCase();
+  return (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
+}
+
+// Helper: ambil warna berdasarkan nama (untuk avatar warna-warni)
+function getAvatarColor(name: string): string {
+  const colors = [
+    "bg-red-500/80",
+    "bg-blue-500/80",
+    "bg-green-500/80",
+    "bg-yellow-500/80",
+    "bg-purple-500/80",
+    "bg-pink-500/80",
+    "bg-indigo-500/80",
+    "bg-teal-500/80",
+    "bg-orange-500/80",
+  ];
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) {
+    hash = name.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  return colors[Math.abs(hash) % colors.length];
 }
 
 export function DrakorDetailView({ detail }: DrakorDetailViewProps) {
@@ -25,6 +53,7 @@ export function DrakorDetailView({ detail }: DrakorDetailViewProps) {
   const synopsis = detail.synopsis || "";
   const details = (detail.details && typeof detail.details === "object") ? detail.details : {};
   const episodes = Array.isArray(detail.episodes) ? detail.episodes : [];
+  const cast = Array.isArray(detail.cast) ? detail.cast : [];
   const drakorId = detail.id || detail.slug || "";
 
   const sortedEpisodes = [...episodes].sort((a, b) => {
@@ -56,7 +85,7 @@ export function DrakorDetailView({ detail }: DrakorDetailViewProps) {
     Country: details.Country || "",
   };
 
-  // Smart back button: balik ke halaman asal, fallback ke /drakor
+  // Smart back button
   const handleBack = () => {
     if (typeof window !== "undefined" && window.history.length > 1) {
       router.back();
@@ -158,6 +187,40 @@ export function DrakorDetailView({ detail }: DrakorDetailViewProps) {
                   {synopsis.split("\n").filter((p: string) => p.trim()).map((p: string, idx: number) => (
                     <p key={idx}>{p}</p>
                   ))}
+                </div>
+              </div>
+            )}
+
+            {/* CAST SECTION - Baru ditambahkan */}
+            {cast.length > 0 && (
+              <div className="mb-6">
+                <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Pemeran ({cast.length})</h3>
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                  {cast.map((member: any, idx: number) => {
+                    const name = member?.name || "Unknown";
+                    const role = member?.role || "";
+                    const url = member?.url || "";
+                    const initials = getInitials(name);
+                    const avatarColor = getAvatarColor(name);
+
+                    return (
+                      <div
+                        key={idx}
+                        className="flex items-center gap-2.5 rounded-lg border border-border bg-card p-2.5"
+                      >
+                        {/* Avatar dengan inisial (karena API tidak punya foto) */}
+                        <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full ${avatarColor} text-sm font-bold text-white`}>
+                          {initials}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-xs font-semibold text-foreground">{name}</p>
+                          {role && (
+                            <p className="truncate text-[10px] text-muted-foreground">as {role}</p>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             )}
