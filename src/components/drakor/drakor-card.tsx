@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { Play, Tv } from "lucide-react";
@@ -22,9 +23,9 @@ interface DrakorCardProps {
 }
 
 export function DrakorCard({ drakor }: DrakorCardProps) {
+  const [imgError, setImgError] = useState(false);
   const title = drakor.title || "Untitled";
   const rawPoster = drakor.imageUrl || drakor.poster || drakor.thumbnail || null;
-  // FIX: Route all images through proxy to bypass hotlink protection
   const poster = rawPoster ? `/api/proxy-image?url=${encodeURIComponent(rawPoster)}` : null;
   const slug = (drakor.id || drakor.slug || "").toString().replace(/\/+$/, "").trim();
   const status = drakor.status || "Ongoing";
@@ -40,7 +41,7 @@ export function DrakorCard({ drakor }: DrakorCardProps) {
       className="group relative flex w-full flex-col overflow-hidden rounded-lg bg-card text-left transition-all duration-300 hover:scale-[1.03] hover:shadow-2xl hover:shadow-primary/20 hover:ring-2 hover:ring-primary/40"
     >
       <div className="relative aspect-[2/3] w-full overflow-hidden bg-muted">
-        {poster ? (
+        {poster && !imgError ? (
           <Image
             src={poster}
             alt={title}
@@ -48,10 +49,12 @@ export function DrakorCard({ drakor }: DrakorCardProps) {
             sizes="(max-width: 640px) 33vw, (max-width: 1024px) 20vw, 16vw"
             className="object-cover transition-transform duration-300 group-hover:scale-110"
             unoptimized
+            onError={() => setImgError(true)}
           />
         ) : (
-          <div className="flex h-full items-center justify-center text-muted-foreground">
-            <Tv className="h-12 w-12" />
+          <div className="flex h-full flex-col items-center justify-center gap-2 text-muted-foreground">
+            <Tv className="h-8 w-8" />
+            <span className="text-[10px] text-center px-2">No Image</span>
           </div>
         )}
 
