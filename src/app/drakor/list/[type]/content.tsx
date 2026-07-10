@@ -37,7 +37,7 @@ function unwrap(res: any): any {
 
 const TYPE_CONFIG: Record<
   string,
-  { title: string; endpoint: (page: number) => string }
+  { title: string; endpoint: (page: number) => string; isTrending?: boolean }
 > = {
   terbaru: {
     title: "Drakor Terbaru",
@@ -49,7 +49,8 @@ const TYPE_CONFIG: Record<
   },
   trending: {
     title: "Trending",
-    endpoint: (page) => "/api/drakor/trending" + (page > 1 ? "?page=" + page : ""),
+    endpoint: () => "/api/drakor/trending",
+    isTrending: true,
   },
 };
 
@@ -64,10 +65,11 @@ export function DrakorListContent({ type, page }: DrakorListContentProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [hasNextPage, setHasNextPage] = useState(false);
+  const [trendingTab, setTrendingTab] = useState<"hari_ini" | "minggu_ini" | "bulan_ini">("hari_ini");
 
   const config = TYPE_CONFIG[type];
 
-  const loadData = useCallback(async (pageNum: number) => {
+  const loadData = useCallback(async (pageNum: number, tab?: "hari_ini" | "minggu_ini" | "bulan_ini") => {
     setLoading(true);
     setError(null);
     try {
@@ -80,30 +82,41 @@ export function DrakorListContent({ type, page }: DrakorListContentProps) {
       if (!res.ok) throw new Error("HTTP " + res.status);
       const json = await res.json();
       const inner = unwrap(json);
-      // FIX: Trending pakai hari_ini/minggu_ini/bulan_ini (bukan items)
-      const rawList =
-        inner?.items ||
-        inner?.hari_ini ||
-        inner?.minggu_ini ||
-        inner?.bulan_ini ||
-        [];
+
+      let rawList: any[] = [];
+      if (config.isTrending) {
+        // Trending: pakai tab yang dipilih
+        const tabKey = tab || trendingTab;
+        rawList = inner?.[tabKey] || inner?.hari_ini || inner?.minggu_ini || inner?.bulan_ini || [];
+        // Trending tidak support pagination - selalu tampilkan semua
+        setHasNextPage(false);
+      } else {
+        rawList = inner?.items || [];
+        const total = inner?.total || 0;
+        const hasNext = total > pageNum * 10 || rawList.length >= 10;
+        setHasNextPage(hasNext);
+      }
+
       const list = normalizeDrakor(rawList);
       setItems(list);
-      // DrakorID: { total: 30 } - kalau ada total, hitung hasNext
-      const total = inner?.total || 0;
-      const hasNext = total > pageNum * 10 || list.length >= 10;
-      setHasNextPage(hasNext);
     } catch (err) {
       console.error("[DrakorList] error:", err);
       setError(err instanceof Error ? err.message : "Failed to load");
     } finally {
       setLoading(false);
     }
-  }, [type, config]);
+  }, [type, config, trendingTab]);
 
   useEffect(() => {
     loadData(page);
   }, [loadData, page]);
+
+  // Reload saat trending tab berubah
+  useEffect(() => {
+    if (config?.isTrending) {
+      loadData(1, trendingTab);
+    }
+  }, [trendingTab, config, loadData]);
 
   const handlePrevPage = () => {
     if (page > 1) {
@@ -168,8 +181,37 @@ export function DrakorListContent({ type, page }: DrakorListContentProps) {
 
         <div className="mb-6">
           <h1 className="text-2xl font-bold sm:text-3xl">{config.title}</h1>
-          <p className="mt-1 text-sm text-muted-foreground">Halaman {page}</p>
+          {!config.isTrending && (
+            <p className="mt-1 text-sm text-muted-foreground">Halaman {page}</p>
+          )}
         </div>
+
+        {/* Tab selector untuk trending */}
+        {config.isTrending && (
+          <div className="mb-6 flex flex-wrap gap-2">
+            <Button
+              size="sm"
+              variant={trendingTab === "hari_ini" ? "default" : "outline"}
+              onClick={() => setTrendingTab("hari_ini")}
+            >
+              🔥 Trending Hari Ini
+            </Button>
+            <Button
+              size="sm"
+              variant={trendingTab === "minggu_ini" ? "default" : "outline"}
+              onClick={() => setTrendingTab("minggu_ini")}
+            >
+              📈 Trending Minggu Ini
+            </Button>
+            <Button
+              size="sm"
+              variant={trendingTab === "bulan_ini" ? "default" : "outline"}
+              onClick={() => setTrendingTab("bulan_ini")}
+            >
+              📅 Trending Bulan Ini
+            </Button>
+          </div>
+        )}
 
         {items.length > 0 ? (
           <>
@@ -181,29 +223,32 @@ export function DrakorListContent({ type, page }: DrakorListContentProps) {
               ))}
             </div>
 
-            <div className="mt-8 flex items-center justify-center gap-3">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handlePrevPage}
-                disabled={page <= 1 || loading}
-                className="gap-1.5"
-              >
-                <ChevronLeft className="h-4 w-4" />Prev
-              </Button>
-              <span className="px-3 text-sm font-medium text-muted-foreground">
-                Halaman {page}
-              </span>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleNextPage}
-                disabled={!hasNextPage || loading}
-                className="gap-1.5"
-              >
-                Next<ChevronRight className="h-4 w-4" />
-              </Button>
-            </div>
+            {/* Pagination hanya untuk non-trending */}
+            {!config.isTrending && (
+              <div className="mt-8 flex items-center justify-center gap-3">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handlePrevPage}
+                  disabled={page <= 1 || loading}
+                  className="gap-1.5"
+                >
+                  <ChevronLeft className="h-4 w-4" />Prev
+                </Button>
+                <span className="px-3 text-sm font-medium text-muted-foreground">
+                  Halaman {page}
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleNextPage}
+                  disabled={!hasNextPage || loading}
+                  className="gap-1.5"
+                >
+                  Next<ChevronRight className="h-4 w-4" />
+                </Button>
+              </div>
+            )}
           </>
         ) : (
           <p className="py-8 text-center text-sm text-muted-foreground">
