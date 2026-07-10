@@ -80,7 +80,14 @@ export function DrakorListContent({ type, page }: DrakorListContentProps) {
       if (!res.ok) throw new Error("HTTP " + res.status);
       const json = await res.json();
       const inner = unwrap(json);
-      const list = normalizeDrakor(inner?.items || []);
+      // FIX: Trending pakai hari_ini/minggu_ini/bulan_ini (bukan items)
+      const rawList =
+        inner?.items ||
+        inner?.hari_ini ||
+        inner?.minggu_ini ||
+        inner?.bulan_ini ||
+        [];
+      const list = normalizeDrakor(rawList);
       setItems(list);
       // DrakorID: { total: 30 } - kalau ada total, hitung hasNext
       const total = inner?.total || 0;
