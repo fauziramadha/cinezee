@@ -364,8 +364,8 @@ export function DrakorPlayerView({
         {/* Info note */}
         <div className="mt-4 rounded-lg border border-border bg-card p-4">
           <p className="text-xs text-muted-foreground">
-            💡 Tips: Jika video tidak otomatis diputar, tekan tombol play di video player.
-            Gunakan tombol settings (⚙️) di pojok kanan atas player untuk mengganti quality.
+            💡 Tips: Untuk sementara waktu resolusi hanya 720p
+            untuk menjaga kestabilan server, sampai admin upgrade server.
           </p>
         </div>
       </div>
