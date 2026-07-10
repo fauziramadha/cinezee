@@ -14,19 +14,42 @@ import { useAppStore, type SelectedMedia } from "@/lib/store";
 import { getImageUrl, type Movie } from "@/lib/tmdb";
 import { cn } from "@/lib/utils";
 
-// Import Cards for Anime, Donghua, Comic
+// Import Cards for Anime, Donghua, Comic, Drakor
 import { AnimeCard } from "@/components/anime/anime-card";
 import { DonghuaCard } from "@/components/donghua/donghua-card";
 import { ComicCard } from "@/components/comic/comic-card";
+import { DrakorCard } from "@/components/drakor/drakor-card";
 
 interface Genre { id: number; name: string; }
 interface Network { id: number; name: string; logo_path: string | null; }
 type TabView = "results" | "genres" | "networks";
 
+// Helper untuk unwrap DrakorID response: { code, message, data: {...} }
+function unwrapDrakor(res: any): any {
+  if (!res) return null;
+  if (res.data !== undefined && res.code !== undefined) return res.data;
+  return res;
+}
+
+// Normalize DrakorID item shape → format DrakorCard
+function normalizeDrakor(list: any[]): any[] {
+  if (!Array.isArray(list)) return [];
+  return list.map((item: any) => ({
+    id: (item.id || item.slug || "").toString().replace(/\/+$/, "").trim(),
+    slug: (item.id || item.slug || "").toString().replace(/\/+$/, "").trim(),
+    title: item.title || "Untitled",
+    imageUrl: item.imageUrl || item.poster || item.thumbnail || null,
+    poster: item.imageUrl || item.poster || item.thumbnail || null,
+    status: item.status || "Ongoing",
+    episode: item.episode || item.current_episode || "",
+    year: item.year || "",
+    type: item.type || "Drama Korea",
+  }));
+}
+
 export function SearchModal() {
   const router = useRouter();
   const pathname = usePathname();
-  // Ambil state global dari store, termasuk server yang dipilih
   const { searchOpen, setSearchOpen, setSelectedMedia, animeServer, donghuaServer } = useAppStore();
   
   const [query, setQuery] = useState("");
@@ -34,7 +57,6 @@ export function SearchModal() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Movie/TV specific state
   const [activeTab, setActiveTab] = useState<TabView>("results");
   const [type, setType] = useState<"movie" | "tv">("movie");
   const [selectedGenre, setSelectedGenre] = useState<Genre | null>(null);
@@ -44,10 +66,11 @@ export function SearchModal() {
   const [networks, setNetworks] = useState<Network[]>([]);
   const [networksLoading, setNetworksLoading] = useState(false);
 
-  // Determine context based on pathname
+  // Determine context based on pathname — TAMBAH DRAMOR
   const context = pathname.startsWith("/anime") ? "anime" 
                 : pathname.startsWith("/donghua") ? "donghua" 
                 : pathname.startsWith("/comic") ? "comic" 
+                : pathname.startsWith("/drakor") ? "drakor" 
                 : "movie";
 
   // Fetch Genres & Networks (only if context is movie)
@@ -98,7 +121,6 @@ export function SearchModal() {
           setResults(data.results || []);
         } 
         else if (context === "anime") {
-          // Baca state global animeServer
           const endpoint = animeServer === "animasu"
             ? `/api/anime/animasu/search/${encodeURIComponent(query)}`
             : `/api/anime/search/${encodeURIComponent(query)}`;
@@ -106,7 +128,6 @@ export function SearchModal() {
           if (!res.ok) throw new Error("Fetch failed");
           data = await res.json();
           
-          // Normalize for AnimeCard
           const rawList = animeServer === "animasu"
             ? (data?.animes || data?.data || [])
             : (data?.data?.animeList || []);
@@ -118,7 +139,6 @@ export function SearchModal() {
           setResults(list);
         }
         else if (context === "donghua") {
-          // Baca state global donghuaServer
           const endpoint = donghuaServer === "s2"
             ? `/api/donghua/donghub/search/${encodeURIComponent(query)}/1`
             : `/api/donghua/donghua/search/${encodeURIComponent(query)}/1`;
@@ -126,7 +146,6 @@ export function SearchModal() {
           if (!res.ok) throw new Error("Fetch failed");
           data = await res.json();
           
-          // Normalize for DonghuaCard
           const rawList = donghuaServer === "s2"
             ? (data?.data || [])
             : (data?.data || []);
@@ -150,6 +169,16 @@ export function SearchModal() {
           }));
           setResults(list);
         }
+        // BARU: Drakor search
+        else if (context === "drakor") {
+          const res = await fetch(`/api/drakor/search?q=${encodeURIComponent(query)}`);
+          if (!res.ok) throw new Error("Fetch failed");
+          data = await res.json();
+          // DrakorID shape: { code, message, data: { items: [...] } }
+          const inner = unwrapDrakor(data);
+          const list = normalizeDrakor(inner?.items || []);
+          setResults(list);
+        }
       } catch (err) {
         setError(err instanceof Error ? err.message : "Unknown error");
       } finally {
@@ -157,7 +186,6 @@ export function SearchModal() {
       }
     }, 400);
 
-    // Tambahkan animeServer & donghuaServer ke dependency array
     return () => clearTimeout(timer);
   }, [query, activeTab, context, animeServer, donghuaServer]);
 
@@ -232,7 +260,7 @@ export function SearchModal() {
             </button>
           </div>
           
-          {/* Indikator Server Aktif (Hanya tampilan teks, tidak bisa diklik di sini) */}
+          {/* Indikator Server Aktif (Anime & Donghua only) */}
           {(context === "anime" || context === "donghua") && (
             <div className="flex items-center gap-2 px-4 pb-2">
               <span className="text-xs text-muted-foreground">Mencari di:</span>
@@ -380,6 +408,23 @@ export function SearchModal() {
                 <p className="py-8 text-center text-sm text-muted-foreground">Tidak ada hasil.</p>
               ) : (
                 <p className="py-8 text-center text-sm text-muted-foreground">Cari komik favoritmu...</p>
+              )}
+            </div>
+          )}
+
+          {/* === DRAKOR CONTEXT: RESULTS === (BARU) */}
+          {context === "drakor" && (
+            <div className="p-4">
+              {loading ? (
+                <div className="flex h-32 items-center justify-center"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>
+              ) : results.length > 0 ? (
+                <div className="grid grid-cols-3 gap-3 sm:grid-cols-4 md:grid-cols-5">
+                  {results.map((item) => <DrakorCard key={item.id || item.slug} drakor={item} />)}
+                </div>
+              ) : query.trim() ? (
+                <p className="py-8 text-center text-sm text-muted-foreground">Tidak ada hasil.</p>
+              ) : (
+                <p className="py-8 text-center text-sm text-muted-foreground">Cari drama Korea favoritmu...</p>
               )}
             </div>
           )}
