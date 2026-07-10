@@ -28,7 +28,7 @@ export function DrakorCard({ drakor }: DrakorCardProps) {
 
   const title = drakor.title || "Untitled";
   const rawPoster = drakor.imageUrl || drakor.poster || drakor.thumbnail || null;
-  const poster = rawPoster ? `/api/proxy-image?url=${encodeURIComponent(rawPoster)}` : null;
+  const poster = rawPoster;  // Direct URL - convert.d-cdn.me tidak ada hotlink protection
   const slug = (drakor.id || drakor.slug || "").toString().replace(/\/+$/, "").trim();
   const status = drakor.status || "Ongoing";
   const episode = drakor.episode || drakor.current_episode || "";
