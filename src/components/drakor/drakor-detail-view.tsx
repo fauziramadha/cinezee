@@ -85,10 +85,22 @@ export function DrakorDetailView({ detail }: DrakorDetailViewProps) {
     Country: details.Country || "",
   };
 
-  // Smart back button
+  // Smart back button — hindari loop ke player page
   const handleBack = () => {
-    if (typeof window !== "undefined" && window.history.length > 1) {
-      router.back();
+    if (typeof window !== "undefined") {
+      const referrer = document.referrer || "";
+      // Kalau halaman sebelumnya adalah player (drakor/watch), langsung ke beranda
+      // supaya tidak loop: Detail → Player → Detail → (back) → Player ❌
+      if (referrer.includes("/drakor/watch/") || referrer.includes("/watch/")) {
+        router.push("/drakor");
+        return;
+      }
+      // Kalau ada history normal, balik ke halaman sebelumnya
+      if (window.history.length > 1) {
+        router.back();
+      } else {
+        router.push("/drakor");
+      }
     } else {
       router.push("/drakor");
     }
