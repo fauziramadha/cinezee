@@ -45,7 +45,6 @@ export function DrakorContent() {
   const [terbaru, setTerbaru] = useState<any[]>([]);
   const [ongoing, setOngoing] = useState<any[]>([]);
   const [trending, setTrending] = useState<any[]>([]);
-  const [kategori, setKategori] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<any[]>([]);
@@ -55,11 +54,10 @@ export function DrakorContent() {
     const fetchAll = async () => {
       setLoading(true);
       try {
-        const [terbaruRes, ongoingRes, trendingRes, kategoriRes] = await Promise.all([
+        const [terbaruRes, ongoingRes, trendingRes] = await Promise.all([
           fetchJSON("/api/drakor/terbaru?page=1").catch(() => null),
           fetchJSON("/api/drakor/ongoing?page=1").catch(() => null),
           fetchJSON("/api/drakor/trending").catch(() => null),
-          fetchJSON("/api/drakor/kategori").catch(() => null),
         ]);
 
         if (terbaruRes) {
@@ -82,11 +80,6 @@ export function DrakorContent() {
             [];
           const items = normalizeDrakor(trendingItems);
           if (items.length > 0) setTrending(items);
-        }
-        if (kategoriRes) {
-          const inner = unwrap(kategoriRes);
-          const items = inner?.items || [];
-          if (items.length > 0) setKategori(items);
         }
       } catch (err) {
         console.error("Failed to load drakor home:", err);
@@ -180,25 +173,6 @@ export function DrakorContent() {
                 drakors={ongoing}
                 href="/drakor/list/ongoing"
               />
-            )}
-
-            {kategori.length > 0 && (
-              <section className="px-4 sm:px-6 lg:px-8">
-                <h2 className="mb-3 text-base font-bold tracking-tight sm:text-lg md:text-xl">
-                  Browse by Kategori
-                </h2>
-                <div className="flex flex-wrap gap-2">
-                  {kategori.map((k) => (
-                    <a
-                      key={k.id}
-                      href={"/drakor/kategori/" + k.id}
-                      className="rounded-full border border-border bg-card px-4 py-2 text-xs font-medium text-foreground transition-colors hover:border-primary hover:bg-primary/10 hover:text-primary"
-                    >
-                      {k.title} ({k.count})
-                    </a>
-                  ))}
-                </div>
-              </section>
             )}
           </div>
         </>
