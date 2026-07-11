@@ -374,7 +374,7 @@ export function PlayerModal() {
     return () => clearTimeout(timer);
   }, [iframeError, currentIdx, providers.length, switchProvider]);
 
-  // === LOAD FILMBOX STREAM URL ===
+    // === LOAD FILMBOX STREAM URL ===
   const loadFilmboxStream = useCallback(async () => {
     if (!filmboxMatch) return;
 
@@ -400,34 +400,20 @@ export function PlayerModal() {
 
       const playData = data?.data || data;
 
-       // Get video URL - PAKAI PROXY URL dari Indocast (bukan direct URL)
-      let rawStreamUrl = playData?.vid_url_proxy || playData?.vid_url || "";
+      // PAKAI LANGSUNG vid_url_proxy (Indocast proxy sudah set CORS *)
+      // Tidak perlu proxy route kita
+      let streamUrl = playData?.vid_url_proxy || "";
 
-      if (!rawStreamUrl && Array.isArray(playData?.hls)) {
+      if (!streamUrl && Array.isArray(playData?.hls)) {
         const hls720 = playData.hls.find((h: any) => h.resolutions === "720");
-        rawStreamUrl = hls720?.url_proxy || hls720?.url || playData.hls[playData.hls.length - 1]?.url_proxy || playData.hls[playData.hls.length - 1]?.url || "";
+        streamUrl = hls720?.url_proxy || playData.hls[0]?.url_proxy || "";
       }
 
-      // Get subtitle Indonesia - PAKAI PROXY URL
-      let rawSubtitleUrl = "";
-      if (Array.isArray(playData?.subtitles)) {
-        const subIndo = playData.subtitles.find((s: any) => s.id === "in_id" || s.label === "in_id");
-        rawSubtitleUrl = subIndo?.url_proxy || subIndo?.url || "";
-      }
-      if (!rawSubtitleUrl) {
-        rawSubtitleUrl = playData?.sub_url_proxy || playData?.sub_url || "";
-      }
+      // Subtitle - skip dulu (butuh proxy untuk CORS)
+      // Fokus ke video dulu
 
-      if (rawStreamUrl) {
-        // Pakai proxy route kita sendiri untuk handle CORS + token
-        const streamUrl = `/api/filmbox/stream?url=${encodeURIComponent(rawStreamUrl)}`;
+      if (streamUrl) {
         setFilmboxStream(streamUrl);
-
-        if (rawSubtitleUrl) {
-          // Subtitle juga pakai proxy
-          const subtitleUrl = `/api/filmbox/stream?url=${encodeURIComponent(rawSubtitleUrl)}`;
-          setFilmboxSubtitle(subtitleUrl);
-        }
       } else {
         setIframeError(true);
       }
@@ -721,12 +707,11 @@ export function PlayerModal() {
                   )}
                   controls
                   playsInline
-                  crossOrigin="anonymous"
                   onError={() => {
                     setIframeError(true);
                     setIframeLoaded(false);
                   }}
-                >
+                />
                   {filmboxSubtitle && (
                     <track
                       kind="subtitles"
