@@ -12,6 +12,7 @@ import {
   RotateCcw,
   Maximize,
   Minimize,
+  Crown,
 } from "lucide-react";
 import {
   Dialog,
@@ -69,11 +70,24 @@ export function PlayerModal() {
     skip_delay: number;
   } | null>(null);
 
+  // === FILMBOX PREMIUM PROVIDER ===
+  const [filmboxMatch, setFilmboxMatch] = useState<{
+    detailPath: string;
+    subjectId: string;
+    title: string;
+  } | null>(null);
+  const [filmboxStream, setFilmboxStream] = useState<string>("");
+  const [filmboxSubtitle, setFilmboxSubtitle] = useState<string>("");
+  const [filmboxLoading, setFilmboxLoading] = useState(false);
+  const [filmboxSearching, setFilmboxSearching] = useState(false);
+  const [isFilmboxProvider, setIsFilmboxProvider] = useState(false);
+  const videoRef = useRef<HTMLVideoElement>(null);
+
   useEffect(() => {
     setSeason(playerSeason || 1);
     setEpisode(playerEpisode || 1);
   }, [playerSeason, playerEpisode]);
-  
+
   useEffect(() => {
     if (playerMedia) {
       fetch("/api/ads/config")
@@ -173,6 +187,7 @@ export function PlayerModal() {
       setIframeError(false);
       if (isMediaChanged) {
         setCurrentIdx(0);
+        setIsFilmboxProvider(false);
       }
       try {
         const res = await fetch(`/api/providers?${params.toString()}`);
@@ -206,6 +221,120 @@ export function PlayerModal() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [playerMedia, season, episode]);
+
+  // === SEARCH FILMBOX BY TITLE (matching TMDB) ===
+  // subjectType: 1 = movie, 2 = drama/series (Filmbox format)
+  useEffect(() => {
+    if (!playerMedia) return;
+
+    let cancelled = false;
+    setFilmboxSearching(true);
+    setFilmboxMatch(null);
+    setFilmboxStream("");
+    setFilmboxSubtitle("");
+    setIsFilmboxProvider(false);
+
+    const searchFilmbox = async () => {
+      try {
+        // Determine subjectType: 1 for movie, 2 for tv
+        const subjectType = playerMedia.type === "tv" ? 2 : 1;
+
+        const res = await fetch("/api/filmbox/search", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            keyword: playerMedia.title,
+            page: 0,
+            perPage: 10,
+            subjectType: subjectType,
+          }),
+        });
+
+        if (!res.ok) return;
+        const data = await res.json();
+
+        if (cancelled) return;
+
+        // Parse response - shape: { code, message, data: { items: [...] } }
+        const inner = data?.data || data;
+        const items = inner?.items || inner?.list || [];
+
+        if (items.length === 0) {
+          setFilmboxSearching(false);
+          return;
+        }
+
+        // Normalize title for matching
+        const normalizeTitle = (t: string) =>
+          t.toLowerCase()
+            .replace(/[^a-z0-9\s]/g, "")
+            .replace(/\s+/g, " ")
+            .trim();
+
+        const tmdbTitle = normalizeTitle(playerMedia.title);
+
+        // Get year from detail if available (for better matching)
+        const tmdbYear = detail?.release_date || detail?.first_air_date || "";
+        const tmdbYearStr = tmdbYear ? tmdbYear.split("-")[0] : "";
+
+        // Find best match: exact title match first, then contains match
+        let bestMatch = null;
+        let bestScore = 0;
+
+        for (const item of items) {
+          const itemTitle = normalizeTitle(item.title || item.name || "");
+          if (!itemTitle) continue;
+
+          let score = 0;
+
+          // Exact match = highest score
+          if (itemTitle === tmdbTitle) {
+            score = 100;
+          }
+          // TMDB title contains item title
+          else if (tmdbTitle.includes(itemTitle)) {
+            score = 80;
+          }
+          // Item title contains TMDB title
+          else if (itemTitle.includes(tmdbTitle)) {
+            score = 70;
+          }
+
+          // Bonus: year match
+          if (score > 0 && tmdbYearStr) {
+            const itemYear = (item.releaseDate || "").split("-")[0];
+            if (itemYear === tmdbYearStr) {
+              score += 10;
+            }
+          }
+
+          if (score > bestScore) {
+            bestScore = score;
+            bestMatch = item;
+          }
+        }
+
+        if (bestMatch && bestScore >= 70 && !cancelled) {
+          setFilmboxMatch({
+            detailPath: bestMatch.detailPath || bestMatch.detail_path || "",
+            subjectId: String(bestMatch.subjectId || bestMatch.subject_id || bestMatch.id || ""),
+            title: bestMatch.title || bestMatch.name || "",
+          });
+        }
+      } catch (err) {
+        console.error("[Filmbox search] error:", err);
+      } finally {
+        if (!cancelled) setFilmboxSearching(false);
+      }
+    };
+
+    searchFilmbox();
+
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [playerMedia, detail]);
 
   useEffect(() => {
     if (currentIdx === 0 && providers.length === 0) return;
@@ -245,6 +374,116 @@ export function PlayerModal() {
     return () => clearTimeout(timer);
   }, [iframeError, currentIdx, providers.length, switchProvider]);
 
+  // === LOAD FILMBOX STREAM URL ===
+  const loadFilmboxStream = useCallback(async () => {
+    if (!filmboxMatch) return;
+
+    setFilmboxLoading(true);
+    setFilmboxStream("");
+    setFilmboxSubtitle("");
+    setIframeError(false);
+    setIframeLoaded(false);
+
+    try {
+      const params = new URLSearchParams({
+        subjectId: filmboxMatch.subjectId,
+        detailPath: filmboxMatch.detailPath,
+        se: "0",
+        ep: "0",
+        lang: "in_id",
+      });
+
+      const res = await fetch(`/api/filmbox/getplay?${params.toString()}`);
+      if (!res.ok) throw new Error("Failed to fetch stream");
+
+      const data = await res.json();
+
+      const playData = data?.data || data;
+
+      // Get video URL - try vid_url first, then hls array (720p preferred)
+      let streamUrl = playData?.vid_url || "";
+
+      if (!streamUrl && Array.isArray(playData?.hls)) {
+        // Find 720p in hls array, fallback to last one
+        const hls720 = playData.hls.find((h: any) => h.resolutions === "720");
+        streamUrl = hls720?.url || playData.hls[playData.hls.length - 1]?.url || "";
+      }
+
+      // Get subtitle Indonesia
+      let subtitleUrl = "";
+      if (Array.isArray(playData?.subtitles)) {
+        const subIndo = playData.subtitles.find((s: any) => s.id === "in_id" || s.label === "in_id");
+        subtitleUrl = subIndo?.url || "";
+      }
+      if (!subtitleUrl) {
+        subtitleUrl = playData?.sub_url || "";
+      }
+
+      if (streamUrl) {
+        setFilmboxStream(streamUrl);
+        if (subtitleUrl) {
+          setFilmboxSubtitle(subtitleUrl);
+        }
+      } else {
+        setIframeError(true);
+      }
+    } catch (err) {
+      console.error("[Filmbox getplay] error:", err);
+      setIframeError(true);
+    } finally {
+      setFilmboxLoading(false);
+    }
+  }, [filmboxMatch]);
+
+  // === SETUP VIDEO (untuk Filmbox Premium - MP4 format) ===
+  useEffect(() => {
+    if (!isFilmboxProvider || !filmboxStream) return;
+
+    const video = videoRef.current;
+    if (!video) return;
+
+    setIframeLoaded(false);
+    setIframeError(false);
+
+    // MP4 format - langsung set src, tidak perlu hls.js
+    video.src = filmboxStream;
+    video.load();
+
+    const onLoaded = () => {
+      setIframeLoaded(true);
+      video.play().catch(() => {});
+    };
+    const onError = () => {
+      setIframeError(true);
+      setIframeLoaded(false);
+    };
+
+    video.addEventListener("loadedmetadata", onLoaded, { once: true });
+    video.addEventListener("error", onError, { once: true });
+
+    return () => {
+      video.removeEventListener("loadedmetadata", onLoaded);
+      video.removeEventListener("error", onError);
+      video.src = "";
+    };
+  }, [isFilmboxProvider, filmboxStream]);
+
+  // === AUTO FAILOVER: Filmbox error → switch ke Server 1 ===
+  useEffect(() => {
+    if (!isFilmboxProvider || !iframeError) return;
+
+    const timer = setTimeout(() => {
+      // Switch ke Server 1 (currentIdx = 0, isFilmboxProvider = false)
+      setIsFilmboxProvider(false);
+      setFilmboxStream("");
+      setIframeError(false);
+      setIframeLoaded(false);
+      setCurrentIdx(0);
+    }, 2000);
+
+    return () => clearTimeout(timer);
+  }, [isFilmboxProvider, iframeError]);
+
   if (!playerMedia) return null;
 
   const iframeUrl = currentProvider?.url;
@@ -279,6 +518,8 @@ export function PlayerModal() {
       };
 
   const controlsVisible = !isPseudoFullscreen || showControls || iframeError;
+
+  const showProviderSelector = providers.length > 0 || filmboxMatch || filmboxSearching;
 
   return (
     <Dialog
@@ -353,14 +594,14 @@ export function PlayerModal() {
               </h2>
               <p className="truncate text-[10px] text-white/60 sm:text-xs">
                 {playerMedia.type === "tv"
-                  ? `Season ${season} • Episode ${episode}`
+                  ? `Season ${season} - Episode ${episode}`
                   : "Now Playing"}
               </p>
             </div>
 
-            {providers.length > 0 && (
+            {showProviderSelector && (
               <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
-                {isFilmU && iframeLoaded && !iframeError && (
+                {((isFilmU && iframeLoaded && !iframeError) || (isFilmboxProvider && iframeLoaded && !iframeError)) && (
                   <button
                     onClick={() => setIsPseudoFullscreen(!isPseudoFullscreen)}
                     className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-white/10 text-white backdrop-blur-sm transition-colors hover:bg-primary sm:h-9 sm:w-9"
@@ -371,14 +612,42 @@ export function PlayerModal() {
                 )}
 
                 <Select
-                  value={String(currentIdx)}
-                  onValueChange={(v) => setCurrentIdx(parseInt(v, 10))}
+                  value={isFilmboxProvider ? "filmbox" : String(currentIdx)}
+                  onValueChange={(v) => {
+                    if (v === "filmbox") {
+                      setIsFilmboxProvider(true);
+                      setIframeError(false);
+                      setIframeLoaded(false);
+                      if (!filmboxStream) {
+                        loadFilmboxStream();
+                      }
+                    } else {
+                      setIsFilmboxProvider(false);
+                      setFilmboxStream("");
+                      setCurrentIdx(parseInt(v, 10));
+                    }
+                  }}
                 >
                   <SelectTrigger className="h-7 w-24 shrink-0 gap-1 border-white/20 bg-white/10 text-[10px] text-white backdrop-blur-sm sm:h-8 sm:w-32 sm:text-xs md:w-40">
-                    <Server className="h-3 w-3 shrink-0 sm:h-3.5 sm:w-3.5" />
+                    {isFilmboxProvider ? (
+                      <Crown className="h-3 w-3 shrink-0 text-yellow-400 sm:h-3.5 sm:w-3.5" />
+                    ) : (
+                      <Server className="h-3 w-3 shrink-0 sm:h-3.5 sm:w-3.5" />
+                    )}
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
+                    {filmboxMatch && !filmboxSearching && (
+                      <SelectItem value="filmbox">
+                        <span className="flex items-center gap-2">
+                          <Crown className="h-3 w-3 text-yellow-400" />
+                          <span className="font-semibold">Premium</span>
+                          <Badge variant="outline" className="ml-1 border-yellow-500/40 px-1 text-[8px] text-yellow-400">
+                            HD
+                          </Badge>
+                        </span>
+                      </SelectItem>
+                    )}
                     {providers.map((p, idx) => (
                       <SelectItem key={p.name} value={String(idx)}>
                         <span className="flex items-center gap-2">
@@ -429,6 +698,7 @@ export function PlayerModal() {
                 onComplete={() => setShowPreRoll(false)}
               />
             )}
+
             {loading && (
               <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-white">
                 <Loader2 className="h-10 w-10 animate-spin text-primary" />
@@ -436,7 +706,60 @@ export function PlayerModal() {
               </div>
             )}
 
-            {!loading && iframeUrl && (
+            {/* === FILMBOX PREMIUM: pakai video tag (MP4) === */}
+            {isFilmboxProvider && filmboxStream && (
+              <>
+                <video
+                  ref={videoRef}
+                  className={cn(
+                    "h-full w-full transition-opacity duration-500",
+                    iframeLoaded ? "opacity-100" : "opacity-0"
+                  )}
+                  controls
+                  playsInline
+                  crossOrigin="anonymous"
+                  onError={() => {
+                    setIframeError(true);
+                    setIframeLoaded(false);
+                  }}
+                >
+                  {filmboxSubtitle && (
+                    <track
+                      kind="subtitles"
+                      srcLang="id"
+                      label="Indonesia"
+                      src={filmboxSubtitle}
+                      default
+                    />
+                  )}
+                </video>
+
+                {!iframeLoaded && !iframeError && (
+                  <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black text-white">
+                    <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                    <p className="text-xs text-white/70">
+                      Loading from Premium (Filmbox)...
+                    </p>
+                  </div>
+                )}
+
+                {iframeError && (
+                  <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-black p-6 text-center text-white">
+                    <AlertCircle className="h-12 w-12 text-red-500" />
+                    <div>
+                      <p className="mb-1 text-base font-semibold">Premium Error</p>
+                      <p className="text-sm text-white/60">
+                        Mengalihkan ke Server 1...
+                      </p>
+                    </div>
+                    <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                  </div>
+                )}
+              </>
+            )}
+
+            {/* === REGULAR PROVIDERS: pakai iframe === */}
+            {!isFilmboxProvider && !loading && iframeUrl && (
               <>
                 <iframe
                   key={iframeUrl}
@@ -490,6 +813,14 @@ export function PlayerModal() {
                   </div>
                 )}
               </>
+            )}
+
+            {/* === FILMBOX LOADING (saat fetch stream URL) === */}
+            {isFilmboxProvider && filmboxLoading && !filmboxStream && (
+              <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black text-white">
+                <Loader2 className="h-10 w-10 animate-spin text-primary" />
+                <p className="text-sm text-white/70">Mencari film di Premium...</p>
+              </div>
             )}
           </div>
 
