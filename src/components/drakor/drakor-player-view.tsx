@@ -53,7 +53,7 @@ export function DrakorPlayerView({
   const title = detail?.title || "Drakor";
   const episodes = Array.isArray(detail?.episodes) ? detail.episodes : [];
   const watchBase = `/drakor/watch/${drakorId}`;
-  const detailHref = `/drakor/${drakorId}`;
+  const detailHref = `/drakor/${drakorId}?from=player`;
 
   const currentEpNum = parseInt(episodeNumber, 10);
   const prevEp = episodes.find((e: any) => e?.number === currentEpNum - 1);
