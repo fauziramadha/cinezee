@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Header } from "@/components/cinepro/header";
 import { Footer } from "@/components/cinepro/footer";
 import { SearchModal } from "@/components/cinepro/search-modal";
@@ -47,6 +47,8 @@ function getAvatarColor(name: string): string {
 
 export function DrakorDetailView({ detail }: DrakorDetailViewProps) {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const fromPlayer = searchParams.get("from") === "player";
 
   const title = detail.title || "Untitled";
   const poster = detail.poster || detail.imageUrl || null;
@@ -85,22 +87,14 @@ export function DrakorDetailView({ detail }: DrakorDetailViewProps) {
     Country: details.Country || "",
   };
 
-  // Smart back button — hindari loop ke player page
+  // Smart back button — kalau dari player, langsung ke beranda (hindari loop)
   const handleBack = () => {
-    if (typeof window !== "undefined") {
-      const referrer = document.referrer || "";
-      // Kalau halaman sebelumnya adalah player (drakor/watch), langsung ke beranda
-      // supaya tidak loop: Detail → Player → Detail → (back) → Player ❌
-      if (referrer.includes("/drakor/watch/") || referrer.includes("/watch/")) {
-        router.push("/drakor");
-        return;
-      }
-      // Kalau ada history normal, balik ke halaman sebelumnya
-      if (window.history.length > 1) {
-        router.back();
-      } else {
-        router.push("/drakor");
-      }
+    if (fromPlayer) {
+      router.push("/drakor");
+      return;
+    }
+    if (typeof window !== "undefined" && window.history.length > 1) {
+      router.back();
     } else {
       router.push("/drakor");
     }
@@ -190,7 +184,6 @@ export function DrakorDetailView({ detail }: DrakorDetailViewProps) {
                 <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Genre</h3>
                 <div className="flex flex-wrap gap-1.5">
                   {genres.map((g: string, idx: number) => {
-                    // Convert genre name to slug (mis. "Romance" → "romance")
                     const genreSlug = g.toLowerCase().trim();
                     return (
                       <Link
@@ -221,7 +214,7 @@ export function DrakorDetailView({ detail }: DrakorDetailViewProps) {
               </div>
             )}
 
-            {/* CAST SECTION - Baru ditambahkan */}
+            {/* CAST SECTION */}
             {cast.length > 0 && (
               <div className="mb-6">
                 <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Pemeran ({cast.length})</h3>
@@ -238,7 +231,6 @@ export function DrakorDetailView({ detail }: DrakorDetailViewProps) {
                         key={idx}
                         className="flex items-center gap-2.5 rounded-lg border border-border bg-card p-2.5"
                       >
-                        {/* Avatar dengan inisial (karena API tidak punya foto) */}
                         <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full ${avatarColor} text-sm font-bold text-white`}>
                           {initials}
                         </div>
