@@ -707,21 +707,12 @@ export function PlayerModal() {
                   )}
                   controls
                   playsInline
+                  src={filmboxStream}
                   onError={() => {
                     setIframeError(true);
                     setIframeLoaded(false);
                   }}
                 />
-                  {filmboxSubtitle && (
-                    <track
-                      kind="subtitles"
-                      srcLang="id"
-                      label="Indonesia"
-                      src={filmboxSubtitle}
-                      default
-                    />
-                  )}
-                </video>
 
                 {!iframeLoaded && !iframeError && (
                   <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black text-white">
