@@ -11,11 +11,12 @@ export async function GET(req: NextRequest) {
       return new NextResponse("Missing url parameter", { status: 400 });
     }
 
-    // Validasi URL — hanya allow Filmbox CDN domains
+    // Validasi URL — allow Filmbox CDN domains + Indocast proxy
     const allowedDomains = [
       "bcdnxw.hakunaymatata.com",
       "cacdn.hakunaymatata.com",
       "pbcdnw.aoneroom.com",
+      "indocast.site",
     ];
 
     let parsedUrl: URL;
@@ -31,7 +32,7 @@ export async function GET(req: NextRequest) {
 
     // Forward range header untuk video streaming
     const headers: Record<string, string> = {
-      "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1",
+      "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version=17.0 Mobile/15E148 Safari/604.1",
       "Referer": "https://play.filmboxplus.stream/",
     };
 
