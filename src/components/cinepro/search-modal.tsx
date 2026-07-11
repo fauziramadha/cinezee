@@ -14,24 +14,22 @@ import { useAppStore, type SelectedMedia } from "@/lib/store";
 import { getImageUrl, type Movie } from "@/lib/tmdb";
 import { cn } from "@/lib/utils";
 
-// Import Cards for Anime, Donghua, Comic, Drakor
 import { AnimeCard } from "@/components/anime/anime-card";
 import { DonghuaCard } from "@/components/donghua/donghua-card";
 import { ComicCard } from "@/components/comic/comic-card";
 import { DrakorCard } from "@/components/drakor/drakor-card";
+import { DrakorKategoriList } from "@/components/drakor/drakor-kategori-list";
 
 interface Genre { id: number; name: string; }
 interface Network { id: number; name: string; logo_path: string | null; }
-type TabView = "results" | "genres" | "networks";
+type TabView = "results" | "genres" | "networks" | "kategori";
 
-// Helper untuk unwrap DrakorID response: { code, message, data: {...} }
 function unwrapDrakor(res: any): any {
   if (!res) return null;
   if (res.data !== undefined && res.code !== undefined) return res.data;
   return res;
 }
 
-// Normalize DrakorID item shape → format DrakorCard
 function normalizeDrakor(list: any[]): any[] {
   if (!Array.isArray(list)) return [];
   return list.map((item: any) => ({
@@ -51,9 +49,9 @@ export function SearchModal() {
   const router = useRouter();
   const pathname = usePathname();
   const { searchOpen, setSearchOpen, setSelectedMedia, animeServer, donghuaServer } = useAppStore();
-  
+
   const [query, setQuery] = useState("");
-  const [results, setResults] = useState<any[]>([]); 
+  const [results, setResults] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -66,17 +64,14 @@ export function SearchModal() {
   const [networks, setNetworks] = useState<Network[]>([]);
   const [networksLoading, setNetworksLoading] = useState(false);
 
-  // Determine context based on pathname — TAMBAH DRAMOR
-  const context = pathname.startsWith("/anime") ? "anime" 
-                : pathname.startsWith("/donghua") ? "donghua" 
-                : pathname.startsWith("/comic") ? "comic" 
-                : pathname.startsWith("/drakor") ? "drakor" 
+  const context = pathname.startsWith("/anime") ? "anime"
+                : pathname.startsWith("/donghua") ? "donghua"
+                : pathname.startsWith("/comic") ? "comic"
+                : pathname.startsWith("/drakor") ? "drakor"
                 : "movie";
 
-  // Fetch Genres & Networks (only if context is movie)
   useEffect(() => {
     if (context !== "movie") return;
-    
     fetch("/api/genres")
       .then((res) => res.json())
       .then((data) => {
@@ -88,7 +83,6 @@ export function SearchModal() {
 
   useEffect(() => {
     if (context !== "movie") return;
-    
     setNetworksLoading(true);
     fetch("/api/networks")
       .then((res) => res.json())
@@ -97,13 +91,16 @@ export function SearchModal() {
       .finally(() => setNetworksLoading(false));
   }, [context]);
 
-  // Search Logic
   useEffect(() => {
     if (context === "movie" && activeTab !== "results") {
       setResults([]);
       return;
     }
-    
+    if (context === "drakor" && activeTab !== "results") {
+      setResults([]);
+      return;
+    }
+
     if (!query.trim()) {
       setResults([]);
       return;
@@ -113,55 +110,53 @@ export function SearchModal() {
     const timer = setTimeout(async () => {
       try {
         let data: any;
-        
+
         if (context === "movie") {
-          const res = await fetch(`/api/search?q=${encodeURIComponent(query)}`);
+          const res = await fetch("/api/search?q=" + encodeURIComponent(query));
           if (!res.ok) throw new Error("Fetch failed");
           data = await res.json();
           setResults(data.results || []);
-        } 
+        }
         else if (context === "anime") {
           const endpoint = animeServer === "animasu"
-            ? `/api/anime/animasu/search/${encodeURIComponent(query)}`
-            : `/api/anime/search/${encodeURIComponent(query)}`;
+            ? "/api/anime/animasu/search/" + encodeURIComponent(query)
+            : "/api/anime/search/" + encodeURIComponent(query);
           const res = await fetch(endpoint);
           if (!res.ok) throw new Error("Fetch failed");
           data = await res.json();
-          
           const rawList = animeServer === "animasu"
             ? (data?.animes || data?.data || [])
             : (data?.data?.animeList || []);
-          const list = rawList.map((item: any) => ({ 
-            ...item, 
-            animeId: item.slug || item.animeId, 
-            source: animeServer === "animasu" ? "animasu" : "otakudesu" 
+          const list = rawList.map((item: any) => ({
+            ...item,
+            animeId: item.slug || item.animeId,
+            source: animeServer === "animasu" ? "animasu" : "otakudesu"
           }));
           setResults(list);
         }
         else if (context === "donghua") {
           const endpoint = donghuaServer === "s2"
-            ? `/api/donghua/donghub/search/${encodeURIComponent(query)}/1`
-            : `/api/donghua/donghua/search/${encodeURIComponent(query)}/1`;
+            ? "/api/donghua/donghub/search/" + encodeURIComponent(query) + "/1"
+            : "/api/donghua/donghua/search/" + encodeURIComponent(query) + "/1";
           const res = await fetch(endpoint);
           if (!res.ok) throw new Error("Fetch failed");
           data = await res.json();
-          
           const rawList = donghuaServer === "s2"
             ? (data?.data || [])
             : (data?.data || []);
-          const list = rawList.map((item: any) => ({ 
-            ...item, 
-            slug: (item.slug || "").replace(/\/$/, ""), 
-            source: donghuaServer === "s2" ? "s2" : "s1" 
+          const list = rawList.map((item: any) => ({
+            ...item,
+            slug: (item.slug || "").replace(/\/$/, ""),
+            source: donghuaServer === "s2" ? "s2" : "s1"
           }));
           setResults(list);
         }
         else if (context === "comic") {
-          const res = await fetch(`/api/indocast/komiku/search?q=${encodeURIComponent(query)}`);
+          const res = await fetch("/api/indocast/komiku/search?q=" + encodeURIComponent(query));
           if (!res.ok) throw new Error("Fetch failed");
           data = await res.json();
-          const list = (data?.items || []).map((item: any) => ({ 
-            ...item, 
+          const list = (data?.items || []).map((item: any) => ({
+            ...item,
             slug: item.slug || (item.link || "").replace(/^\/(manga|detail-komik)\//, "").replace(/\/$/, ""),
             thumbnail: item.thumbnail || item.image,
             image: item.thumbnail || item.image,
@@ -169,12 +164,10 @@ export function SearchModal() {
           }));
           setResults(list);
         }
-        // BARU: Drakor search
         else if (context === "drakor") {
-          const res = await fetch(`/api/drakor/search?q=${encodeURIComponent(query)}`);
+          const res = await fetch("/api/drakor/search?q=" + encodeURIComponent(query));
           if (!res.ok) throw new Error("Fetch failed");
           data = await res.json();
-          // DrakorID shape: { code, message, data: { items: [...] } }
           const inner = unwrapDrakor(data);
           const list = normalizeDrakor(inner?.items || []);
           setResults(list);
@@ -189,7 +182,6 @@ export function SearchModal() {
     return () => clearTimeout(timer);
   }, [query, activeTab, context, animeServer, donghuaServer]);
 
-  // Reset state when modal closes or context changes
   useEffect(() => {
     if (!searchOpen) {
       setQuery("");
@@ -203,7 +195,7 @@ export function SearchModal() {
   const handleSearchSubmit = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter" && query.trim()) {
       if (context === "movie") {
-        router.push(`/search?q=${encodeURIComponent(query.trim())}`);
+        router.push("/search?q=" + encodeURIComponent(query.trim()));
       }
       setSearchOpen(false);
     }
@@ -223,12 +215,12 @@ export function SearchModal() {
 
   const handleBrowseGenre = () => {
     if (!selectedGenre) return;
-    router.push(`/search?type=${type}&genre=${selectedGenre.id}`);
+    router.push("/search?type=" + type + "&genre=" + selectedGenre.id);
     setSearchOpen(false);
   };
 
   const handleNetworkSelect = (networkId: number) => {
-    router.push(`/search?type=tv&network=${networkId}`);
+    router.push("/search?type=tv&network=" + networkId);
     setSearchOpen(false);
   };
 
@@ -241,7 +233,6 @@ export function SearchModal() {
           <DialogTitle>Search {context}</DialogTitle>
         </DialogHeader>
 
-        {/* Search Input */}
         <div className="shrink-0 border-b border-border">
           <div className="flex items-center gap-3 px-4 py-3">
             <Search className="h-5 w-5 shrink-0 text-muted-foreground" />
@@ -251,7 +242,7 @@ export function SearchModal() {
               value={query}
               onChange={(e) => { setQuery(e.target.value); setActiveTab("results"); }}
               onKeyDown={handleSearchSubmit}
-              placeholder={`Search ${context}...`}
+              placeholder={"Search " + context + "..."}
               className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground sm:text-base"
             />
             {loading && <Loader2 className="h-4 w-4 shrink-0 animate-spin text-muted-foreground" />}
@@ -259,8 +250,7 @@ export function SearchModal() {
               <X className="h-4 w-4" />
             </button>
           </div>
-          
-          {/* Indikator Server Aktif (Anime & Donghua only) */}
+
           {(context === "anime" || context === "donghua") && (
             <div className="flex items-center gap-2 px-4 pb-2">
               <span className="text-xs text-muted-foreground">Mencari di:</span>
@@ -270,7 +260,7 @@ export function SearchModal() {
                   ? "bg-purple-500/90 text-white"
                   : "bg-blue-500/90 text-white"
               )}>
-                {context === "anime" 
+                {context === "anime"
                   ? (animeServer === "animasu" ? "Server 2" : "Server 1")
                   : (donghuaServer === "s2" ? "Server 2" : "Server 1")
                 }
@@ -279,35 +269,67 @@ export function SearchModal() {
           )}
         </div>
 
-        {/* Tabs Filter (Only for Movie context) */}
-        {context === "movie" && (
+        {/* Tabs Filter — Movie & Drakor */}
+        {(context === "movie" || context === "drakor") && (
           <div className="flex shrink-0 items-center gap-2 overflow-x-auto border-b border-border px-4 py-2">
-            <button onClick={() => setActiveTab("results")} className={cn("flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium transition-colors", activeTab === "results" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted")}>
+            <button
+              onClick={() => setActiveTab("results")}
+              className={cn(
+                "flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium transition-colors",
+                activeTab === "results" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted"
+              )}
+            >
               <Search className="h-3.5 w-3.5" /> Results
             </button>
-            <button onClick={() => setActiveTab("genres")} className={cn("flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium transition-colors", activeTab === "genres" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted")}>
-              <Clapperboard className="h-3.5 w-3.5" /> Genres
-            </button>
-            <button onClick={() => setActiveTab("networks")} className={cn("flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium transition-colors", activeTab === "networks" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted")}>
-              <Radio className="h-3.5 w-3.5" /> Networks
-            </button>
 
-            {activeTab === "genres" && (
-              <div className="ml-auto flex shrink-0 items-center gap-1 rounded-full bg-muted p-0.5">
-                <button onClick={() => { setType("movie"); setSelectedGenre(null); }} className={cn("rounded-full px-2 py-0.5 text-[10px] font-semibold", type === "movie" ? "bg-background text-foreground" : "text-muted-foreground")}>Movies</button>
-                <button onClick={() => { setType("tv"); setSelectedGenre(null); }} className={cn("rounded-full px-2 py-0.5 text-[10px] font-semibold", type === "tv" ? "bg-background text-foreground" : "text-muted-foreground")}>TV</button>
-              </div>
+            {context === "movie" && (
+              <>
+                <button
+                  onClick={() => setActiveTab("genres")}
+                  className={cn(
+                    "flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium transition-colors",
+                    activeTab === "genres" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted"
+                  )}
+                >
+                  <Clapperboard className="h-3.5 w-3.5" /> Genres
+                </button>
+                <button
+                  onClick={() => setActiveTab("networks")}
+                  className={cn(
+                    "flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium transition-colors",
+                    activeTab === "networks" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted"
+                  )}
+                >
+                  <Radio className="h-3.5 w-3.5" /> Networks
+                </button>
+                {activeTab === "genres" && (
+                  <div className="ml-auto flex shrink-0 items-center gap-1 rounded-full bg-muted p-0.5">
+                    <button onClick={() => { setType("movie"); setSelectedGenre(null); }} className={cn("rounded-full px-2 py-0.5 text-[10px] font-semibold", type === "movie" ? "bg-background text-foreground" : "text-muted-foreground")}>Movies</button>
+                    <button onClick={() => { setType("tv"); setSelectedGenre(null); }} className={cn("rounded-full px-2 py-0.5 text-[10px] font-semibold", type === "tv" ? "bg-background text-foreground" : "text-muted-foreground")}>TV</button>
+                  </div>
+                )}
+              </>
+            )}
+
+            {context === "drakor" && (
+              <button
+                onClick={() => setActiveTab("kategori")}
+                className={cn(
+                  "flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium transition-colors",
+                  activeTab === "kategori" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted"
+                )}
+              >
+                <Clapperboard className="h-3.5 w-3.5" /> Kategori
+              </button>
             )}
           </div>
         )}
 
-        {/* Content Area */}
         <div className="flex min-w-0 flex-1 flex-col overflow-y-auto overflow-x-hidden" style={{ maxHeight: "70vh", scrollbarWidth: "thin", WebkitOverflowScrolling: "touch" }}>
           <style>{`
             .search-scroll::-webkit-scrollbar { display: none; }
           `}</style>
 
-          {/* === MOVIE CONTEXT: RESULTS === */}
           {context === "movie" && activeTab === "results" && (
             <>
               {!query.trim() && (
@@ -330,7 +352,7 @@ export function SearchModal() {
                     const mediaType: "movie" | "tv" = movie.media_type || (movie.title ? "movie" : "tv");
                     const rating = movie.vote_average?.toFixed(1) || "N/A";
                     return (
-                      <button key={`${movie.id}-${mediaType}`} onClick={() => handleSelectMovie(movie)} className="group relative aspect-[2/3] overflow-hidden rounded-lg bg-card text-left transition-all hover:ring-2 hover:ring-primary">
+                      <button key={movie.id + "-" + mediaType} onClick={() => handleSelectMovie(movie)} className="group relative aspect-[2/3] overflow-hidden rounded-lg bg-card text-left transition-all hover:ring-2 hover:ring-primary">
                         {movie.poster_path ? (
                           <Image src={getImageUrl(movie.poster_path, "w500")} alt={title} fill sizes="(max-width: 768px) 30vw, 150px" className="object-cover" unoptimized />
                         ) : (
@@ -342,7 +364,7 @@ export function SearchModal() {
                         <div className="absolute bottom-0 p-2">
                           <span className="rounded bg-primary/90 px-1 text-[8px] font-bold uppercase text-primary-foreground">{mediaType}</span>
                           <h3 className="mt-1 line-clamp-2 text-[11px] font-semibold text-white sm:text-xs">{title}</h3>
-                          <span className="text-[9px] text-white/60">★ {rating}</span>
+                          <span className="text-[9px] text-white/60">{rating}</span>
                         </div>
                       </button>
                     );
@@ -352,8 +374,8 @@ export function SearchModal() {
 
               {!loading && query.trim() && (
                 <div className="shrink-0 border-t border-border p-3">
-                  <button onClick={() => { router.push(`/search?q=${encodeURIComponent(query.trim())}`); setSearchOpen(false); }} className="flex w-full items-center justify-center gap-2 rounded-lg bg-muted/50 py-2 text-xs font-semibold text-primary hover:bg-muted">
-                    See all results for &quot;{query}&quot;
+                  <button onClick={() => { router.push("/search?q=" + encodeURIComponent(query.trim())); setSearchOpen(false); }} className="flex w-full items-center justify-center gap-2 rounded-lg bg-muted/50 py-2 text-xs font-semibold text-primary hover:bg-muted">
+                    See all results for {query}
                     <ArrowRight className="h-3.5 w-3.5" />
                   </button>
                 </div>
@@ -361,7 +383,6 @@ export function SearchModal() {
             </>
           )}
 
-          {/* === ANIME CONTEXT: RESULTS === */}
           {context === "anime" && (
             <div className="p-4">
               {loading ? (
@@ -378,7 +399,6 @@ export function SearchModal() {
             </div>
           )}
 
-          {/* === DONGHUA CONTEXT: RESULTS === */}
           {context === "donghua" && (
             <div className="p-4">
               {loading ? (
@@ -395,7 +415,6 @@ export function SearchModal() {
             </div>
           )}
 
-          {/* === COMIC CONTEXT: RESULTS === */}
           {context === "comic" && (
             <div className="p-4">
               {loading ? (
@@ -412,8 +431,7 @@ export function SearchModal() {
             </div>
           )}
 
-          {/* === DRAKOR CONTEXT: RESULTS === (BARU) */}
-          {context === "drakor" && (
+          {context === "drakor" && activeTab === "results" && (
             <div className="p-4">
               {loading ? (
                 <div className="flex h-32 items-center justify-center"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>
@@ -429,7 +447,10 @@ export function SearchModal() {
             </div>
           )}
 
-          {/* === MOVIE CONTEXT: GENRES === */}
+          {context === "drakor" && activeTab === "kategori" && (
+            <DrakorKategoriList />
+          )}
+
           {context === "movie" && activeTab === "genres" && (
             <div className="min-w-0 p-4 pb-20">
               <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3">
@@ -452,7 +473,6 @@ export function SearchModal() {
             </div>
           )}
 
-          {/* === MOVIE CONTEXT: NETWORKS === */}
           {context === "movie" && activeTab === "networks" && (
             <div className="min-w-0 p-4 pb-20">
               <p className="mb-3 text-xs text-muted-foreground">Browse TV shows by network:</p>
@@ -482,7 +502,6 @@ export function SearchModal() {
           )}
         </div>
 
-        {/* Browse button di LUAR scroll area (Movie Context Only) */}
         {context === "movie" && activeTab === "genres" && selectedGenre && (
           <div className="shrink-0 border-t border-border bg-background p-3">
             <button onClick={handleBrowseGenre} className="flex w-full items-center justify-center gap-2 rounded-lg bg-primary py-2.5 text-sm font-semibold text-primary-foreground hover:bg-primary/90">
