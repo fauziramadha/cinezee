@@ -400,28 +400,32 @@ export function PlayerModal() {
 
       const playData = data?.data || data;
 
-      // Get video URL - try vid_url first, then hls array (720p preferred)
-      let streamUrl = playData?.vid_url || "";
+      // Get video URL - prefer vid_url, then hls 720p
+      let rawStreamUrl = playData?.vid_url || "";
 
-      if (!streamUrl && Array.isArray(playData?.hls)) {
-        // Find 720p in hls array, fallback to last one
+      if (!rawStreamUrl && Array.isArray(playData?.hls)) {
         const hls720 = playData.hls.find((h: any) => h.resolutions === "720");
-        streamUrl = hls720?.url || playData.hls[playData.hls.length - 1]?.url || "";
+        rawStreamUrl = hls720?.url || playData.hls[playData.hls.length - 1]?.url || "";
       }
 
       // Get subtitle Indonesia
-      let subtitleUrl = "";
+      let rawSubtitleUrl = "";
       if (Array.isArray(playData?.subtitles)) {
         const subIndo = playData.subtitles.find((s: any) => s.id === "in_id" || s.label === "in_id");
-        subtitleUrl = subIndo?.url || "";
+        rawSubtitleUrl = subIndo?.url || "";
       }
-      if (!subtitleUrl) {
-        subtitleUrl = playData?.sub_url || "";
+      if (!rawSubtitleUrl) {
+        rawSubtitleUrl = playData?.sub_url || "";
       }
 
-      if (streamUrl) {
+      if (rawStreamUrl) {
+        // Pakai proxy route kita sendiri untuk handle CORS + token
+        const streamUrl = `/api/filmbox/stream?url=${encodeURIComponent(rawStreamUrl)}`;
         setFilmboxStream(streamUrl);
-        if (subtitleUrl) {
+
+        if (rawSubtitleUrl) {
+          // Subtitle juga pakai proxy
+          const subtitleUrl = `/api/filmbox/stream?url=${encodeURIComponent(rawSubtitleUrl)}`;
           setFilmboxSubtitle(subtitleUrl);
         }
       } else {
