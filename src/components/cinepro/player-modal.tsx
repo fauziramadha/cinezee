@@ -400,22 +400,22 @@ export function PlayerModal() {
 
       const playData = data?.data || data;
 
-      // Get video URL - prefer vid_url, then hls 720p
-      let rawStreamUrl = playData?.vid_url || "";
+       // Get video URL - PAKAI PROXY URL dari Indocast (bukan direct URL)
+      let rawStreamUrl = playData?.vid_url_proxy || playData?.vid_url || "";
 
       if (!rawStreamUrl && Array.isArray(playData?.hls)) {
         const hls720 = playData.hls.find((h: any) => h.resolutions === "720");
-        rawStreamUrl = hls720?.url || playData.hls[playData.hls.length - 1]?.url || "";
+        rawStreamUrl = hls720?.url_proxy || hls720?.url || playData.hls[playData.hls.length - 1]?.url_proxy || playData.hls[playData.hls.length - 1]?.url || "";
       }
 
-      // Get subtitle Indonesia
+      // Get subtitle Indonesia - PAKAI PROXY URL
       let rawSubtitleUrl = "";
       if (Array.isArray(playData?.subtitles)) {
         const subIndo = playData.subtitles.find((s: any) => s.id === "in_id" || s.label === "in_id");
-        rawSubtitleUrl = subIndo?.url || "";
+        rawSubtitleUrl = subIndo?.url_proxy || subIndo?.url || "";
       }
       if (!rawSubtitleUrl) {
-        rawSubtitleUrl = playData?.sub_url || "";
+        rawSubtitleUrl = playData?.sub_url_proxy || playData?.sub_url || "";
       }
 
       if (rawStreamUrl) {
