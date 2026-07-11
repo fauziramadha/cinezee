@@ -81,6 +81,8 @@ export function PlayerModal() {
   const [filmboxLoading, setFilmboxLoading] = useState(false);
   const [filmboxSearching, setFilmboxSearching] = useState(false);
   const [isFilmboxProvider, setIsFilmboxProvider] = useState(false);
+  const [filmboxQualities, setFilmboxQualities] = useState<Array<{ resolutions: string; url_proxy: string }>>([]);
+  const [selectedFilmboxQuality, setSelectedFilmboxQuality] = useState<string>("720");
   const videoRef = useRef<HTMLVideoElement>(null);
 
   useEffect(() => {
@@ -223,7 +225,6 @@ export function PlayerModal() {
   }, [playerMedia, season, episode]);
 
   // === SEARCH FILMBOX BY TITLE (matching TMDB) ===
-  // subjectType: 1 = movie, 2 = drama/series (Filmbox format)
   useEffect(() => {
     if (!playerMedia) return;
 
@@ -233,10 +234,10 @@ export function PlayerModal() {
     setFilmboxStream("");
     setFilmboxSubtitle("");
     setIsFilmboxProvider(false);
+    setFilmboxQualities([]);
 
     const searchFilmbox = async () => {
       try {
-        // Determine subjectType: 1 for movie, 2 for tv
         const subjectType = playerMedia.type === "tv" ? 2 : 1;
 
         const res = await fetch("/api/filmbox/search", {
@@ -255,7 +256,6 @@ export function PlayerModal() {
 
         if (cancelled) return;
 
-        // Parse response - shape: { code, message, data: { items: [...] } }
         const inner = data?.data || data;
         const items = inner?.items || inner?.list || [];
 
@@ -264,7 +264,6 @@ export function PlayerModal() {
           return;
         }
 
-        // Normalize title for matching
         const normalizeTitle = (t: string) =>
           t.toLowerCase()
             .replace(/[^a-z0-9\s]/g, "")
@@ -272,12 +271,9 @@ export function PlayerModal() {
             .trim();
 
         const tmdbTitle = normalizeTitle(playerMedia.title);
-
-        // Get year from detail if available (for better matching)
         const tmdbYear = detail?.release_date || detail?.first_air_date || "";
         const tmdbYearStr = tmdbYear ? tmdbYear.split("-")[0] : "";
 
-        // Find best match: exact title match first, then contains match
         let bestMatch = null;
         let bestScore = 0;
 
@@ -286,21 +282,14 @@ export function PlayerModal() {
           if (!itemTitle) continue;
 
           let score = 0;
-
-          // Exact match = highest score
           if (itemTitle === tmdbTitle) {
             score = 100;
-          }
-          // TMDB title contains item title
-          else if (tmdbTitle.includes(itemTitle)) {
+          } else if (tmdbTitle.includes(itemTitle)) {
             score = 80;
-          }
-          // Item title contains TMDB title
-          else if (itemTitle.includes(tmdbTitle)) {
+          } else if (itemTitle.includes(tmdbTitle)) {
             score = 70;
           }
 
-          // Bonus: year match
           if (score > 0 && tmdbYearStr) {
             const itemYear = (item.releaseDate || "").split("-")[0];
             if (itemYear === tmdbYearStr) {
@@ -320,6 +309,8 @@ export function PlayerModal() {
             subjectId: String(bestMatch.subjectId || bestMatch.subject_id || bestMatch.id || ""),
             title: bestMatch.title || bestMatch.name || "",
           });
+          // AUTO-SELECT PREMIUM saat match ditemukan
+          setIsFilmboxProvider(true);
         }
       } catch (err) {
         console.error("[Filmbox search] error:", err);
@@ -374,7 +365,7 @@ export function PlayerModal() {
     return () => clearTimeout(timer);
   }, [iframeError, currentIdx, providers.length, switchProvider]);
 
-    // === LOAD FILMBOX STREAM URL ===
+  // === LOAD FILMBOX STREAM URL ===
   const loadFilmboxStream = useCallback(async () => {
     if (!filmboxMatch) return;
 
@@ -397,20 +388,29 @@ export function PlayerModal() {
       if (!res.ok) throw new Error("Failed to fetch stream");
 
       const data = await res.json();
-
       const playData = data?.data || data;
 
-      // PAKAI LANGSUNG vid_url_proxy (Indocast proxy sudah set CORS *)
-      // Tidak perlu proxy route kita
-      let streamUrl = playData?.vid_url_proxy || "";
+      // Simpan semua kualitas yang tersedia dari array hls
+      const qualities = Array.isArray(playData?.hls)
+        ? playData.hls.map((h: any) => ({
+            resolutions: h.resolutions,
+            url_proxy: h.url_proxy || h.url || "",
+          })).filter((q: any) => q.url_proxy)
+        : [];
+      
+      setFilmboxQualities(qualities);
 
-      if (!streamUrl && Array.isArray(playData?.hls)) {
-        const hls720 = playData.hls.find((h: any) => h.resolutions === "720");
-        streamUrl = hls720?.url_proxy || playData.hls[0]?.url_proxy || "";
+      // Cari 720p secara default, kalau tidak ada fallback ke vid_url_proxy
+      let streamUrl = "";
+      const q720 = qualities.find((q: any) => q.resolutions === "720");
+      
+      if (q720) {
+        streamUrl = q720.url_proxy;
+        setSelectedFilmboxQuality("720");
+      } else {
+        streamUrl = playData?.vid_url_proxy || "";
+        setSelectedFilmboxQuality(playData?.quality || "720");
       }
-
-      // Subtitle - skip dulu (butuh proxy untuk CORS)
-      // Fokus ke video dulu
 
       if (streamUrl) {
         setFilmboxStream(streamUrl);
@@ -425,6 +425,24 @@ export function PlayerModal() {
     }
   }, [filmboxMatch]);
 
+  // === AUTO LOAD FILMBOX STREAM WHEN MATCHED ===
+  useEffect(() => {
+    if (filmboxMatch && isFilmboxProvider) {
+      loadFilmboxStream();
+    }
+  }, [filmboxMatch, isFilmboxProvider, loadFilmboxStream]);
+
+  // === HANDLE QUALITY CHANGE ===
+  const handleFilmboxQualityChange = (quality: string) => {
+    setSelectedFilmboxQuality(quality);
+    const q = filmboxQualities.find(q => q.resolutions === quality);
+    if (q && q.url_proxy) {
+      setFilmboxStream(q.url_proxy);
+      setIframeLoaded(false);
+      setIframeError(false);
+    }
+  };
+
   // === SETUP VIDEO (untuk Filmbox Premium - MP4 format) ===
   useEffect(() => {
     if (!isFilmboxProvider || !filmboxStream) return;
@@ -435,7 +453,6 @@ export function PlayerModal() {
     setIframeLoaded(false);
     setIframeError(false);
 
-    // MP4 format - langsung set src, tidak perlu hls.js
     video.src = filmboxStream;
     video.load();
 
@@ -463,7 +480,6 @@ export function PlayerModal() {
     if (!isFilmboxProvider || !iframeError) return;
 
     const timer = setTimeout(() => {
-      // Switch ke Server 1 (currentIdx = 0, isFilmboxProvider = false)
       setIsFilmboxProvider(false);
       setFilmboxStream("");
       setIframeError(false);
@@ -666,6 +682,25 @@ export function PlayerModal() {
                     ))}
                   </SelectContent>
                 </Select>
+
+                {/* QUALITY SELECTOR UNTUK FILMBOX */}
+                {isFilmboxProvider && filmboxQualities.length > 0 && (
+                  <Select
+                    value={selectedFilmboxQuality}
+                    onValueChange={handleFilmboxQualityChange}
+                  >
+                    <SelectTrigger className="h-7 w-16 shrink-0 gap-1 border-white/20 bg-white/10 text-[10px] text-white backdrop-blur-sm sm:h-8 sm:w-20 sm:text-xs">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {filmboxQualities.map((q) => (
+                        <SelectItem key={q.resolutions} value={q.resolutions}>
+                          {q.resolutions}p
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
 
                 <button
                   onClick={() => {
