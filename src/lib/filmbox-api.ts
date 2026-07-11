@@ -6,7 +6,7 @@ const CACHE_TTL = {
   trending: 6 * 60 * 60,
   search: 6 * 60 * 60,
   detail: 24 * 60 * 60,
-  play: 12 * 60 * 60,
+  play: 30 * 60,  // 30 menit (was 12 jam) - token expired cepat
 } as const;
 
 async function getD1(): Promise<D1Database> {
