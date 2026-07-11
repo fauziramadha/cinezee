@@ -199,13 +199,7 @@ export function DrakorPlayerView({
       <Header />
       <div className="container mx-auto px-4 py-6 pt-20">
         <button
-          onClick={() => {
-            if (typeof window !== "undefined" && window.history.length > 1) {
-              router.back();
-            } else {
-              router.push(detailHref);
-            }
-          }}
+          onClick={() => router.push(detailHref)}
           className="mb-4 flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground"
         >
           <ArrowLeft className="h-4 w-4" />
