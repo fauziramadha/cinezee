@@ -415,21 +415,22 @@ export function PlayerModal() {
         setSelectedFilmboxQuality(playData?.quality || "720");
       }
 
-      // Get subtitle Indonesia - pakai direct URL via our proxy
+      // Get subtitle Indonesia - PAKAI LANGSUNG url_proxy dari Indocast
+      // Indocast proxy sudah return format VTT, tidak perlu convert
       let rawSubtitleUrl = "";
       if (Array.isArray(playData?.subtitles)) {
         const subIndo = playData.subtitles.find((s: any) => s.id === "in_id" || s.label === "in_id");
-        rawSubtitleUrl = subIndo?.url || "";
+        rawSubtitleUrl = subIndo?.url_proxy || subIndo?.url || "";
       }
       if (!rawSubtitleUrl) {
-        rawSubtitleUrl = playData?.sub_url || "";
+        rawSubtitleUrl = playData?.sub_url_proxy || playData?.sub_url || "";
       }
 
       if (streamUrl) {
         setFilmboxStream(streamUrl);
-        // Subtitle pakai our proxy route (karena cacdn tidak ada CORS headers)
+        // Subtitle pakai langsung dari Indocast proxy (sudah VTT + CORS)
         if (rawSubtitleUrl) {
-          setFilmboxSubtitle("/api/filmbox/stream?url=" + encodeURIComponent(rawSubtitleUrl));
+          setFilmboxSubtitle(rawSubtitleUrl);
         }
       } else {
         setIframeError(true);
