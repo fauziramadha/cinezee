@@ -376,11 +376,14 @@ export function PlayerModal() {
     setIframeLoaded(false);
 
     try {
+      // Untuk TV series: kirim season + episode yang dipilih user
+      // Untuk movie: se=0, ep=0 (movie tidak punya season/episode)
+      const isTVType = playerMedia?.type === "tv";
       const params = new URLSearchParams({
         subjectId: filmboxMatch.subjectId,
         detailPath: filmboxMatch.detailPath,
-        se: "0",
-        ep: "0",
+        se: isTVType ? String(season) : "0",
+        ep: isTVType ? String(episode) : "0",
         lang: "in_id",
       });
 
@@ -412,8 +415,22 @@ export function PlayerModal() {
         setSelectedFilmboxQuality(playData?.quality || "720");
       }
 
+      // Get subtitle Indonesia - pakai direct URL via our proxy
+      let rawSubtitleUrl = "";
+      if (Array.isArray(playData?.subtitles)) {
+        const subIndo = playData.subtitles.find((s: any) => s.id === "in_id" || s.label === "in_id");
+        rawSubtitleUrl = subIndo?.url || "";
+      }
+      if (!rawSubtitleUrl) {
+        rawSubtitleUrl = playData?.sub_url || "";
+      }
+
       if (streamUrl) {
         setFilmboxStream(streamUrl);
+        // Subtitle pakai our proxy route (karena cacdn tidak ada CORS headers)
+        if (rawSubtitleUrl) {
+          setFilmboxSubtitle("/api/filmbox/stream?url=" + encodeURIComponent(rawSubtitleUrl));
+        }
       } else {
         setIframeError(true);
       }
@@ -423,7 +440,7 @@ export function PlayerModal() {
     } finally {
       setFilmboxLoading(false);
     }
-  }, [filmboxMatch]);
+  }, [filmboxMatch, season, episode]);
 
   // === AUTO LOAD FILMBOX STREAM WHEN MATCHED ===
   useEffect(() => {
@@ -747,13 +764,23 @@ export function PlayerModal() {
                     setIframeError(true);
                     setIframeLoaded(false);
                   }}
-                />
+                >
+                  {filmboxSubtitle && (
+                    <track
+                      kind="subtitles"
+                      srcLang="id"
+                      label="Indonesia"
+                      src={filmboxSubtitle}
+                      default
+                    />
+                  )}
+                </video>
 
                 {!iframeLoaded && !iframeError && (
                   <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black text-white">
                     <Loader2 className="h-8 w-8 animate-spin text-primary" />
                     <p className="text-xs text-white/70">
-                      Loading from Premium (Filmbox)...
+                      Loading from Premium...
                     </p>
                   </div>
                 )}
