@@ -11,7 +11,6 @@ export async function GET(req: NextRequest) {
       return new NextResponse("Missing url parameter", { status: 400 });
     }
 
-    // Validasi URL — allow Filmbox CDN domains + Indocast proxy
     const allowedDomains = [
       "bcdnxw.hakunaymatata.com",
       "cacdn.hakunaymatata.com",
@@ -30,7 +29,6 @@ export async function GET(req: NextRequest) {
       return new NextResponse("Domain not allowed", { status: 403 });
     }
 
-    // Forward range header untuk video streaming
     const headers: Record<string, string> = {
       "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version=17.0 Mobile/15E148 Safari/604.1",
       "Referer": "https://play.filmboxplus.stream/",
@@ -49,15 +47,35 @@ export async function GET(req: NextRequest) {
       });
     }
 
-    // Build response headers — add CORS + forward content headers
     const responseHeaders = new Headers();
     responseHeaders.set("Access-Control-Allow-Origin", "*");
     responseHeaders.set("Access-Control-Allow-Methods", "GET, HEAD, OPTIONS");
     responseHeaders.set("Access-Control-Allow-Headers", "Range");
     responseHeaders.set("Access-Control-Expose-Headers", "Content-Range, Accept-Ranges, Content-Length");
 
-    // Forward content headers
-    const contentType = response.headers.get("content-type");
+    const contentType = response.headers.get("content-type") || "";
+    
+    // === KONVERSI SRT KE VTT UNTUK SUBTITLE ===
+    // Browser hanya support WebVTT, Filmbox pakai SRT
+    if (contentType.includes("subrip") || parsedUrl.pathname.includes(".srt")) {
+      const srtText = await response.text();
+      
+      // Convert SRT to VTT
+      let vttText = "WEBVTT\n\n";
+      
+      // Replace comma with dot in timestamps (SRT: 00:00:01,000 → VTT: 00:00:01.000)
+      vttText += srtText.replace(/(\d{2}:\d{2}:\d{2}),(\d{3})/g, "$1.$2");
+      
+      responseHeaders.set("Content-Type", "text/vtt; charset=utf-8");
+      responseHeaders.set("Cache-Control", "no-cache");
+      
+      return new NextResponse(vttText, {
+        status: 200,
+        headers: responseHeaders,
+      });
+    }
+
+    // === FORWARD VIDEO STREAM ===
     if (contentType) responseHeaders.set("Content-Type", contentType);
 
     const contentLength = response.headers.get("content-length");
@@ -73,7 +91,6 @@ export async function GET(req: NextRequest) {
       responseHeaders.set("Accept-Ranges", "bytes");
     }
 
-    // Stream the response body
     return new NextResponse(response.body, {
       status: response.status,
       headers: responseHeaders,
@@ -84,7 +101,6 @@ export async function GET(req: NextRequest) {
   }
 }
 
-// Handle OPTIONS untuk CORS preflight
 export async function OPTIONS() {
   return new NextResponse(null, {
     status: 204,
