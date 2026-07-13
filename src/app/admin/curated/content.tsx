@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { Header } from "@/components/cinepro/header";
 import { Footer } from "@/components/cinepro/footer";
-import { Loader2, Trash2, Plus, Film, Tv, CheckCircle, Subtitles, Play, Copy } from "lucide-react";
+import { Loader2, Trash2, Plus, Film, Tv, CheckCircle, Subtitles, Play, Copy, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -61,6 +61,8 @@ export function CuratedContent() {
   const [subtitleUrl, setSubtitleUrl] = useState("");
   const [subtitleSource, setSubtitleSource] = useState("");
   const [subtitleLoading, setSubtitleLoading] = useState(false);
+  const [subtitleList, setSubtitleList] = useState<any[]>([]);
+  const [subtitleSearched, setSubtitleSearched] = useState(false);
   
   // Test player
   const [testPlayerUrl, setTestPlayerUrl] = useState("");
@@ -106,6 +108,8 @@ export function CuratedContent() {
     setQuality("HD");
     setSubtitleUrl("");
     setSubtitleSource("");
+    setSubtitleList([]);
+    setSubtitleSearched(false);
     setDialogOpen(true);
   };
 
@@ -120,13 +124,14 @@ export function CuratedContent() {
     setSubtitleLoading(true);
     setSubtitleUrl("");
     setSubtitleSource("");
+    setSubtitleList([]);
+    setSubtitleSearched(false);
     
     try {
       const type = selectedMovie.media_type || (selectedMovie.title ? "movie" : "tv");
       const params = new URLSearchParams({
         tmdb_id: String(selectedMovie.id),
         type: type,
-        title: selectedMovie.title || selectedMovie.name || "",
       });
       if (type === "tv") {
         params.set("season", season);
@@ -136,20 +141,26 @@ export function CuratedContent() {
       const res = await fetch("/api/subtitle/search?" + params.toString());
       const json = await res.json();
 
-      if (json.success) {
-        // Convert ke VTT via our proxy
-        const vttUrl = "/api/subtitle/convert?url=" + encodeURIComponent(json.subtitle_url);
-        setSubtitleUrl(vttUrl);
-        setSubtitleSource(json.source);
-        toast.success("Subtitle ditemukan dari " + json.source);
+      if (json.success && json.subtitles && json.subtitles.length > 0) {
+        setSubtitleList(json.subtitles);
+        toast.success(json.subtitles.length + " subtitle ditemukan! Pilih salah satu.");
       } else {
-        toast.error("Subtitle Indonesia tidak ditemukan");
+        setSubtitleSearched(true);
+        toast.error("Subtitle Indonesia tidak ditemukan. Silakan input manual di bawah.");
       }
     } catch (err) {
-      toast.error("Gagal fetch subtitle");
+      setSubtitleSearched(true);
+      toast.error("Gagal fetch subtitle. Silakan input manual di bawah.");
     } finally {
       setSubtitleLoading(false);
     }
+  };
+
+  const handleSelectSubtitle = (sub: any) => {
+    setSubtitleUrl(sub.download_url);
+    setSubtitleSource(sub.source);
+    setSubtitleList([]);
+    toast.success("Subtitle dipilih: " + sub.source);
   };
 
   const handleTestPlayer = () => {
@@ -209,7 +220,7 @@ export function CuratedContent() {
         <div className="mb-6">
           <h1 className="text-2xl font-bold">Curated Movies</h1>
           <p className="text-sm text-muted-foreground">
-            Cari film → pilih embed provider → fetch subtitle → test play → approve
+            Cari film - pilih embed provider - cari & pilih subtitle - test play - approve
           </p>
         </div>
 
@@ -342,7 +353,7 @@ export function CuratedContent() {
                 <div>
                   <h3 className="font-semibold">{selectedMovie.title || selectedMovie.name}</h3>
                   <p className="text-sm text-muted-foreground">
-                    {selectedMovie.media_type || (selectedMovie.title ? "Movie" : "TV")} • TMDB ID: {selectedMovie.id}
+                    {selectedMovie.media_type || (selectedMovie.title ? "Movie" : "TV")} - TMDB ID: {selectedMovie.id}
                   </p>
                 </div>
               </div>
@@ -422,8 +433,8 @@ export function CuratedContent() {
                 </div>
               </div>
 
-              {/* Subtitle */}
-              <div className="space-y-2">
+              {/* Subtitle Section */}
+              <div className="space-y-3">
                 <div className="flex items-center justify-between">
                   <label className="text-sm font-medium">Subtitle Indonesia</label>
                   <Button
@@ -437,19 +448,67 @@ export function CuratedContent() {
                     {subtitleLoading ? "Mencari..." : "Cari Subtitle"}
                   </Button>
                 </div>
-                {subtitleUrl && (
+
+                {/* Daftar Pilihan Subtitle */}
+                {subtitleList.length > 0 && (
+                  <div className="space-y-1.5 max-h-40 overflow-y-auto rounded-lg border border-border p-2">
+                    {subtitleList.map((sub, idx) => (
+                      <button
+                        key={idx}
+                        onClick={() => handleSelectSubtitle(sub)}
+                        className={cn(
+                          "flex w-full items-center justify-between rounded-md p-2 text-left text-xs transition-colors",
+                          subtitleUrl === sub.download_url
+                            ? "bg-primary/10 text-primary"
+                            : "hover:bg-muted"
+                        )}
+                      >
+                        <span className="truncate flex-1">{sub.release}</span>
+                        <Badge variant="outline" className="ml-2 shrink-0 capitalize">{sub.source}</Badge>
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {/* Subtitle Terpilih */}
+                {subtitleUrl && subtitleList.length === 0 && (
                   <div className="flex items-center gap-2 rounded-lg border border-green-500/40 bg-green-500/10 p-2">
                     <CheckCircle className="h-4 w-4 text-green-500 shrink-0" />
                     <p className="text-xs text-green-600 truncate flex-1">
                       Subtitle dari {subtitleSource}
                     </p>
-                    <Badge variant="outline" className="text-green-600">VTT Ready</Badge>
+                    <button 
+                      onClick={() => {
+                        setSubtitleUrl("");
+                        setSubtitleSource("");
+                        setSubtitleSearched(true);
+                      }}
+                      className="text-xs text-red-500 hover:underline shrink-0"
+                    >
+                      Hapus
+                    </button>
                   </div>
                 )}
-                {!subtitleUrl && !subtitleLoading && (
-                  <p className="text-xs text-muted-foreground">
-                    Klik "Cari Subtitle" untuk auto-fetch dari OpenSubtitles / SubDL / SubSource
-                  </p>
+
+                {/* Input Manual - muncul kalau sudah cari tapi tidak ada, atau belum cari sama sekali */}
+                {(!subtitleUrl && subtitleList.length === 0 && !subtitleLoading) && (
+                  <div className="space-y-1">
+                    <p className="text-xs text-muted-foreground">
+                      {subtitleSearched 
+                        ? "Tidak ketemu? Masukkan URL subtitle (.srt atau .vtt) manual:" 
+                        : "Atau masukkan URL subtitle (.srt atau .vtt) manual:"}
+                    </p>
+                    <Input
+                      type="text"
+                      placeholder="https://example.com/subtitle.srt"
+                      value={subtitleUrl}
+                      onChange={(e) => {
+                        setSubtitleUrl(e.target.value);
+                        setSubtitleSource("manual");
+                      }}
+                      className="text-xs"
+                    />
+                  </div>
                 )}
               </div>
 
@@ -490,7 +549,7 @@ export function CuratedContent() {
             )}
           </div>
           <p className="text-xs text-muted-foreground text-center">
-            Jika video muncul → URL valid. Tutup lalu Approve.
+            Jika video muncul - URL valid. Tutup lalu Approve.
           </p>
         </DialogContent>
       </Dialog>
