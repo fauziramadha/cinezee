@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import Image from "next/image";
+import { wrapCinemacityImage } from "@/lib/cinemacity-api";
 import { useRouter } from "next/navigation";
 import { useSafeSession } from "@/lib/use-safe-session";
 import {
@@ -93,8 +94,8 @@ export function DetailModal() {
             title: cd.title,
             name: cd.type === "tv" ? cd.title : undefined,
             overview: cd.description || "No description available.",
-            poster_path: cd.poster || null,
-            backdrop_path: cd.backdrop || cd.poster || null,
+            poster_path: wrapCinemacityImage(cd.poster),
+            backdrop_path: wrapCinemacityImage(cd.backdrop || cd.poster),
             vote_average: 0,
             vote_count: 0,
             release_date: cd.year ? `${cd.year}-01-01` : undefined,
