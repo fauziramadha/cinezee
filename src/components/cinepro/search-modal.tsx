@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import Image from "next/image";
 import { useRouter, usePathname } from "next/navigation";
+import { wrapCinemacityImage } from "@/lib/cinemacity-api";
 import { Search, X, Film, Tv, Loader2, ArrowRight, Clapperboard, Radio } from "lucide-react";
 import {
   Dialog,
@@ -126,8 +127,8 @@ export function SearchModal() {
             title: cm.title,
             name: cm.type === "tv" ? cm.title : undefined,
             overview: "",
-            poster_path: cm.poster || null,
-            backdrop_path: cm.poster || null,
+            poster_path: wrapCinemacityImage(cm.poster),
+            backdrop_path: wrapCinemacityImage(cm.poster),
             vote_average: 0,
             vote_count: 0,
             release_date: cm.year ? `${cm.year}-01-01` : undefined,
