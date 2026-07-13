@@ -32,13 +32,16 @@ export function MovieCard({ movie, className, size = "md", type }: MovieCardProp
   // FIX: Prioritaskan prop `type`, lalu movie.media_type, lalu deteksi dari title vs name
   const mediaType: "movie" | "tv" = type || movie.media_type || (movie.title ? "movie" : "tv");
 
-  const handleClick = () => {
+    const handleClick = () => {
     const selected: SelectedMedia = {
       id: movie.id,
       type: mediaType,
       title,
       posterPath: movie.poster_path,
       backdropPath: movie.backdrop_path,
+      // Cinemacity fields (dari adapter)
+      slug: (movie as any).slug,
+      source: (movie as any).source,
     };
     setSelectedMedia(selected);
   };
