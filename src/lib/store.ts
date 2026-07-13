@@ -10,6 +10,9 @@ export interface SelectedMedia {
   title: string;
   posterPath: string | null;
   backdropPath: string | null;
+  // Cinemacity fields (optional — untuk backward compatibility dengan TMDB)
+  slug?: string;                              // cinemacity slug, e.g. "1873-obsession"
+  source?: "tmdb" | "cinemacity";            // sumber data
 }
 
 export interface WatchHistoryItem extends SelectedMedia {
