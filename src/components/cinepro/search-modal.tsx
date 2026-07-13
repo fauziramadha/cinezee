@@ -111,11 +111,33 @@ export function SearchModal() {
       try {
         let data: any;
 
+        // ============================================================
+        // CINEMACITY SEARCH (menggantikan TMDB search untuk context movie)
+        // ============================================================
         if (context === "movie") {
-          const res = await fetch("/api/search?q=" + encodeURIComponent(query));
+          const res = await fetch("/api/cinemacity/search?q=" + encodeURIComponent(query));
           if (!res.ok) throw new Error("Fetch failed");
           data = await res.json();
-          setResults(data.results || []);
+
+          // Convert cinemacity movies → TMDB Movie shape
+          // cinemacity returns: { movies: [{ id, slug, type, title, url, poster, year }] }
+          const list: Movie[] = (data.movies || []).map((cm: any) => ({
+            id: Number(cm.id),
+            title: cm.title,
+            name: cm.type === "tv" ? cm.title : undefined,
+            overview: "",
+            poster_path: cm.poster || null,
+            backdrop_path: cm.poster || null,
+            vote_average: 0,
+            vote_count: 0,
+            release_date: cm.year ? `${cm.year}-01-01` : undefined,
+            first_air_date: cm.year ? `${cm.year}-01-01` : undefined,
+            media_type: cm.type,
+            popularity: 0,
+            // Cinemacity extras
+            ...({ slug: cm.slug, source: "cinemacity" } as any),
+          }));
+          setResults(list);
         }
         else if (context === "anime") {
           const endpoint = animeServer === "animasu"
@@ -201,6 +223,9 @@ export function SearchModal() {
     }
   };
 
+  // ============================================================
+  // UPDATE: handleSelectMovie sekarang kirim slug & source
+  // ============================================================
   const handleSelectMovie = (movie: Movie) => {
     const mediaType: "movie" | "tv" = movie.media_type || (movie.title ? "movie" : "tv");
     setSelectedMedia({
@@ -209,7 +234,10 @@ export function SearchModal() {
       title: movie.title || movie.name || "Untitled",
       posterPath: movie.poster_path,
       backdropPath: movie.backdrop_path,
-    });
+      // Cinemacity fields (kalau ada)
+      slug: (movie as any).slug,
+      source: (movie as any).source,
+    } as SelectedMedia);
     setSearchOpen(false);
   };
 
@@ -264,6 +292,16 @@ export function SearchModal() {
                   ? (animeServer === "animasu" ? "Server 2" : "Server 1")
                   : (donghuaServer === "s2" ? "Server 2" : "Server 1")
                 }
+              </span>
+            </div>
+          )}
+
+          {/* Cinemacity source badge untuk context movie */}
+          {context === "movie" && (
+            <div className="flex items-center gap-2 px-4 pb-2">
+              <span className="text-xs text-muted-foreground">Sumber:</span>
+              <span className="rounded-full bg-emerald-500/90 px-3 py-1 text-xs font-semibold text-white">
+                cinemacity.cc
               </span>
             </div>
           )}
@@ -351,6 +389,7 @@ export function SearchModal() {
                     const title = movie.title || movie.name || "Untitled";
                     const mediaType: "movie" | "tv" = movie.media_type || (movie.title ? "movie" : "tv");
                     const rating = movie.vote_average?.toFixed(1) || "N/A";
+                    const year = movie.release_date?.split("-")[0] || movie.first_air_date?.split("-")[0];
                     return (
                       <button key={movie.id + "-" + mediaType} onClick={() => handleSelectMovie(movie)} className="group relative aspect-[2/3] overflow-hidden rounded-lg bg-card text-left transition-all hover:ring-2 hover:ring-primary">
                         {movie.poster_path ? (
@@ -364,7 +403,14 @@ export function SearchModal() {
                         <div className="absolute bottom-0 p-2">
                           <span className="rounded bg-primary/90 px-1 text-[8px] font-bold uppercase text-primary-foreground">{mediaType}</span>
                           <h3 className="mt-1 line-clamp-2 text-[11px] font-semibold text-white sm:text-xs">{title}</h3>
-                          <span className="text-[9px] text-white/60">{rating}</span>
+                          <div className="flex items-center gap-1">
+                            {rating !== "N/A" && (
+                              <span className="text-[9px] text-white/60">{rating}</span>
+                            )}
+                            {year && (
+                              <span className="text-[9px] text-white/60">• {year}</span>
+                            )}
+                          </div>
                         </div>
                       </button>
                     );
