@@ -105,21 +105,36 @@ async function searchOpenSubtitles(tmdbId: string, imdbId: string, type: string,
 // 2. SUBDL
 // ============================================================
 async function searchSubDL(title: string, type: string): Promise<{ url: string } | null> {
-  const apiKey = process.env.SUBDL_API_KEY;
-  if (!apiKey) return null;
+  // Trim spasi yang tidak sengaja tertempel di env var
+  const apiKey = (process.env.SUBDL_API_KEY || "").trim();
+  if (!apiKey) {
+    console.log("[SubDL] No API key");
+    return null;
+  }
 
   try {
     const searchUrl = "https://api.subdl.com/api/v2/movies/search?q=" + encodeURIComponent(title) + "&type=" + (type === "tv" ? "tv" : "movie") + "&limit=5";
     
     console.log("[SubDL] Searching:", searchUrl);
+    console.log("[SubDL] API Key length:", apiKey.length);
+    
     const searchRes = await fetch(searchUrl, {
-      headers: { "Authorization": "Bearer " + apiKey },
+      headers: { 
+        "Authorization": "Bearer " + apiKey,
+        "Accept": "application/json"
+      },
     });
 
     console.log("[SubDL] Search status:", searchRes.status);
+    
     if (!searchRes.ok) {
       const errText = await searchRes.text();
       console.log("[SubDL] Error response:", errText);
+      
+      // Kalau 403, kemungkinan API key invalid
+      if (searchRes.status === 403) {
+        console.log("[SubDL] 403 Forbidden - API Key mungkin invalid atau expired");
+      }
       return null;
     }
 
@@ -138,7 +153,10 @@ async function searchSubDL(title: string, type: string): Promise<{ url: string }
       
       const subUrl = "https://api.subdl.com/api/v2/subtitles?film_id=" + movieId + "&language=id";
       const subRes = await fetch(subUrl, {
-        headers: { "Authorization": "Bearer " + apiKey },
+        headers: { 
+          "Authorization": "Bearer " + apiKey,
+          "Accept": "application/json"
+        },
       });
       
       if (!subRes.ok) return null;
@@ -160,7 +178,10 @@ async function searchSubDL(title: string, type: string): Promise<{ url: string }
 
     const dlUrl = "https://api.subdl.com/api/v2/subtitles/" + subtitleId + "/download?format=file";
     const dlRes = await fetch(dlUrl, {
-      headers: { "Authorization": "Bearer " + apiKey },
+      headers: { 
+        "Authorization": "Bearer " + apiKey,
+        "Accept": "application/json"
+      },
     });
 
     if (!dlRes.ok) return null;
