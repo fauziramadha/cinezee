@@ -2,7 +2,270 @@ import { NextRequest, NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic";
 
-// Kombinasi 3 API Subtitle: OpenSubtitles → SubDL → SubSource
+// ============================================================
+// 1. OPENSUBTITLES
+// Docs: https://opensubtitles.stoplight.io/docs/opensubtitles-api
+// Auth: Api-Key header + User-Agent header
+// ============================================================
+async function searchOpenSubtitles(tmdbId: string, type: string, season: string, episode: string): Promise<{ url: string } | null> {
+  const apiKey = process.env.OPENSUBTITLES_API_KEY;
+  if (!apiKey) return null;
+
+  try {
+    // Step 1: Search subtitle
+    let searchUrl = "https://api.opensubtitles.com/api/v1/subtitles?tmdb_id=" + tmdbId + "&languages=id";
+    if (type === "tv" && season && episode) {
+      searchUrl += "&season_number=" + season + "&episode_number=" + episode;
+    }
+
+    const searchRes = await fetch(searchUrl, {
+      headers: {
+        "Api-Key": apiKey,
+        "User-Agent": "CineStream v1.0",
+      },
+    });
+
+    if (!searchRes.ok) {
+      console.error("[OS] Search failed:", searchRes.status);
+      return null;
+    }
+
+    const searchData = await searchRes.json();
+    const subtitles = searchData?.data || [];
+
+    if (subtitles.length === 0) return null;
+
+    // Ambil file_id dari subtitle pertama
+    const fileId = subtitles[0]?.attributes?.files?.[0]?.file_id;
+    if (!fileId) return null;
+
+    // Step 2: Request download link
+    const dlRes = await fetch("https://api.opensubtitles.com/api/v1/download", {
+      method: "POST",
+      headers: {
+        "Api-Key": apiKey,
+        "Content-Type": "application/json",
+        "User-Agent": "CineStream v1.0",
+      },
+      body: JSON.stringify({ file_id: fileId }),
+    });
+
+    if (!dlRes.ok) {
+      console.error("[OS] Download request failed:", dlRes.status);
+      return null;
+    }
+
+    const dlData = await dlRes.json();
+    const link = dlData?.link;
+
+    if (link) {
+      return { url: link };
+    }
+
+    return null;
+  } catch (err) {
+    console.error("[OS] Error:", err);
+    return null;
+  }
+}
+
+// ============================================================
+// 2. SUBDL
+// Docs: https://subdl.com/developers
+// Auth: Authorization: Bearer $SUBDL_API_KEY
+// API v2
+// ============================================================
+async function searchSubDL(title: string, type: string, tmdbId: string): Promise<{ url: string } | null> {
+  const apiKey = process.env.SUBDL_API_KEY;
+  if (!apiKey) return null;
+
+  try {
+    // Step 1: Search movie by title
+    const searchUrl = "https://api.subdl.com/api/v2/movies/search?q=" + encodeURIComponent(title) + "&type=" + (type === "tv" ? "tv" : "movie") + "&limit=5";
+    
+    const searchRes = await fetch(searchUrl, {
+      headers: {
+        "Authorization": "Bearer " + apiKey,
+      },
+    });
+
+    if (!searchRes.ok) {
+      console.error("[SubDL] Search failed:", searchRes.status);
+      return null;
+    }
+
+    const searchData = await searchRes.json();
+    const movies = searchData?.results || searchData?.data || searchData?.movies || [];
+
+    if (movies.length === 0) return null;
+
+    // Ambil movie pertama
+    const movie = movies[0];
+    const movieId = movie?.sd_id || movie?.id || movie?.subdl_id;
+
+    if (!movieId) return null;
+
+    // Step 2: Get subtitles for movie
+    const subUrl = "https://api.subdl.com/api/v2/subtitles?film_id=" + movieId + "&language=id";
+    
+    const subRes = await fetch(subUrl, {
+      headers: {
+        "Authorization": "Bearer " + apiKey,
+      },
+    });
+
+    if (!subRes.ok) {
+      console.error("[SubDL] Subtitle list failed:", subRes.status);
+      return null;
+    }
+
+    const subData = await subRes.json();
+    const subtitles = subData?.subtitles || subData?.data || [];
+
+    if (subtitles.length === 0) return null;
+
+    // Ambil subtitle Indonesia pertama
+    const sub = subtitles.find((s: any) => 
+      s?.language?.toLowerCase().includes("id") || 
+      s?.lang?.toLowerCase().includes("id") ||
+      s?.language?.toLowerCase().includes("indonesian")
+    ) || subtitles[0];
+
+    const subtitleId = sub?.sd_id || sub?.id || sub?.subdl_id;
+    if (!subtitleId) return null;
+
+    // Step 3: Download subtitle
+    const dlUrl = "https://api.subdl.com/api/v2/subtitles/" + subtitleId + "/download?format=file";
+    
+    const dlRes = await fetch(dlUrl, {
+      headers: {
+        "Authorization": "Bearer " + apiKey,
+      },
+    });
+
+    if (!dlRes.ok) {
+      console.error("[SubDL] Download failed:", dlRes.status);
+      return null;
+    }
+
+    // Cek apakah response adalah file langsung atau JSON dengan link
+    const contentType = dlRes.headers.get("content-type") || "";
+    
+    if (contentType.includes("json")) {
+      const dlData = await dlRes.json();
+      const link = dlData?.link || dlData?.url || dlData?.download_url;
+      if (link) return { url: link };
+    } else {
+      // Response langsung berisi SRT file
+      const text = await dlRes.text();
+      // Return sebagai data URL
+      return { url: "data:text/srt;base64," + Buffer.from(text).toString("base64") };
+    }
+
+    return null;
+  } catch (err) {
+    console.error("[SubDL] Error:", err);
+    return null;
+  }
+}
+
+// ============================================================
+// 3. SUBSOURCE
+// Docs: https://subsource.net/api-docs
+// Auth: X-API-Key header
+// Base URL: https://api.subsource.net/api/v1
+// ============================================================
+async function searchSubSource(title: string, type: string): Promise<{ url: string } | null> {
+  const apiKey = process.env.SUBSOURCE_API_KEY;
+  if (!apiKey) return null;
+
+  try {
+    // Step 1: Search movie
+    const searchUrl = "https://api.subsource.net/api/v1/movies/search?searchType=text&q=" + encodeURIComponent(title);
+    
+    const searchRes = await fetch(searchUrl, {
+      headers: {
+        "X-API-Key": apiKey,
+      },
+    });
+
+    if (!searchRes.ok) {
+      console.error("[SubSource] Search failed:", searchRes.status);
+      return null;
+    }
+
+    const searchData = await searchRes.json();
+    const movies = searchData?.results || searchData?.data || searchData?.movies || [];
+
+    if (movies.length === 0) return null;
+
+    // Ambil movie pertama
+    const movie = movies[0];
+    const movieId = movie?.id || movie?.subsource_id;
+
+    if (!movieId) return null;
+
+    // Step 2: Get subtitles (filter Indonesian)
+    const subUrl = "https://api.subsource.net/api/v1/subtitles?movieId=" + movieId + "&language=indonesian";
+    
+    const subRes = await fetch(subUrl, {
+      headers: {
+        "X-API-Key": apiKey,
+      },
+    });
+
+    if (!subRes.ok) {
+      console.error("[SubSource] Subtitle list failed:", subRes.status);
+      return null;
+    }
+
+    const subData = await subRes.json();
+    const subtitles = subData?.subtitles || subData?.data || [];
+
+    if (subtitles.length === 0) return null;
+
+    // Ambil subtitle pertama
+    const sub = subtitles[0];
+    const subtitleId = sub?.id || sub?.subsource_id;
+
+    if (!subtitleId) return null;
+
+    // Step 3: Download subtitle (ZIP archive)
+    const dlUrl = "https://api.subsource.net/api/v1/subtitles/" + subtitleId + "/download";
+    
+    const dlRes = await fetch(dlUrl, {
+      headers: {
+        "X-API-Key": apiKey,
+      },
+    });
+
+    if (!dlRes.ok) {
+      console.error("[SubSource] Download failed:", dlRes.status);
+      return null;
+    }
+
+    // SubSource return ZIP, kita ambil URL download saja
+    const contentType = dlRes.headers.get("content-type") || "";
+    
+    if (contentType.includes("json")) {
+      const dlData = await dlRes.json();
+      const link = dlData?.link || dlData?.url || dlData?.download_url;
+      if (link) return { url: link };
+    } else if (contentType.includes("zip") || contentType.includes("octet-stream")) {
+      // ZIP file - return URL langsung, convert route akan handle
+      return { url: dlUrl + "&api_key=" + apiKey };
+    }
+
+    return null;
+  } catch (err) {
+    console.error("[SubSource] Error:", err);
+    return null;
+  }
+}
+
+// ============================================================
+// MAIN: Cascade search (OpenSubtitles → SubDL → SubSource)
+// ============================================================
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
@@ -16,127 +279,53 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "Missing tmdb_id" }, { status: 400 });
     }
 
+    console.log("[Subtitle] Searching for:", { tmdbId, type, title, season, episode });
+
     // === 1. OpenSubtitles ===
-    const osApiKey = process.env.OPENSUBTITLES_API_KEY;
-    if (osApiKey) {
-      try {
-        let osUrl = "https://api.opensubtitles.com/api/v1/subtitles?tmdb_id=" + tmdbId + "&languages=id&type=" + type;
-        if (type === "tv" && season && episode) {
-          osUrl += "&season_number=" + season + "&episode_number=" + episode;
-        }
-
-        const osRes = await fetch(osUrl, {
-          headers: { "Api-Key": osApiKey, "User-Agent": "CineStream v1.0" },
-        });
-
-        if (osRes.ok) {
-          const osData = await osRes.json();
-          const subs = osData?.data || [];
-          if (subs.length > 0) {
-            const fileId = subs[0]?.attributes?.files?.[0]?.file_id;
-            if (fileId) {
-              const dlRes = await fetch("https://api.opensubtitles.com/api/v1/download", {
-                method: "POST",
-                headers: {
-                  "Api-Key": osApiKey,
-                  "Content-Type": "application/json",
-                  "User-Agent": "CineStream v1.0",
-                },
-                body: JSON.stringify({ file_id: fileId }),
-              });
-
-              if (dlRes.ok) {
-                const dlData = await dlRes.json();
-                if (dlData?.link) {
-                  return NextResponse.json({
-                    success: true,
-                    source: "opensubtitles",
-                    subtitle_url: dlData.link,
-                    raw_srt: true,
-                  });
-                }
-              }
-            }
-          }
-        }
-      } catch (err) {
-        console.error("[Subtitle] OpenSubtitles error:", err);
-      }
+    console.log("[Subtitle] Trying OpenSubtitles...");
+    const osResult = await searchOpenSubtitles(tmdbId, type, season || "", episode || "");
+    if (osResult) {
+      console.log("[Subtitle] Found on OpenSubtitles");
+      return NextResponse.json({
+        success: true,
+        source: "opensubtitles",
+        subtitle_url: osResult.url,
+      });
     }
 
     // === 2. SubDL ===
-    const subdlApiKey = process.env.SUBDL_API_KEY;
-    if (subdlApiKey) {
-      try {
-        let subdlUrl = "https://api.subdl.com/api/v1/subtitles?api_key=" + subdlApiKey + "&tmdb_id=" + tmdbId + "&language=id";
-        if (type === "tv" && season && episode) {
-          subdlUrl += "&season=" + season + "&episode=" + episode;
-        }
-
-        const subdlRes = await fetch(subdlUrl);
-        if (subdlRes.ok) {
-          const subdlData = await subdlRes.json();
-          const subs = subdlData?.subtitles || subdlData?.data || [];
-          if (subs.length > 0) {
-            const subUrl = subs[0]?.url || subs[0]?.link;
-            if (subUrl) {
-              const fullUrl = subUrl.startsWith("http") ? subUrl : "https://api.subdl.com" + subUrl;
-              return NextResponse.json({
-                success: true,
-                source: "subdl",
-                subtitle_url: fullUrl,
-                raw_srt: true,
-              });
-            }
-          }
-        }
-      } catch (err) {
-        console.error("[Subtitle] SubDL error:", err);
+    if (title) {
+      console.log("[Subtitle] Trying SubDL...");
+      const subdlResult = await searchSubDL(title, type, tmdbId);
+      if (subdlResult) {
+        console.log("[Subtitle] Found on SubDL");
+        return NextResponse.json({
+          success: true,
+          source: "subdl",
+          subtitle_url: subdlResult.url,
+        });
       }
     }
 
     // === 3. SubSource ===
-    const subsourceApiKey = process.env.SUBSOURCE_API_KEY;
-    if (subsourceApiKey) {
-      try {
-        const ssRes = await fetch("https://api.subsource.net/api/search", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization": "Bearer " + subsourceApiKey,
-          },
-          body: JSON.stringify({
-            query: title || "",
-            tmdb_id: tmdbId,
-            type: type,
-            language: "id",
-          }),
+    if (title) {
+      console.log("[Subtitle] Trying SubSource...");
+      const ssResult = await searchSubSource(title, type);
+      if (ssResult) {
+        console.log("[Subtitle] Found on SubSource");
+        return NextResponse.json({
+          success: true,
+          source: "subsource",
+          subtitle_url: ssResult.url,
         });
-
-        if (ssRes.ok) {
-          const ssData = await ssRes.json();
-          const subs = ssData?.subtitles || ssData?.data || [];
-          if (subs.length > 0) {
-            const subUrl = subs[0]?.url || subs[0]?.download_url;
-            if (subUrl) {
-              return NextResponse.json({
-                success: true,
-                source: "subsource",
-                subtitle_url: subUrl,
-                raw_srt: true,
-              });
-            }
-          }
-        }
-      } catch (err) {
-        console.error("[Subtitle] SubSource error:", err);
       }
     }
 
     // === Tidak ada subtitle ===
+    console.log("[Subtitle] No subtitle found from any source");
     return NextResponse.json({
       success: false,
-      message: "No subtitle found from any source",
+      message: "No Indonesian subtitle found from any source",
     }, { status: 404 });
 
   } catch (error: any) {
