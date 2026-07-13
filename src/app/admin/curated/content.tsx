@@ -164,12 +164,28 @@ export function CuratedContent() {
   };
 
   const handleTestPlayer = () => {
-    setTestPlayerUrl(customStreamUrl);
+    let url = customStreamUrl;
+    
+    // Jika pakai vaplayer.ru dan ada subtitle, tambahkan parameter sub_url
+    if (url.includes("vaplayer.ru") && subtitleUrl) {
+      const separator = url.includes("?") ? "&" : "?";
+      url = url + separator + "sub_url=" + encodeURIComponent(subtitleUrl) + "&sub_lang=id&sub_label=Indonesia&sub_default=true";
+    }
+    
+    setTestPlayerUrl(url);
     setTestPlayerOpen(true);
   };
 
   const handleSave = async () => {
     if (!selectedMovie) return;
+    
+    let finalStreamUrl = customStreamUrl;
+    
+    // Jika pakai vaplayer.ru dan ada subtitle, tanam subtitle ke URL
+    if (finalStreamUrl.includes("vaplayer.ru") && subtitleUrl) {
+      const separator = finalStreamUrl.includes("?") ? "&" : "?";
+      finalStreamUrl = finalStreamUrl + separator + "sub_url=" + encodeURIComponent(subtitleUrl) + "&sub_lang=id&sub_label=Indonesia&sub_default=true";
+    }
     
     try {
       const res = await fetch("/api/admin/curated", {
@@ -180,11 +196,11 @@ export function CuratedContent() {
           tmdb_type: selectedMovie.media_type || (selectedMovie.title ? "movie" : "tv"),
           title: selectedMovie.title || selectedMovie.name,
           poster_path: selectedMovie.poster_path,
-          stream_url: customStreamUrl,
+          stream_url: finalStreamUrl, // Simpan URL yang sudah include subtitle
           stream_type: "iframe",
           quality: quality,
           status: "approved",
-          subtitle_url: subtitleUrl,
+          subtitle_url: subtitleUrl, // Simpan subtitle URL terpisah juga untuk backup
         }),
       });
       
