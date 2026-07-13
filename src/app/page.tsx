@@ -1,9 +1,6 @@
-//test
 "use client";
 
-import { AdBanner } from "@/components/cinepro/ad-banner";
-import { useEffect, useState, Suspense } from "react";
-import { useSearchParams } from "next/navigation";
+import { useEffect, useState } from "react";
 import { Header } from "@/components/cinepro/header";
 import { HeroCarousel } from "@/components/cinepro/hero-carousel";
 import { ContentRow } from "@/components/cinepro/content-row";
@@ -12,64 +9,21 @@ import { Footer } from "@/components/cinepro/footer";
 import { SearchModal } from "@/components/cinepro/search-modal";
 import { DetailModal } from "@/components/cinepro/detail-modal";
 import { PlayerModal } from "@/components/cinepro/player-modal";
-import { AuthModal } from "@/components/cinepro/auth-modal";
-import { AdminDashboard } from "@/components/cinepro/admin-dashboard";
-import { useAppStore, type SelectedMedia } from "@/lib/store";
-import { trackPageView } from "@/lib/analytics";
+import { useAppStore } from "@/lib/store";
+import { fetchCinemacityHome } from "@/lib/cinemacity-api";
 import type { Movie } from "@/lib/tmdb";
 import { Loader2 } from "lucide-react";
 
-function DeepLinkHandler() {
-  const searchParams = useSearchParams();
-  const setSelectedMedia = useAppStore((s) => s.setSelectedMedia);
-
-  useEffect(() => {
-    const movieId = searchParams.get("movie");
-    const tvId = searchParams.get("tv");
-
-    if (movieId || tvId) {
-      const id = movieId || tvId;
-      const type = movieId ? "movie" : "tv";
-      
-      fetch(`/api/detail/${id}?type=${type}`)
-        .then((res) => res.json())
-        .then((data) => {
-          const media: SelectedMedia = {
-            id: parseInt(id!, 10),
-            type: type as "movie" | "tv",
-            title: data.title || data.name || "Loading...",
-            posterPath: data.poster_path || null,
-            backdropPath: data.backdrop_path || null,
-          };
-          setSelectedMedia(media);
-        })
-        .catch(() => {
-          setSelectedMedia({
-            id: parseInt(id!, 10),
-            type: type as "movie" | "tv",
-            title: "Loading...",
-            posterPath: null,
-            backdropPath: null,
-          });
-        });
-    }
-  }, [searchParams, setSelectedMedia]);
-
-  return null;
-}
-
 export default function Home() {
-  const [trending, setTrending] = useState<Movie[]>([]);
-  const [popularMovies, setPopularMovies] = useState<Movie[]>([]);
-  const [popularTV, setPopularTV] = useState<Movie[]>([]);
-  const [topRated, setTopRated] = useState<Movie[]>([]);
+  const [allMovies, setAllMovies] = useState<Movie[]>([]);
+  const [movies, setMovies] = useState<Movie[]>([]);
+  const [tvShows, setTvShows] = useState<Movie[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const loadHistory = useAppStore((s) => s.loadHistory);
   useEffect(() => {
     loadHistory();
-    trackPageView("/");
   }, [loadHistory]);
 
   useEffect(() => {
@@ -82,20 +36,17 @@ export default function Home() {
       setError(null);
 
       try {
-        const [trend, popMovies, popTV] = await Promise.all([
-          fetch("/api/trending").then((r) => r.json()),
-          fetch("/api/movies/popular").then((r) => r.json()),
-          fetch("/api/tv/popular").then((r) => r.json()),
+        // Fetch all content from cinemacity
+        const [all, moviesOnly, tvOnly] = await Promise.all([
+          fetchCinemacityHome("all"),
+          fetchCinemacityHome("movies"),
+          fetchCinemacityHome("tv"),
         ]);
+
         if (cancelled) return;
-        setTrending(trend.results || []);
-        setPopularMovies(popMovies.results || []);
-        setPopularTV(popTV.results || []);
-        const all = [
-          ...(popMovies.results || []),
-          ...(popTV.results || []),
-        ].sort((a, b) => (b.vote_average || 0) - (a.vote_average || 0));
-        setTopRated(all.slice(0, 12));
+        setAllMovies(all);
+        setMovies(moviesOnly);
+        setTvShows(tvOnly);
       } catch (err) {
         if (cancelled) return;
         setError(err instanceof Error ? err.message : "Failed to load content");
@@ -111,25 +62,25 @@ export default function Home() {
     };
   }, []);
 
+  // Hero = first 5 movies with posters
+  const heroMovies = allMovies.filter((m) => m.poster_path).slice(0, 5);
+
   return (
     <main className="min-h-screen bg-background">
-      <Suspense fallback={null}>
-        <DeepLinkHandler />
-      </Suspense>
-
       <Header />
 
+      {/* Hero */}
       {loading ? (
-        <div className="flex h-[60vh] min-h-[400px] items-center justify-center bg-muted/20 md:h-[75vh]">
+        <div className="flex h-[70vh] min-h-[480px] items-center justify-center bg-muted/20 md:h-[85vh]">
           <div className="flex flex-col items-center gap-3">
             <Loader2 className="h-10 w-10 animate-spin text-primary" />
             <p className="text-sm text-muted-foreground">
-              Loading trending content...
+              Loading cinemacity content...
             </p>
           </div>
         </div>
       ) : error ? (
-        <div className="flex h-[60vh] min-h-[400px] flex-col items-center justify-center gap-3 px-4 text-center md:h-[75vh]">
+        <div className="flex h-[70vh] min-h-[480px] flex-col items-center justify-center gap-3 px-4 text-center md:h-[85vh]">
           <p className="text-sm text-destructive">{error}</p>
           <button
             onClick={() => window.location.reload()}
@@ -139,40 +90,41 @@ export default function Home() {
           </button>
         </div>
       ) : (
-        <HeroCarousel movies={trending} />
+        <HeroCarousel movies={heroMovies} />
       )}
 
-      <div className="relative z-10 space-y-6 pb-16 pt-4 sm:space-y-8 sm:pt-6 md:-mt-16 md:space-y-10 md:pt-0 lg:-mt-24">
+      {/* Content rows */}
+      <div className="relative z-10 -mt-32 space-y-8 pb-16 md:-mt-40">
+        {/* Continue Watching */}
         <WatchHistory />
 
-        {!loading && trending.length > 0 && (
-          <ContentRow title="🔥 Trending Now" movies={trending.slice(0, 12)} />
+        {/* All Movies & TV (cinemacity) */}
+        {!loading && allMovies.length > 0 && (
+          <ContentRow title="🎬 Latest Movies & TV" movies={allMovies.slice(0, 20)} />
         )}
 
-        {!loading && popularMovies.length > 0 && (
-          <ContentRow title="🎬 Popular Movies" movies={popularMovies} />
+        {/* Movies only */}
+        {!loading && movies.length > 0 && (
+          <ContentRow title="🎥 Movies" movies={movies} />
         )}
 
-        {!loading && topRated.length > 0 && (
-          <ContentRow title="⭐ Top Rated" movies={topRated} />
+        {/* TV Shows */}
+        {!loading && tvShows.length > 0 && (
+          <ContentRow title="📺 TV Series" movies={tvShows} />
         )}
 
-        {!loading && popularTV.length > 0 && (
-          <ContentRow title="📺 Popular TV Shows" movies={popularTV} />
-        )}
-
-        {!loading && trending.length > 0 && (
-          <ContentRow title="🌟 All Trending" movies={trending} />
+        {/* All content */}
+        {!loading && allMovies.length > 20 && (
+          <ContentRow title="🌟 All Content" movies={allMovies} />
         )}
       </div>
 
       <Footer />
 
+      {/* Modals */}
       <SearchModal />
       <DetailModal />
       <PlayerModal />
-      <AuthModal />
-      <AdminDashboard />
     </main>
   );
 }
