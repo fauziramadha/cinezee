@@ -384,3 +384,139 @@ export const dbMessage = {
     );
   },
 };
+// ============================================================
+// CINEMACITY COOKIES & PROXY CACHE OPERATIONS
+// ============================================================
+export interface CinemacityCookieAccount {
+  id: number;
+  label: string;
+  cookies_json: string;
+  is_active: number;
+  last_used: string | null;
+  last_refreshed: string;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CinemacityProxyCache {
+  cache_key: string;
+  endpoint: string;
+  method: string;
+  status_code: number;
+  body: string;
+  content_type: string | null;
+  ttl_seconds: number;
+  created_at: string;
+  expires_at: string;
+}
+
+export const dbCinemacity = {
+  async getActiveCookies(): Promise<{
+    id: number;
+    label: string;
+    cookies: any[];
+  } | null> {
+    const rows = await query<CinemacityCookieAccount>(
+      `SELECT * FROM cinemacity_cookies WHERE is_active = 1 ORDER BY id ASC LIMIT 1`
+    );
+    if (!rows[0]) return null;
+    try {
+      const cookies = JSON.parse(rows[0].cookies_json);
+      return { id: rows[0].id, label: rows[0].label, cookies };
+    } catch {
+      return null;
+    }
+  },
+
+  async listCookieAccounts(): Promise<CinemacityCookieAccount[]> {
+    return query<CinemacityCookieAccount>(
+      `SELECT * FROM cinemacity_cookies ORDER BY is_active DESC, id ASC`
+    );
+  },
+
+  async upsertCookies(data: {
+    label: string;
+    cookies: any[];
+    is_active?: boolean;
+    notes?: string;
+  }): Promise<{ id: number; updated: boolean }> {
+    const cookiesJson = JSON.stringify(data.cookies);
+    const isActive = data.is_active === false ? 0 : 1;
+    const existing = await query<{ id: number }>(
+      `SELECT id FROM cinemacity_cookies WHERE label = ? LIMIT 1`,
+      [data.label]
+    );
+
+    if (existing[0]) {
+      await execute(
+        `UPDATE cinemacity_cookies SET
+          cookies_json = ?, is_active = ?, notes = ?,
+          last_refreshed = datetime('now'), updated_at = datetime('now')
+         WHERE id = ?`,
+        [cookiesJson, isActive, data.notes || null, existing[0].id]
+      );
+      return { id: existing[0].id, updated: true };
+    }
+
+    const id = await insertAndGetId(
+      `INSERT INTO cinemacity_cookies (label, cookies_json, is_active, notes)
+       VALUES (?, ?, ?, ?)`,
+      [data.label, cookiesJson, isActive, data.notes || null]
+    );
+    return { id, updated: false };
+  },
+
+  async setActiveAccount(id: number): Promise<void> {
+    await execute(`UPDATE cinemacity_cookies SET is_active = 0`);
+    await execute(
+      `UPDATE cinemacity_cookies SET is_active = 1, updated_at = datetime('now') WHERE id = ?`,
+      [id]
+    );
+  },
+
+  async touchLastUsed(id: number): Promise<void> {
+    await execute(
+      `UPDATE cinemacity_cookies SET last_used = datetime('now') WHERE id = ?`,
+      [id]
+    );
+  },
+
+  async deleteCookies(id: number): Promise<void> {
+    await execute("DELETE FROM cinemacity_cookies WHERE id = ?", [id]);
+  },
+
+  async getCache(cacheKey: string): Promise<CinemacityProxyCache | null> {
+    const rows = await query<CinemacityProxyCache>(
+      `SELECT * FROM cinemacity_proxy_cache
+       WHERE cache_key = ? AND expires_at > datetime('now') LIMIT 1`,
+      [cacheKey]
+    );
+    return rows[0] || null;
+  },
+
+  async setCache(data: {
+    cache_key: string;
+    endpoint: string;
+    method: string;
+    status_code: number;
+    body: string;
+    content_type: string;
+    ttl_seconds: number;
+  }): Promise<void> {
+    await execute(
+      `INSERT OR REPLACE INTO cinemacity_proxy_cache
+        (cache_key, endpoint, method, status_code, body, content_type, ttl_seconds, created_at, expires_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now', '+' || ? || ' seconds'))`,
+      [data.cache_key, data.endpoint, data.method, data.status_code, data.body,
+       data.content_type, data.ttl_seconds, data.ttl_seconds]
+    );
+  },
+
+  async invalidateByEndpoint(endpointPattern: string): Promise<void> {
+    await execute(
+      `DELETE FROM cinemacity_proxy_cache WHERE endpoint LIKE ?`,
+      [endpointPattern]
+    );
+  },
+};
