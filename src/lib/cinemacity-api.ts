@@ -14,6 +14,19 @@ import type {
 } from "@/lib/cinemacity-parser";
 
 // =====================================================
+// HELPER: wrap cinemacity image URL ke image proxy
+// cinemacity.cc nge-block hotlink (403 Cloudflare), jadi semua
+// image cinemacity harus lewat /api/cinemacity/image?url=...
+// =====================================================
+export function wrapCinemacityImage(url: string | null | undefined): string | null {
+  if (!url) return null;
+  if (url.includes("cinemacity.cc")) {
+    return `/api/cinemacity/image?url=${encodeURIComponent(url)}`;
+  }
+  return url;
+}
+
+// =====================================================
 // ADAPTER: CinemacityMovie → TMDB Movie
 // =====================================================
 export function cinemacityToTMDB(cm: CinemacityMovie): Movie {
@@ -22,8 +35,8 @@ export function cinemacityToTMDB(cm: CinemacityMovie): Movie {
     title: cm.title,
     name: cm.type === "tv" ? cm.title : undefined,
     overview: "",
-    poster_path: cm.poster || null,
-    backdrop_path: cm.poster || null,
+    poster_path: wrapCinemacityImage(cm.poster),
+    backdrop_path: wrapCinemacityImage(cm.poster),
     vote_average: 0,
     vote_count: 0,
     release_date: cm.year ? `${cm.year}-01-01` : undefined,
@@ -43,8 +56,8 @@ export function cinemacityDetailToTMDB(cd: CinemacityDetail): MovieDetail {
     title: cd.title,
     name: cd.type === "tv" ? cd.title : undefined,
     overview: cd.description || "",
-    poster_path: cd.poster || null,
-    backdrop_path: cd.backdrop || cd.poster || null,
+    poster_path: wrapCinemacityImage(cd.poster),
+    backdrop_path: wrapCinemacityImage(cd.backdrop || cd.poster),
     vote_average: 0,
     vote_count: 0,
     release_date: cd.year ? `${cd.year}-01-01` : undefined,
