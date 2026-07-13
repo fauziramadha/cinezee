@@ -101,6 +101,10 @@ export function getImageUrl(
   if (!path) {
     return "/placeholder.svg";
   }
+  // Jika path sudah full URL (cinemacity posters, dll), return as-is
+  if (path.startsWith("http://") || path.startsWith("https://")) {
+    return path;
+  }
   return `${TMDB_IMAGE_BASE}/${size}${path}`;
 }
 
