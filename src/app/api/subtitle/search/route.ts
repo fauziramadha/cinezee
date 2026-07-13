@@ -1,10 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getCloudflareContext } from "@opennextjs/cloudflare";
 
 export const dynamic = "force-dynamic";
 
-// Dapatkan IMDb ID dari TMDB ID (dibutuhkan SubSource)
+// Helper untuk ambil env var dari Cloudflare Context
+async function getEnvVar(key: string): Promise<string> {
+  try {
+    const ctx = await getCloudflareContext();
+    const val = (ctx?.env?.[key] as string) || "";
+    return val.trim();
+  } catch {
+    return (process.env[key] || "").trim();
+  }
+}
+
 async function getImdbId(tmdbId: string, type: string): Promise<string | null> {
-  const apiKey = process.env.TMDB_API_KEY || process.env.NEXT_PUBLIC_TMDB_API_KEY;
+  const apiKey = await getEnvVar("TMDB_API_KEY") || await getEnvVar("NEXT_PUBLIC_TMDB_API_KEY");
   if (!apiKey) return null;
   try {
     const url = `https://api.themoviedb.org/3/${type}/${tmdbId}/external_ids?api_key=${apiKey}`;
@@ -18,23 +29,24 @@ async function getImdbId(tmdbId: string, type: string): Promise<string | null> {
 }
 
 // ============================================================
-// 1. SUBDL (Prioritas Utama - Paling Cepat & Akurat)
-// Docs: https://subdl.com/developers
-// Endpoint: GET /api/v2/subtitles/search
-// Auth: Authorization: Bearer <key>
+// 1. SUBDL
 // ============================================================
 async function searchSubDL(tmdbId: string, type: string, season: string, episode: string): Promise<{ url: string } | null> {
-  const apiKey = (process.env.SUBDL_API_KEY || "").trim();
-  if (!apiKey) return null;
+  const apiKey = await getEnvVar("SUBDL_API_KEY");
+  if (!apiKey) {
+    console.log("[SubDL] No API key");
+    return null;
+  }
 
   try {
-    // Pakai endpoint subtitle search langsung dengan unpack=1
     let searchUrl = `https://api.subdl.com/api/v2/subtitles/search?tmdb_id=${tmdbId}&type=${type === "tv" ? "tv" : "movie"}&languages=id&unpack=1`;
     if (type === "tv" && season && episode) {
       searchUrl += `&season=${season}&episode=${episode}`;
     }
 
-    console.log("[SubDL] Searching:", searchUrl);
+    console.log("[SubDL] URL:", searchUrl);
+    console.log("[SubDL] Key length:", apiKey.length);
+
     const res = await fetch(searchUrl, {
       headers: { 
         "Authorization": "Bearer " + apiKey,
@@ -43,6 +55,38 @@ async function searchSubDL(tmdbId: string, type: string, season: string, episode
     });
 
     console.log("[SubDL] Status:", res.status);
+    
+    if (res.status === 403) {
+      // Coba pakai X-API-Key header
+      console.log("[SubDL] 403, trying X-API-Key...");
+      const res2 = await fetch(searchUrl, {
+        headers: { 
+          "X-API-Key": apiKey,
+          "Accept": "application/json"
+        },
+      });
+      
+      console.log("[SubDL] X-API-Key Status:", res2.status);
+      if (!res2.ok) {
+        console.log("[SubDL] Error:", await res2.text());
+        return null;
+      }
+      
+      const data2 = await res2.json();
+      const subs2 = data2?.subtitles || data2?.data || [];
+      console.log("[SubDL] Subtitles (X-API-Key):", subs2.length);
+      
+      if (subs2.length === 0) return null;
+      
+      const dlUrl = subs2[0]?.url || subs2[0]?.download_url || subs2[0]?.link;
+      if (dlUrl) return { url: dlUrl };
+      
+      const subId = subs2[0]?.sd_id || subs2[0]?.id;
+      if (subId) return { url: `https://api.subdl.com/api/v2/subtitles/${subId}/download` };
+      
+      return null;
+    }
+
     if (!res.ok) {
       console.log("[SubDL] Error:", await res.text());
       return null;
@@ -56,21 +100,17 @@ async function searchSubDL(tmdbId: string, type: string, season: string, episode
     
     if (subtitles.length === 0) return null;
 
-    // Karena pakai unpack=1, seharusnya ada URL download langsung
     const sub = subtitles[0];
     const dlUrl = sub?.url || sub?.download_url || sub?.link;
     
     if (dlUrl) {
-      console.log("[SubDL] Found direct URL");
+      console.log("[SubDL] Direct URL found");
       return { url: dlUrl };
     }
 
-    // Fallback: pakai endpoint download manual
     const subId = sub?.sd_id || sub?.id;
     if (subId) {
-      const manualDlUrl = `https://api.subdl.com/api/v2/subtitles/${subId}/download`;
-      console.log("[SubDL] Using manual download:", manualDlUrl);
-      return { url: manualDlUrl };
+      return { url: `https://api.subdl.com/api/v2/subtitles/${subId}/download` };
     }
 
     return null;
@@ -81,27 +121,32 @@ async function searchSubDL(tmdbId: string, type: string, season: string, episode
 }
 
 // ============================================================
-// 2. SUBSOURCE (Prioritas Kedua - Pakai IMDb ID)
-// Docs: https://subsource.net/api-docs
-// Auth: X-API-Key: <key>
+// 2. SUBSOURCE
 // ============================================================
 async function searchSubSource(imdbId: string): Promise<{ url: string } | null> {
-  const apiKey = (process.env.SUBSOURCE_API_KEY || "").trim();
-  if (!apiKey) return null;
+  const apiKey = await getEnvVar("SUBSOURCE_API_KEY");
+  if (!apiKey) {
+    console.log("[SubSource] No API key");
+    return null;
+  }
 
   try {
-    // Step 1: Cari movie berdasarkan IMDb ID
     const searchUrl = `https://api.subsource.net/api/v1/movies/search?searchType=imdb&imdb=${imdbId}`;
-    console.log("[SubSource] Movie Search:", searchUrl);
+    console.log("[SubSource] Search:", searchUrl);
     
     const searchRes = await fetch(searchUrl, {
       headers: { "X-API-Key": apiKey },
     });
 
-    console.log("[SubSource] Movie Search Status:", searchRes.status);
-    if (!searchRes.ok) return null;
+    console.log("[SubSource] Search Status:", searchRes.status);
+    if (!searchRes.ok) {
+      console.log("[SubSource] Error:", await searchRes.text());
+      return null;
+    }
 
     const searchData = await searchRes.json();
+    console.log("[SubSource] Search response:", JSON.stringify(searchData).substring(0, 500));
+    
     const movies = searchData?.results || searchData?.data || searchData?.movies || [];
     console.log("[SubSource] Movies found:", movies.length);
     
@@ -109,37 +154,36 @@ async function searchSubSource(imdbId: string): Promise<{ url: string } | null> 
 
     const movie = movies[0];
     const movieId = movie?.id || movie?._id || movie?.movieId;
+    console.log("[SubSource] Movie ID:", movieId);
+    
     if (!movieId) return null;
 
-    // Step 2: Ambil list subtitle (filter Indonesian)
     const subUrl = `https://api.subsource.net/api/v1/subtitles?movieId=${movieId}&language=indonesian`;
-    console.log("[SubSource] Subtitle URL:", subUrl);
+    console.log("[SubSource] Sub URL:", subUrl);
     
     const subRes = await fetch(subUrl, {
       headers: { "X-API-Key": apiKey },
     });
 
-    console.log("[SubSource] Subtitle Status:", subRes.status);
-    if (!subRes.ok) return null;
+    console.log("[SubSource] Sub Status:", subRes.status);
+    if (!subRes.ok) {
+      console.log("[SubSource] Sub Error:", await subRes.text());
+      return null;
+    }
 
     const subData = await subRes.json();
+    console.log("[SubSource] Sub response:", JSON.stringify(subData).substring(0, 500));
+    
     const subtitles = subData?.subtitles || subData?.data || [];
     console.log("[SubSource] Subtitles found:", subtitles.length);
     
     if (subtitles.length === 0) return null;
 
-    // Ambil subtitle pertama
     const sub = subtitles[0];
     const subtitleId = sub?.id || sub?._id;
     if (!subtitleId) return null;
 
-    // Step 3: Download URL
-    const dlUrl = `https://api.subsource.net/api/v1/subtitles/${subtitleId}/download`;
-    console.log("[SubSource] Download URL:", dlUrl);
-    
-    // SubSource butuh API key di header untuk download, jadi kita return URL endpoint-nya
-    // Convert route akan handle fetch + API key
-    return { url: dlUrl };
+    return { url: `https://api.subsource.net/api/v1/subtitles/${subtitleId}/download` };
   } catch (err) {
     console.error("[SubSource] Error:", err);
     return null;
@@ -147,29 +191,28 @@ async function searchSubSource(imdbId: string): Promise<{ url: string } | null> 
 }
 
 // ============================================================
-// 3. OPENSUBTITLES (Prioritas Terakhir - Sering 503 di Workers)
-// Docs: https://opensubtitles.stoplight.io
-// Auth: Api-Key header + User-Agent header
+// 3. OPENSUBTITLES
 // ============================================================
 async function searchOpenSubtitles(tmdbId: string, imdbId: string, type: string, season: string, episode: string): Promise<{ url: string } | null> {
-  const apiKey = (process.env.OPENSUBTITLES_API_KEY || "").trim();
-  if (!apiKey) return null;
+  const apiKey = await getEnvVar("OPENSUBTITLES_API_KEY");
+  if (!apiKey) {
+    console.log("[OS] No API key");
+    return null;
+  }
 
   try {
-    // Search subtitle
     let searchUrl = `https://api.opensubtitles.com/api/v1/subtitles?languages=id&tmdb_id=${tmdbId}`;
     if (type === "tv" && season && episode) {
       searchUrl += `&season_number=${season}&episode_number=${episode}`;
     }
 
-    console.log("[OS] Searching:", searchUrl);
+    console.log("[OS] Search:", searchUrl);
     let searchRes = await fetch(searchUrl, {
       headers: { "Api-Key": apiKey, "User-Agent": "CineStream v1.0" },
     });
 
     let subtitles = (await searchRes.json())?.data || [];
 
-    // Fallback ke imdb_id
     if (subtitles.length === 0 && imdbId) {
       searchUrl = `https://api.opensubtitles.com/api/v1/subtitles?languages=id&imdb_id=${imdbId.replace("tt", "")}`;
       if (type === "tv" && season && episode) {
@@ -184,13 +227,12 @@ async function searchOpenSubtitles(tmdbId: string, imdbId: string, type: string,
     console.log("[OS] Found:", subtitles.length);
     if (subtitles.length === 0) return null;
 
-    // Coba download
-    for (const sub of subtitles.slice(0, 3)) { // Cuma coba 3 pertama
+    for (const sub of subtitles.slice(0, 3)) {
       const fileId = sub?.attributes?.files?.[0]?.file_id;
       if (!fileId) continue;
 
       console.log("[OS] Trying file_id:", fileId);
-      await new Promise(r => setTimeout(r, 1000)); // Delay 1s hindari rate limit
+      await new Promise(r => setTimeout(r, 1500));
 
       const dlRes = await fetch("https://api.opensubtitles.com/api/v1/download", {
         method: "POST",
@@ -202,11 +244,8 @@ async function searchOpenSubtitles(tmdbId: string, imdbId: string, type: string,
         body: JSON.stringify({ file_id: fileId }),
       });
 
-      if (dlRes.status === 503 || dlRes.status === 429) {
-        console.log("[OS] Rate limited");
-        continue;
-      }
-
+      console.log("[OS] Download status:", dlRes.status);
+      if (dlRes.status === 503 || dlRes.status === 429) continue;
       if (!dlRes.ok) continue;
 
       const dlData = await dlRes.json();
@@ -239,11 +278,18 @@ export async function GET(req: NextRequest) {
     console.log("===== SUBTITLE SEARCH =====");
     console.log("TMDB:", tmdbId, "Type:", type);
 
-    // Dapatkan IMDB ID untuk SubSource
+    // Cek API keys
+    const subdlKey = await getEnvVar("SUBDL_API_KEY");
+    const subsourceKey = await getEnvVar("SUBSOURCE_API_KEY");
+    const osKey = await getEnvVar("OPENSUBTITLES_API_KEY");
+    console.log("Keys - SubDL:", subdlKey ? `YES (${subdlKey.length} chars)` : "NO", 
+                "SubSource:", subsourceKey ? `YES (${subsourceKey.length} chars)` : "NO",
+                "OS:", osKey ? `YES (${osKey.length} chars)` : "NO");
+
     const imdbId = await getImdbId(tmdbId, type);
     console.log("IMDb:", imdbId);
 
-    // 1. SubDL (Paling akurat untuk TMDB ID)
+    // 1. SubDL
     console.log("[1/3] SubDL...");
     const subdlResult = await searchSubDL(tmdbId, type, season || "", episode || "");
     if (subdlResult) {
@@ -251,7 +297,7 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ success: true, source: "subdl", subtitle_url: subdlResult.url });
     }
 
-    // 2. SubSource (Pakai IMDb ID)
+    // 2. SubSource
     if (imdbId) {
       console.log("[2/3] SubSource...");
       const ssResult = await searchSubSource(imdbId);
@@ -261,7 +307,7 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    // 3. OpenSubtitles (Fallback terakhir)
+    // 3. OpenSubtitles
     console.log("[3/3] OpenSubtitles...");
     const osResult = await searchOpenSubtitles(tmdbId, imdbId || "", type, season || "", episode || "");
     if (osResult) {
@@ -273,6 +319,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ success: false, message: "No subtitle found" }, { status: 404 });
 
   } catch (error: any) {
+    console.error("[Subtitle] Error:", error);
     return NextResponse.json({ error: error?.message }, { status: 500 });
   }
 }
