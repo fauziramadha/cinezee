@@ -24,26 +24,27 @@ export async function GET() {
   }
 }
 
-// POST: Tambah film baru ke daftar curate
+// POST: Tambah/update film
 export async function POST(req: NextRequest) {
   try {
     const d1 = await getD1();
     const body = await req.json();
     
-    const { tmdb_id, tmdb_type, title, poster_path, stream_url, stream_type, quality, status } = body;
+    const { tmdb_id, tmdb_type, title, poster_path, stream_url, stream_type, quality, status, subtitle_url } = body;
     
     if (!tmdb_id || !tmdb_type) {
       return NextResponse.json({ success: false, message: "tmdb_id dan tmdb_type wajib diisi" }, { status: 400 });
     }
     
     await d1.prepare(
-      `INSERT INTO curated_movies (tmdb_id, tmdb_type, title, poster_path, stream_url, stream_type, quality, status)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `INSERT INTO curated_movies (tmdb_id, tmdb_type, title, poster_path, stream_url, stream_type, quality, status, subtitle_url)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(tmdb_id, tmdb_type) DO UPDATE SET
          stream_url = excluded.stream_url,
          stream_type = excluded.stream_type,
          quality = excluded.quality,
          status = excluded.status,
+         subtitle_url = excluded.subtitle_url,
          updated_at = datetime('now')`
     ).bind(
       tmdb_id, 
@@ -53,7 +54,8 @@ export async function POST(req: NextRequest) {
       stream_url || "", 
       stream_type || "iframe", 
       quality || "HD", 
-      status || "pending"
+      status || "pending",
+      subtitle_url || ""
     ).run();
     
     return NextResponse.json({ success: true, message: "Film berhasil disimpan" });
