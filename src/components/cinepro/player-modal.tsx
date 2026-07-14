@@ -1,21 +1,13 @@
 "use client";
 
 import { useEffect, useState, useRef, useCallback } from "react";
-import {
-  X,
-  AlertCircle,
-  Loader2,
-  Maximize,
-  Minimize,
-  Subtitles,
-} from "lucide-react";
+import { X, AlertCircle, Loader2 } from "lucide-react";
 import {
   Dialog,
   DialogContent,
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { useAppStore } from "@/lib/store";
 import { getStreamProxyUrl, fetchCinemacityPlay } from "@/lib/cinemacity-api";
 import { cn } from "@/lib/utils";
@@ -53,24 +45,9 @@ export function PlayerModal() {
   const [error, setError] = useState<string | null>(null);
   const [streamUrl, setStreamUrl] = useState<string>("");
   const [subtitles, setSubtitles] = useState<Subtitle[]>([]);
-  const [currentSubtitle, setCurrentSubtitle] = useState<string>("");
-  const [showSubtitlesMenu, setShowSubtitles] = useState(false);
-  const [isPseudoFullscreen, setIsPseudoFullscreen] = useState(false);
-  const [showControls, setShowControls] = useState(true);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const hlsRef = useRef<any>(null);
-  const hideControlsTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
-
-  // Sync fullscreen state
-  useEffect(() => {
-    const handleFsChange = () => {
-      setIsPseudoFullscreen(!!document.fullscreenElement);
-    };
-    document.addEventListener("fullscreenchange", handleFsChange);
-    return () => document.removeEventListener("fullscreenchange", handleFsChange);
-  }, []);
 
   // Fetch stream URL when player opens
   useEffect(() => {
@@ -87,7 +64,6 @@ export function PlayerModal() {
 
     const loadStream = async () => {
       try {
-        // Only cinemacity source supported
         if (playerMedia.source !== "cinemacity" || !playerMedia.slug) {
           throw new Error("Player only supports cinemacity source. Selected media has no slug.");
         }
@@ -102,7 +78,6 @@ export function PlayerModal() {
 
         setStreamUrl(data.streamUrl);
         setSubtitles(data.subtitles || []);
-        setCurrentSubtitle("");
 
         // Add to history
         addToHistory({
@@ -121,7 +96,6 @@ export function PlayerModal() {
 
     return () => {
       cancelled = true;
-      // Cleanup HLS
       if (hlsRef.current) {
         hlsRef.current.destroy();
         hlsRef.current = null;
@@ -134,8 +108,7 @@ export function PlayerModal() {
     if (!streamUrl || !videoRef.current) return;
 
     const video = videoRef.current;
-    // FIX: Gunakan stream URL LANGSUNG (s1.cccdn.net punya CORS *)
-    // Proxy menyebabkan URL relatif di m3u8 (index-f1-a1.m3u8) resolve ke /api/cinemacity/stream/ → 404
+    // Gunakan stream URL LANGSUNG (s1.cccdn.net punya CORS *)
     const videoSrc = streamUrl;
 
     // Cleanup previous HLS instance
@@ -145,13 +118,13 @@ export function PlayerModal() {
     }
 
     const initPlayer = async () => {
-      // Check if native HLS is supported (Safari, iOS)
+      // Native HLS (Safari, iOS)
       if (video.canPlayType("application/vnd.apple.mpegurl")) {
         video.src = videoSrc;
         return;
       }
 
-      // Use HLS.js for other browsers (Chrome, Firefox)
+      // HLS.js for Chrome/Firefox
       try {
         const Hls = await loadHls();
         if (!Hls) {
@@ -203,58 +176,38 @@ export function PlayerModal() {
     };
   }, [streamUrl]);
 
-  // Handle subtitle selection
-  const handleSubtitleChange = useCallback((url: string) => {
-    setCurrentSubtitle(url);
-    setShowSubtitlesMenu(false);
-
+  // Auto-load first subtitle (English) when subtitles available
+  // Native <video controls> CC button akan detect <track> elements
+  useEffect(() => {
+    if (!streamUrl || subtitles.length === 0) return;
     const video = videoRef.current;
     if (!video) return;
 
-    // Remove existing text tracks
-    const tracks = video.textTracks;
-    for (let i = tracks.length - 1; i >= 0; i--) {
-      video.removeChild(tracks[i]);
-    }
+    // Wait for video element ready
+    const timer = setTimeout(() => {
+      // Prefer English subtitle, fallback to first
+      const englishSub = subtitles.find((s) => s.language === "english");
+      const subToLoad = englishSub || subtitles[0];
+      if (!subToLoad) return;
 
-    if (url) {
       const track = document.createElement("track");
       track.kind = "subtitles";
-      track.label = subtitles.find((s) => s.url === url)?.label || "Subtitles";
-      track.srclang = "en";
-      track.src = getStreamProxyUrl(url);
-      track.default = true;
+      track.label = subToLoad.label;
+      track.srclang = subToLoad.language || "en";
+      track.src = getStreamProxyUrl(subToLoad.url);
       video.appendChild(track);
 
-      // Enable the track
+      // Enable the track after a short delay
       setTimeout(() => {
         const lastTrack = video.textTracks[video.textTracks.length - 1];
         if (lastTrack) {
           lastTrack.mode = "showing";
         }
-      }, 100);
-    }
-  }, [subtitles]);
+      }, 500);
+    }, 1000);
 
-  // Auto-hide controls
-  const showControlsTemporarily = useCallback(() => {
-    setShowControls(true);
-    if (hideControlsTimeout.current) {
-      clearTimeout(hideControlsTimeout.current);
-    }
-    hideControlsTimeout.current = setTimeout(() => {
-      setShowControls(false);
-    }, 3000);
-  }, []);
-
-  // Toggle fullscreen
-  const toggleFullscreen = useCallback(() => {
-    if (!document.fullscreenElement) {
-      containerRef.current?.requestFullscreen?.();
-    } else {
-      document.exitFullscreen();
-    }
-  }, []);
+    return () => clearTimeout(timer);
+  }, [streamUrl, subtitles]);
 
   if (!playerMedia) return null;
 
@@ -263,13 +216,10 @@ export function PlayerModal() {
       <DialogContent className="max-w-[95vw] overflow-hidden rounded-xl border-0 bg-black p-0 md:max-w-5xl">
         <DialogTitle className="sr-only">{playerMedia.title}</DialogTitle>
 
-        {/* Close button */}
+        {/* Close button — minimal, hanya muncul saat hover */}
         <button
           onClick={closePlayer}
-          className={cn(
-            "absolute right-3 top-3 z-30 flex h-9 w-9 items-center justify-center rounded-full bg-black/70 text-white backdrop-blur-sm transition-opacity hover:bg-red-600",
-            showControls ? "opacity-100" : "opacity-0",
-          )}
+          className="absolute right-2 top-2 z-30 flex h-8 w-8 items-center justify-center rounded-full bg-black/50 text-white opacity-0 backdrop-blur-sm transition-all hover:bg-red-600 hover:opacity-100 focus:opacity-100"
           aria-label="Close"
         >
           <X className="h-4 w-4" />
@@ -296,104 +246,17 @@ export function PlayerModal() {
           </div>
         )}
 
-        {/* Video player */}
+        {/* Video player — native controls only */}
         {!loading && !error && streamUrl && (
-          <div
-            ref={containerRef}
-            className="relative aspect-video w-full bg-black"
-            onMouseMove={showControlsTemporarily}
-            onClick={showControlsTemporarily}
-          >
+          <div className="relative aspect-video w-full bg-black">
             <video
               ref={videoRef}
               className="h-full w-full"
               controls
+              controlsList="nodownload"
               playsInline
               autoPlay
             />
-
-            {/* Title bar */}
-            <div
-              className={cn(
-                "absolute left-0 right-0 top-0 bg-gradient-to-b from-black/80 to-transparent p-4 transition-opacity",
-                showControls ? "opacity-100" : "opacity-0",
-              )}
-            >
-              <h3 className="text-sm font-semibold text-white md:text-base">
-                {playerMedia.title}
-              </h3>
-              <div className="mt-1 flex items-center gap-2">
-                <Badge variant="secondary" className="text-[10px]">
-                  {playerMedia.type === "tv" ? "TV Series" : "Movie"}
-                </Badge>
-                <Badge variant="outline" className="text-[10px] text-white/70">
-                  cinemacity.cc
-                </Badge>
-              </div>
-            </div>
-
-            {/* Bottom controls */}
-            <div
-              className={cn(
-                "absolute bottom-0 left-0 right-0 flex items-center gap-2 bg-gradient-to-t from-black/80 to-transparent p-4 transition-opacity",
-                showControls ? "opacity-100" : "opacity-0",
-              )}
-            >
-              {/* Subtitles button */}
-              {subtitles.length > 0 && (
-                <div className="relative">
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    className="gap-1 text-white hover:bg-white/20"
-                    onClick={() => setShowSubtitlesMenu(!showSubtitlesMenu)}
-                  >
-                    <Subtitles className="h-4 w-4" />
-                    <span className="text-xs">CC</span>
-                  </Button>
-
-                  {showSubtitlesMenu && (
-                    <div className="absolute bottom-12 left-0 max-h-60 w-56 overflow-y-auto rounded-lg border border-border bg-black/95 p-2 shadow-xl backdrop-blur-md">
-                      <button
-                        onClick={() => handleSubtitleChange("")}
-                        className={cn(
-                          "block w-full rounded px-3 py-1.5 text-left text-xs text-white/80 hover:bg-white/10",
-                          !currentSubtitle && "bg-primary/20 text-white",
-                        )}
-                      >
-                        Off
-                      </button>
-                      {subtitles.map((sub) => (
-                        <button
-                          key={sub.url}
-                          onClick={() => handleSubtitleChange(sub.url)}
-                          className={cn(
-                            "block w-full rounded px-3 py-1.5 text-left text-xs text-white/80 hover:bg-white/10",
-                            currentSubtitle === sub.url && "bg-primary/20 text-white",
-                          )}
-                        >
-                          {sub.label}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Fullscreen button */}
-              <Button
-                size="sm"
-                variant="ghost"
-                className="ml-auto text-white hover:bg-white/20"
-                onClick={toggleFullscreen}
-              >
-                {isPseudoFullscreen ? (
-                  <Minimize className="h-4 w-4" />
-                ) : (
-                  <Maximize className="h-4 w-4" />
-                )}
-              </Button>
-            </div>
           </div>
         )}
       </DialogContent>
