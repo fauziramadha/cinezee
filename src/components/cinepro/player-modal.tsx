@@ -84,6 +84,62 @@ function getEffectiveDefaultSub(subtitles: Subtitle[]): Subtitle | null {
 }
 
 // ============================================================
+// Helper: cek apakah subtitle Indonesia ada
+// ============================================================
+function hasIndonesianSubtitle(subs: Subtitle[]): boolean {
+  return subs.some(
+    (s) =>
+      s.label.toLowerCase().includes("indonesia") ||
+      s.label.toLowerCase().includes("bahasa indonesia")
+  );
+}
+
+// ============================================================
+// Helper: fetch subtitle Indonesia dari SubDL (via backend)
+// ============================================================
+async function fetchSubdlIndonesian(params: {
+  title: string;
+  type: "movie" | "tv";
+  season?: string;
+  episode?: string;
+}): Promise<Subtitle | null> {
+  try {
+    const searchParams = new URLSearchParams({
+      title: params.title,
+      type: params.type,
+      format: "vtt",
+    });
+    if (params.season) searchParams.set("season", params.season);
+    if (params.episode) searchParams.set("episode", params.episode);
+
+    console.log("[Subtitle] Fetching SubDL Indonesian for:", params.title);
+    const res = await fetch(`/api/subtitle/indonesian?${searchParams.toString()}`);
+    if (!res.ok) {
+      console.warn("[Subtitle] SubDL fetch failed:", res.status);
+      return null;
+    }
+
+    const blob = await res.blob();
+    if (blob.size < 50) {
+      console.warn("[Subtitle] SubDL returned empty/too small");
+      return null;
+    }
+
+    const blobUrl = URL.createObjectURL(blob);
+    console.log("[Subtitle] SubDL Indonesian loaded:", blobUrl.substring(0, 50));
+    return {
+      label: "Bahasa Indonesia (SubDL)",
+      url: blobUrl,
+      language: "bahasa",
+      type: "full",
+    };
+  } catch (err) {
+    console.warn("[Subtitle] SubDL fetch error:", err);
+    return null;
+  }
+}
+
+// ============================================================
 // HLS.js Loader
 // ============================================================
 let hlsPromise: Promise<any> | null = null;
@@ -133,21 +189,26 @@ export function PlayerModal() {
   const [currentEpisodeIdx, setCurrentEpisodeIdx] = useState<number>(0);
   const [retryCount, setRetryCount] = useState(0);
 
-  // NEW: Server selector
+  // Server selector
   const [servers, setServers] = useState<ServerOption[]>([]);
   const [currentServerIdx, setCurrentServerIdx] = useState<number>(0);
 
-  // NEW: Quality & Audio
+  // Quality & Audio
   const [availableQualities, setAvailableQualities] = useState<Array<{ height: number; level: number }>>([]);
   const [currentQuality, setCurrentQuality] = useState<number>(-1);
   const [availableAudioTracks, setAvailableAudioTracks] = useState<Array<{ id: number; name: string }>>([]);
   const [currentAudioTrack, setCurrentAudioTrack] = useState<number>(-1);
+
+  // SubDL state
+  const [subdlSubtitle, setSubdlSubtitle] = useState<Subtitle | null>(null);
+  const [subdlLoading, setSubdlLoading] = useState(false);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const hlsRef = useRef<any>(null);
   const currentStreamUrlRef = useRef<string>("");
   const playerMediaRef = useRef(playerMedia);
   const userInteractedRef = useRef(false);
+  const prevBlobUrlRef = useRef<string | null>(null);
 
   useEffect(() => {
     playerMediaRef.current = playerMedia;
@@ -167,18 +228,40 @@ export function PlayerModal() {
   }, [episodes, currentSeason]);
 
   // ============================================================
-  // CHANGE STREAM SOURCE (no re-mount)
+  // DERIVED: merged subtitles (cinemacity + SubDL)
+  // ============================================================
+  const allSubtitles = useMemo(() => {
+    if (subdlSubtitle) {
+      // SubDL di awal (highest priority for Indonesian)
+      // Avoid duplicate kalau cinemacity juga punya Indonesian
+      const filtered = subtitles.filter(
+        (s) => !hasIndonesianSubtitle([s])
+      );
+      return [subdlSubtitle, ...filtered];
+    }
+    return subtitles;
+  }, [subtitles, subdlSubtitle]);
+
+  // ============================================================
+  // CHANGE STREAM SOURCE
   // ============================================================
   const changeStreamSource = useCallback((newUrl: string) => {
     const video = videoRef.current;
     if (!video || !newUrl) return;
     currentStreamUrlRef.current = newUrl;
     setStreamUrl(newUrl);
-    // Reset quality/audio trackers (will be re-detected by HLS)
     setAvailableQualities([]);
     setAvailableAudioTracks([]);
     setCurrentQuality(-1);
     setCurrentAudioTrack(-1);
+
+    // Reset SubDL subtitle saat ganti source
+    if (prevBlobUrlRef.current) {
+      URL.revokeObjectURL(prevBlobUrlRef.current);
+      prevBlobUrlRef.current = null;
+    }
+    setSubdlSubtitle(null);
+
     if (video.canPlayType("application/vnd.apple.mpegurl") && !hlsRef.current) {
       video.src = newUrl;
       video.play().catch(() => {});
@@ -239,9 +322,6 @@ export function PlayerModal() {
         video.play().catch(() => {});
       });
 
-      // ============================================================
-      // QUALITY & AUDIO DETECTION
-      // ============================================================
       hls.on(Hls.Events.MANIFEST_PARSED, () => {
         const levels = hls.levels || [];
         const qualities = levels
@@ -305,6 +385,7 @@ export function PlayerModal() {
       setSubtitles([]);
       setEpisodes([]);
       setServers([]);
+      setSubdlSubtitle(null);
       setError(null);
       setRetryCount(0);
       return;
@@ -332,7 +413,6 @@ export function PlayerModal() {
         currentStreamUrlRef.current = data.streamUrl;
         setSubtitles(data.subtitles || []);
 
-        // TV series: setup episodes
         const eps = (data.episodes || []) as StreamEpisode[];
         if (eps.length > 0) {
           setEpisodes(eps);
@@ -342,7 +422,6 @@ export function PlayerModal() {
           setEpisodes([]);
         }
 
-        // NEW: Multiple servers
         const srvs = (data.servers || []) as ServerOption[];
         if (srvs.length > 1) {
           setServers(srvs);
@@ -371,8 +450,75 @@ export function PlayerModal() {
         hlsRef.current.destroy();
         hlsRef.current = null;
       }
+      // Cleanup blob URL
+      if (prevBlobUrlRef.current) {
+        URL.revokeObjectURL(prevBlobUrlRef.current);
+        prevBlobUrlRef.current = null;
+      }
     };
   }, [playerMedia]);
+
+  // ============================================================
+  // FETCH SUBDL INDONESIAN (kalau cinemacity gak punya Indonesian)
+  // ============================================================
+  useEffect(() => {
+    if (!playerMedia || subtitles.length === 0) {
+      setSubdlSubtitle(null);
+      return;
+    }
+
+    // Cek apakah cinemacity sudah punya Indonesian
+    if (hasIndonesianSubtitle(subtitles)) {
+      console.log("[Subtitle] Cinemacity has Indonesian, skip SubDL");
+      setSubdlSubtitle(null);
+      return;
+    }
+
+    // Cleanup previous blob URL
+    if (prevBlobUrlRef.current) {
+      URL.revokeObjectURL(prevBlobUrlRef.current);
+      prevBlobUrlRef.current = null;
+    }
+
+    let cancelled = false;
+    setSubdlLoading(true);
+
+    const fetchSubdl = async () => {
+      const title = playerMedia.title || "";
+      const type = (playerMedia.type === "tv" ? "tv" : "movie") as "movie" | "tv";
+
+      // Untuk TV: include season + episode dari current episode
+      let season: string | undefined;
+      let episode: string | undefined;
+      if (type === "tv" && currentSeasonEpisodes[currentEpisodeIdx]) {
+        season = currentSeason;
+        episode = currentSeasonEpisodes[currentEpisodeIdx].episode || String(currentEpisodeIdx + 1);
+      }
+
+      if (!title) {
+        setSubdlLoading(false);
+        return;
+      }
+
+      const subdlSub = await fetchSubdlIndonesian({ title, type, season, episode });
+      if (cancelled) return;
+
+      if (subdlSub) {
+        prevBlobUrlRef.current = subdlSub.url; // simpan untuk cleanup nanti
+        setSubdlSubtitle(subdlSub);
+      } else {
+        setSubdlSubtitle(null);
+      }
+      setSubdlLoading(false);
+    };
+
+    fetchSubdl();
+
+    return () => {
+      cancelled = true;
+    };
+    // Re-fetch saat playerMedia atau currentEpisodeIdx berubah
+  }, [playerMedia, subtitles, currentSeason, currentEpisodeIdx, currentSeasonEpisodes]);
 
   // ============================================================
   // INIT PLAYER saat streamUrl pertama kali di-set
@@ -418,7 +564,7 @@ export function PlayerModal() {
   };
 
   // ============================================================
-  // SERVER CHANGE (Movie & TV)
+  // SERVER CHANGE
   // ============================================================
   const handleServerChange = (idx: number) => {
     const server = servers[idx];
@@ -426,14 +572,12 @@ export function PlayerModal() {
     setCurrentServerIdx(idx);
     setSubtitles(server.subtitles || []);
 
-    // Kalau server punya episodes (TV multi-server), update episode list
     if (server.episodes && server.episodes.length > 0) {
       setEpisodes(server.episodes);
       setCurrentSeason(server.episodes[0].season || "1");
       setCurrentEpisodeIdx(0);
       changeStreamSource(server.episodes[0].streamUrl);
     } else {
-      // Movie multi-server
       changeStreamSource(server.streamUrl);
     }
     console.log(`[Player] Switched to server: ${server.title}`);
@@ -457,17 +601,17 @@ export function PlayerModal() {
   };
 
   // ============================================================
-  // AUTO-LOAD SUBTITLE
+  // AUTO-LOAD SUBTITLE (pakai merged subtitles: cinemacity + SubDL)
   // ============================================================
   useEffect(() => {
-    if (!streamUrl || subtitles.length === 0) return;
+    if (!streamUrl || allSubtitles.length === 0) return;
     const video = videoRef.current;
     if (!video) return;
 
     userInteractedRef.current = false;
     const initializationCompleteRef = { current: false };
 
-    const defaultSub = getEffectiveDefaultSub(subtitles);
+    const defaultSub = getEffectiveDefaultSub(allSubtitles);
 
     if (!defaultSub) {
       const existingTracks = video.querySelectorAll("track");
@@ -479,17 +623,21 @@ export function PlayerModal() {
     const loadAllTracks = () => {
       const existingTracks = video.querySelectorAll("track");
       existingTracks.forEach((t) => t.remove());
-      subtitles.forEach((sub) => {
+      allSubtitles.forEach((sub) => {
         const track = document.createElement("track");
         track.kind = "subtitles";
         track.label = sub.label;
         if (sub.label.toLowerCase().includes("indonesia")) track.srclang = "id";
         else if (sub.language === "english") track.srclang = "en";
         else track.srclang = sub.language || "en";
-        track.src = getStreamProxyUrl(sub.url);
+        // SubDL subtitle pakai blob URL langsung (no proxy)
+        // Cinemacity subtitle pakai proxy (cinemacity.cc block hotlink)
+        const isBlobUrl = sub.url.startsWith("blob:");
+        track.src = isBlobUrl ? sub.url : getStreamProxyUrl(sub.url);
         if (sub === defaultSub) track.default = true;
         video.appendChild(track);
       });
+      console.log(`[Subtitle] Loaded ${allSubtitles.length} tracks (cinemacity + SubDL), default: ${defaultSub.label}`);
     };
 
     const forceEnableDefault = () => {
@@ -514,7 +662,7 @@ export function PlayerModal() {
           allDisabled = false;
           if (tracks[i].label !== defaultSub.label) {
             otherShowing = true;
-            const selectedSub = subtitles.find((s) => s.label === tracks[i].label);
+            const selectedSub = allSubtitles.find((s) => s.label === tracks[i].label);
             if (selectedSub) saveSubtitlePref(selectedSub.label, selectedSub.language);
           }
         }
@@ -565,7 +713,7 @@ export function PlayerModal() {
       textTracks.removeEventListener("change", onTrackChange);
       clearInterval(interval);
     };
-  }, [streamUrl, subtitles]);
+  }, [streamUrl, allSubtitles]);
 
   // ============================================================
   // CLEANUP
@@ -575,6 +723,10 @@ export function PlayerModal() {
       if (hlsRef.current) {
         hlsRef.current.destroy();
         hlsRef.current = null;
+      }
+      if (prevBlobUrlRef.current) {
+        URL.revokeObjectURL(prevBlobUrlRef.current);
+        prevBlobUrlRef.current = null;
       }
     };
   }, []);
@@ -629,15 +781,19 @@ export function PlayerModal() {
               playsInline
               autoPlay
             />
+            {/* SubDL loading indicator (small, di pojok kanan bawah) */}
+            {subdlLoading && (
+              <div className="absolute bottom-2 right-2 flex items-center gap-1 rounded-md bg-black/70 px-2 py-1 backdrop-blur-sm">
+                <Loader2 className="h-3 w-3 animate-spin text-white" />
+                <span className="text-[10px] text-white/80">Searching ID subtitle...</span>
+              </div>
+            )}
           </div>
         )}
 
-        {/* ============================================================ */}
-        {/* CONTROLS BAR: Server / Season / Episode / Quality / Audio    */}
-        {/* ============================================================ */}
+        {/* CONTROLS BAR */}
         {!loading && !error && streamUrl && showControlsBar && (
           <div className="flex flex-wrap items-center gap-2 border-t border-white/10 bg-zinc-950 p-3">
-            {/* SERVER SELECTOR — hanya kalau multiple servers */}
             {hasMultipleServers && (
               <>
                 <span className="text-[10px] font-semibold uppercase tracking-wide text-white/60">Server:</span>
@@ -656,7 +812,6 @@ export function PlayerModal() {
               </>
             )}
 
-            {/* SEASON SELECTOR — hanya untuk TV */}
             {isTV && seasons.length > 1 && (
               <Select value={currentSeason} onValueChange={handleSeasonChange}>
                 <SelectTrigger className="h-8 w-24 shrink-0 border-white/20 bg-zinc-900 text-xs text-white">
@@ -678,7 +833,6 @@ export function PlayerModal() {
               </span>
             )}
 
-            {/* EPISODE SELECTOR — hanya untuk TV */}
             {isTV && (
               <Select
                 value={String(currentEpisodeIdx)}
@@ -697,7 +851,6 @@ export function PlayerModal() {
               </Select>
             )}
 
-            {/* QUALITY SELECTOR — hanya kalau multiple qualities */}
             {hasMultipleQualities && (
               <Select value={String(currentQuality)} onValueChange={(v) => handleQualityChange(Number(v))}>
                 <SelectTrigger className="h-8 w-24 shrink-0 border-white/20 bg-zinc-900 text-xs text-white">
@@ -717,7 +870,6 @@ export function PlayerModal() {
               </Select>
             )}
 
-            {/* AUDIO TRACK SELECTOR — hanya kalau multiple audio */}
             {hasMultipleAudio && (
               <Select value={String(currentAudioTrack)} onValueChange={(v) => handleAudioTrackChange(Number(v))}>
                 <SelectTrigger className="h-8 w-32 shrink-0 border-white/20 bg-zinc-900 text-xs text-white sm:w-40">
@@ -733,7 +885,6 @@ export function PlayerModal() {
               </Select>
             )}
 
-            {/* Episode counter + Prev/Next (TV only) */}
             {isTV && (
               <>
                 <span className="ml-auto text-[10px] text-white/50">
