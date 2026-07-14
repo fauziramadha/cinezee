@@ -74,7 +74,7 @@ export function Top10Row({ title, movies, className }: Top10RowProps) {
       {/* Scrollable row */}
       <div
         ref={scrollRef}
-        className="flex gap-3 overflow-x-auto px-4 pb-4 sm:px-6 md:px-8"
+        className="flex gap-2 overflow-x-auto px-4 pb-4 sm:px-6 md:px-8"
         style={{
           scrollbarWidth: "none",
           msOverflowStyle: "none",
@@ -94,26 +94,31 @@ export function Top10Row({ title, movies, className }: Top10RowProps) {
             <button
               key={`top10-${movie.id}-${idx}`}
               onClick={() => handleClick(movie)}
-              className="group/card relative flex shrink-0 items-end transition-transform duration-300 hover:scale-105 hover:z-10"
-              style={{ width: "calc(11rem + 3rem)" }}
+              className="group/card relative flex shrink-0 items-end"
             >
-              {/* Large rank number (Netflix-style) */}
+              {/* Large rank number - Netflix style */}
+              {/* FIX: pakai solid color + opacity (iOS Safari compatible) */}
               <span
-                className="select-none text-[8rem] font-black leading-none text-transparent"
+                className="select-none font-black leading-none"
                 style={{
-                  WebkitTextStroke: "3px hsl(var(--primary))",
-                  textShadow: "0 0 20px hsl(var(--primary) / 0.3)",
-                  marginRight: "-1.5rem",
-                  marginBottom: "-0.5rem",
+                  fontSize: "7rem",
+                  color: "hsl(var(--primary))",
+                  opacity: 0.35,
+                  fontWeight: 900,
+                  marginRight: "-1.2rem",
+                  marginBottom: "-0.3rem",
                   fontFamily: "system-ui, -apple-system, sans-serif",
-                  letterSpacing: "-0.1em",
+                  letterSpacing: "-0.08em",
+                  textShadow: "2px 2px 0 hsl(var(--background))",
+                  zIndex: 1,
+                  lineHeight: 0.8,
                 }}
               >
                 {rank}
               </span>
 
               {/* Poster card */}
-              <div className="relative w-40 shrink-0 overflow-hidden rounded-lg bg-card shadow-lg ring-1 ring-border transition-all group-hover/card:ring-2 group-hover/card:ring-primary sm:w-44">
+              <div className="relative w-32 shrink-0 overflow-hidden rounded-lg bg-card shadow-lg ring-1 ring-border transition-all group-hover/card:ring-2 group-hover/card:ring-primary sm:w-36 md:w-40">
                 {/* Poster image */}
                 <div className="relative aspect-[2/3] w-full overflow-hidden bg-muted">
                   {movie.poster_path ? (
@@ -121,7 +126,7 @@ export function Top10Row({ title, movies, className }: Top10RowProps) {
                       src={getImageUrl(movie.poster_path, "w500")}
                       alt={title}
                       fill
-                      sizes="(max-width: 768px) 176px, 200px"
+                      sizes="(max-width: 768px) 144px, 176px"
                       className="object-cover transition-transform duration-300 group-hover/card:scale-110"
                       unoptimized
                     />
