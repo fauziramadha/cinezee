@@ -201,22 +201,38 @@ export function HeroCarousel({ movies }: HeroCarouselProps) {
         <ChevronRight className="h-5 w-5" />
       </button>
 
-      {/* Dots indicator */}
-      <div className="absolute bottom-4 left-1/2 z-20 flex -translate-x-1/2 gap-1.5 md:bottom-6">
+      {/* Progress bar indicator — fills up over 8s, resets on slide change */}
+      <div className="absolute bottom-3 left-1/2 z-20 flex -translate-x-1/2 gap-1.5 md:bottom-5">
         {heroMovies.map((_, idx) => (
           <button
             key={`dot-${idx}`}
             onClick={() => emblaApi?.scrollTo(idx)}
-            className={cn(
-              "h-1.5 rounded-full transition-all duration-300",
-              idx === selected
-                ? "w-6 bg-primary"
-                : "w-1.5 bg-white/40 hover:bg-white/60",
-            )}
+            className="h-1 w-8 overflow-hidden rounded-full bg-white/30 sm:w-10"
             aria-label={`Go to slide ${idx + 1}`}
-          />
+          >
+            {idx === selected && (
+              <span
+                key={`progress-${selected}`}
+                className="block h-full rounded-full bg-primary"
+                style={{
+                  animation: "hero-progress 8s linear forwards",
+                }}
+              />
+            )}
+            {idx < selected && (
+              <span className="block h-full w-full rounded-full bg-primary" />
+            )}
+          </button>
         ))}
       </div>
+
+      {/* Keyframe animation injected once */}
+      <style>{`
+        @keyframes hero-progress {
+          from { width: 0%; }
+          to { width: 100%; }
+        }
+      `}</style>
     </section>
   );
 }
