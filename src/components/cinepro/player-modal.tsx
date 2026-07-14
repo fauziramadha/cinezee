@@ -360,43 +360,75 @@ export function PlayerModal() {
   };
 
   // ============================================================
-  // AUTO-LOAD SUBTITLE (English priority)
+  // AUTO-LOAD SUBTITLE — Prioritas: Indonesia > English > First
   // ============================================================
   useEffect(() => {
     if (!streamUrl || subtitles.length === 0) return;
     const video = videoRef.current;
     if (!video) return;
 
-    const timer = setTimeout(() => {
-      // Clear existing tracks
-      while (video.firstChild) {
-        if (video.firstChild.nodeName === "TRACK") {
-          video.removeChild(video.firstChild);
-        } else {
-          break;
-        }
-      }
+    const loadSubtitle = () => {
+      // Clear existing <track> elements
+      const existingTracks = video.querySelectorAll("track");
+      existingTracks.forEach((t) => t.remove());
 
-      const englishSub = subtitles.find((s) => s.language === "english");
-      const subToLoad = englishSub || subtitles[0];
+      // ============================================================
+      // PRIORITY: Indonesian > English > First available
+      // ============================================================
+      // Detection: cek label (lebih reliable daripada language field)
+      // karena cinemacity parse "Bahasa Indonesia" → language: "bahasa"
+      // dan "Bahasa Melayu" → language: "bahasa" (sama!)
+      const indoSub = subtitles.find(
+        (s) =>
+          s.label.toLowerCase().includes("indonesia") ||
+          s.label.toLowerCase().includes("bahasa indonesia")
+      );
+      const englishSub = subtitles.find(
+        (s) => s.language === "english" && s.type === "full"
+      );
+      const englishAny = subtitles.find((s) => s.language === "english");
+      const subToLoad = indoSub || englishSub || englishAny || subtitles[0];
+
       if (!subToLoad) return;
+
+      console.log("[Subtitle] Loading:", subToLoad.label, "→", subToLoad.url.substring(0, 80));
 
       const track = document.createElement("track");
       track.kind = "subtitles";
       track.label = subToLoad.label;
-      track.srclang = subToLoad.language || "en";
+      // Set srclang proper (id untuk Indonesia, en untuk English)
+      if (subToLoad.label.toLowerCase().includes("indonesia")) {
+        track.srclang = "id";
+      } else if (subToLoad.language === "english") {
+        track.srclang = "en";
+      } else {
+        track.srclang = subToLoad.language || "en";
+      }
       track.src = getStreamProxyUrl(subToLoad.url);
+      track.default = true;
       video.appendChild(track);
 
+      // Enable track setelah di-load
       setTimeout(() => {
-        const lastTrack = video.textTracks[video.textTracks.length - 1];
-        if (lastTrack) {
-          lastTrack.mode = "showing";
+        const tracks = video.textTracks;
+        for (let i = tracks.length - 1; i >= 0; i--) {
+          if (tracks[i].mode === "disabled") {
+            tracks[i].mode = "showing";
+            console.log("[Subtitle] Enabled:", tracks[i].label);
+            break;
+          }
         }
-      }, 500);
-    }, 1500);
+      }, 800);
+    };
 
-    return () => clearTimeout(timer);
+    // Wait for video metadata loaded (lebih reliable daripada setTimeout)
+    if (video.readyState >= 1) {
+      const timer = setTimeout(loadSubtitle, 300);
+      return () => clearTimeout(timer);
+    } else {
+      video.addEventListener("loadedmetadata", loadSubtitle, { once: true });
+      return () => video.removeEventListener("loadedmetadata", loadSubtitle);
+    }
   }, [streamUrl, subtitles]);
 
   // ============================================================
