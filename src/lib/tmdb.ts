@@ -105,6 +105,10 @@ export function getImageUrl(
   if (path.startsWith("http://") || path.startsWith("https://")) {
     return path;
   }
+  // Jika path adalah internal API route (image proxy, dll), return as-is
+  if (path.startsWith("/api/")) {
+    return path;
+  }
   return `${TMDB_IMAGE_BASE}/${size}${path}`;
 }
 
