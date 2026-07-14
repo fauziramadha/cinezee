@@ -67,7 +67,7 @@ export async function GET(
     }, { status: 404 });
   }
 
-  // NO CACHE — stream URL has expiry
+    // NO CACHE for play endpoint — stream URL has expiry, always fresh
   return NextResponse.json({
     streamUrl: detail.streamUrl,
     qualities: detail.qualities || [],
@@ -76,5 +76,7 @@ export async function GET(
     title: detail.title,
     type: detail.type,
     source: "cinemacity.cc",
+    // TV series: return semua episodes dengan stream URLs (untuk episode selector)
+    episodes: detail.streamEpisodes || [],
   });
 }
