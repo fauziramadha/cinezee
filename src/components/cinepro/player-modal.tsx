@@ -35,8 +35,61 @@ interface StreamEpisode {
 }
 
 // ============================================================
+// SUBTITLE PREFERENCE — persist ke localStorage
+// ============================================================
+const SUBTITLE_PREF_KEY = "cinestream_subtitle_pref";
+
+function getSavedSubtitlePref(): { label: string; language: string } | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const saved = localStorage.getItem(SUBTITLE_PREF_KEY);
+    if (saved) return JSON.parse(saved);
+  } catch {}
+  return null;
+}
+
+function saveSubtitlePref(label: string, language: string) {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(SUBTITLE_PREF_KEY, JSON.stringify({ label, language }));
+  } catch {}
+}
+
+// Get saved pref OR default (Indonesian)
+function getEffectiveDefaultSub(
+  subtitles: Subtitle[]
+): Subtitle | null {
+  const saved = getSavedSubtitlePref();
+
+  // Kalau user pernah pilih "off", return null (no subtitle)
+  if (saved && saved.label === "__off__") {
+    return null;
+  }
+
+  // Cari subtitle yang cocok dengan saved preference
+  if (saved) {
+    const matchByLabel = subtitles.find((s) => s.label === saved.label);
+    if (matchByLabel) return matchByLabel;
+
+    const matchByLang = subtitles.find((s) => s.language === saved.language);
+    if (matchByLang) return matchByLang;
+  }
+
+  // Default: Indonesian > English (Full) > First
+  const indoSub = subtitles.find(
+    (s) =>
+      s.label.toLowerCase().includes("indonesia") ||
+      s.label.toLowerCase().includes("bahasa indonesia")
+  );
+  const englishFull = subtitles.find(
+    (s) => s.language === "english" && s.type === "full"
+  );
+  const englishAny = subtitles.find((s) => s.language === "english");
+  return indoSub || englishFull || englishAny || subtitles[0] || null;
+}
+
+// ============================================================
 // HLS.js Loader — cache busting untuk m3u8 URLs
-// (mimic cinemacity's original CustomLoader)
 // ============================================================
 let hlsPromise: Promise<any> | null = null;
 async function loadHls(): Promise<any> {
@@ -61,7 +114,6 @@ function makeCustomLoader(Hls: any) {
     load(context: any, config: any, callbacks: any) {
       const onSuccess = callbacks.onSuccess;
       callbacks.onSuccess = (response: any, stats: any, ctx: any, details: any) => {
-        // Cache busting: add ?RANDOM ke setiap .m3u8 URL di playlist
         if (typeof response.data === "string") {
           response.data = response.data.replace(
             /\.(m3u8)\b/g,
@@ -91,8 +143,8 @@ export function PlayerModal() {
   const hlsRef = useRef<any>(null);
   const currentStreamUrlRef = useRef<string>("");
   const playerMediaRef = useRef(playerMedia);
+  const userInteractedRef = useRef(false);
 
-  // Keep playerMediaRef in sync
   useEffect(() => {
     playerMediaRef.current = playerMedia;
   }, [playerMedia]);
@@ -112,7 +164,6 @@ export function PlayerModal() {
 
   // ============================================================
   // CHANGE STREAM SOURCE (no re-mount)
-  // Pakai hls.loadSource() untuk HLS.js, video.src untuk native
   // ============================================================
   const changeStreamSource = useCallback((newUrl: string) => {
     const video = videoRef.current;
@@ -121,34 +172,30 @@ export function PlayerModal() {
     currentStreamUrlRef.current = newUrl;
     setStreamUrl(newUrl);
 
-    // Native HLS (iOS Safari)
     if (video.canPlayType("application/vnd.apple.mpegurl") && !hlsRef.current) {
       video.src = newUrl;
       video.play().catch(() => {});
       return;
     }
 
-    // HLS.js: langsung loadSource (gak destroy + re-create)
     if (hlsRef.current) {
       hlsRef.current.loadSource(newUrl);
     }
   }, []);
 
   // ============================================================
-  // INIT HLS PLAYER (sekali saja, saat pertama buka)
+  // INIT HLS PLAYER
   // ============================================================
   const initHlsPlayer = useCallback(async (url: string) => {
     const video = videoRef.current;
     if (!video) return;
 
-    // Native HLS (Safari, iOS) — gak perlu HLS.js
     if (video.canPlayType("application/vnd.apple.mpegurl")) {
       video.src = url;
       video.play().catch(() => {});
       return;
     }
 
-    // Cleanup previous instance
     if (hlsRef.current) {
       hlsRef.current.destroy();
       hlsRef.current = null;
@@ -162,17 +209,12 @@ export function PlayerModal() {
       }
 
       const hls = new Hls({
-        // ============================================================
-        // PERFORMANCE & STABILITY TUNING
-        // ============================================================
         enableWorker: true,
         lowLatencyMode: false,
-        // Buffer tuning — larger buffer = smoother seek
         maxBufferLength: 60,
         maxMaxBufferLength: 120,
-        maxBufferSize: 60 * 1024 * 1024, // 60MB
+        maxBufferSize: 60 * 1024 * 1024,
         backBufferLength: 30,
-        // Retry tuning — lebih aggressive saat network error
         fragLoadingMaxRetry: 8,
         fragLoadingRetryDelay: 500,
         fragLoadingMaxRetryTimeout: 8000,
@@ -180,7 +222,6 @@ export function PlayerModal() {
         manifestLoadingRetryDelay: 500,
         levelLoadingMaxRetry: 4,
         levelLoadingRetryDelay: 500,
-        // Custom loader untuk cache busting (mimic cinemacity)
         loader: makeCustomLoader(Hls),
       });
       hlsRef.current = hls;
@@ -192,9 +233,6 @@ export function PlayerModal() {
         video.play().catch(() => {});
       });
 
-      // ============================================================
-      // ERROR RECOVERY — auto-retry saat fatal error
-      // ============================================================
       hls.on(Hls.Events.ERROR, async (_event: any, data: any) => {
         if (!data.fatal) return;
 
@@ -203,19 +241,16 @@ export function PlayerModal() {
 
         switch (data.type) {
           case Hls.ErrorTypes.NETWORK_ERROR:
-            // Retry network error
             console.log("[HLS] Network error, retrying...");
             hls.startLoad();
             break;
 
           case Hls.ErrorTypes.MEDIA_ERROR:
-            // Retry media error
             console.log("[HLS] Media error, recovering...");
             hls.recoverMediaError();
             break;
 
           default:
-            // Fatal error (maybe token expired) — refresh stream URL
             if (currentMedia?.source === "cinemacity" && currentMedia?.slug && retryCount < 3) {
               console.log(`[HLS] Fatal error, refreshing stream URL (retry ${retryCount + 1}/3)...`);
               setRetryCount((c) => c + 1);
@@ -279,7 +314,6 @@ export function PlayerModal() {
         currentStreamUrlRef.current = data.streamUrl;
         setSubtitles(data.subtitles || []);
 
-        // TV series: setup episodes
         const eps = (data.episodes || []) as StreamEpisode[];
         if (eps.length > 0) {
           setEpisodes(eps);
@@ -316,10 +350,7 @@ export function PlayerModal() {
   useEffect(() => {
     if (!streamUrl || !videoRef.current) return;
 
-    // Hanya init kalau HLS belum ada (initial load)
-    // Untuk perubahan source berikutnya, pakai changeStreamSource
     if (!hlsRef.current) {
-      // Check native HLS first
       const video = videoRef.current;
       if (video.canPlayType("application/vnd.apple.mpegurl")) {
         video.src = streamUrl;
@@ -330,7 +361,6 @@ export function PlayerModal() {
     }
 
     return () => {
-      // Cleanup saat modal close
       if (hlsRef.current && !playerMedia) {
         hlsRef.current.destroy();
         hlsRef.current = null;
@@ -339,7 +369,7 @@ export function PlayerModal() {
   }, [streamUrl, initHlsPlayer, playerMedia]);
 
   // ============================================================
-  // EPISODE / SEASON CHANGE (no re-mount)
+  // EPISODE / SEASON CHANGE
   // ============================================================
   const handleEpisodeChange = (idx: number) => {
     const ep = currentSeasonEpisodes[idx];
@@ -360,106 +390,154 @@ export function PlayerModal() {
   };
 
   // ============================================================
-  // AUTO-LOAD SUBTITLE — Prioritas: Indonesia > English > First
-  // AUTO-SHOW: paksa mode="showing" di multiple events
-  //           (iOS Safari gak auto-show sampai video play)
+  // AUTO-LOAD SUBTITLE — Load SEMUA tracks, default = saved pref OR Indonesian
+  // Save user preference saat user ganti subtitle
   // ============================================================
   useEffect(() => {
     if (!streamUrl || subtitles.length === 0) return;
     const video = videoRef.current;
     if (!video) return;
 
-    // ============================================================
-    // PRIORITY: Indonesian > English (Full) > English (any) > First
-    // ============================================================
-    const indoSub = subtitles.find(
-      (s) =>
-        s.label.toLowerCase().includes("indonesia") ||
-        s.label.toLowerCase().includes("bahasa indonesia")
-    );
-    const englishFull = subtitles.find(
-      (s) => s.language === "english" && s.type === "full"
-    );
-    const englishAny = subtitles.find((s) => s.language === "english");
-    const subToLoad = indoSub || englishFull || englishAny || subtitles[0];
-
-    if (!subToLoad) return;
+    // Reset interaction flag saat streamUrl berubah
+    userInteractedRef.current = false;
 
     // ============================================================
-    // Function: tambah track + paksa enable
+    // DEFAULT: saved preference > Indonesian > English > First
     // ============================================================
-    const loadAndEnableSubtitle = () => {
-      // Clear existing tracks
+    const defaultSub = getEffectiveDefaultSub(subtitles);
+
+    // Case: user previously chose OFF → don't load any subtitle
+    if (!defaultSub) {
+      console.log("[Subtitle] User preference: OFF");
+      const existingTracks = video.querySelectorAll("track");
+      existingTracks.forEach((t) => t.remove());
+      userInteractedRef.current = true;
+      return;
+    }
+
+    // ============================================================
+    // Load SEMUA subtitle tracks
+    // ============================================================
+    const loadAllTracks = () => {
       const existingTracks = video.querySelectorAll("track");
       existingTracks.forEach((t) => t.remove());
 
-      // Add new track
-      const track = document.createElement("track");
-      track.kind = "subtitles";
-      track.label = subToLoad.label;
-      if (subToLoad.label.toLowerCase().includes("indonesia")) {
-        track.srclang = "id";
-      } else if (subToLoad.language === "english") {
-        track.srclang = "en";
-      } else {
-        track.srclang = subToLoad.language || "en";
-      }
-      track.src = getStreamProxyUrl(subToLoad.url);
-      track.default = true;
-      video.appendChild(track);
+      subtitles.forEach((sub) => {
+        const track = document.createElement("track");
+        track.kind = "subtitles";
+        track.label = sub.label;
+        if (sub.label.toLowerCase().includes("indonesia")) {
+          track.srclang = "id";
+        } else if (sub.language === "english") {
+          track.srclang = "en";
+        } else {
+          track.srclang = sub.language || "en";
+        }
+        track.src = getStreamProxyUrl(sub.url);
+        if (sub === defaultSub) {
+          track.default = true;
+        }
+        video.appendChild(track);
+      });
 
-      console.log("[Subtitle] Track added:", subToLoad.label);
+      console.log(`[Subtitle] Loaded ${subtitles.length} tracks, default: ${defaultSub.label}`);
     };
 
     // ============================================================
-    // Function: paksa enable track (set mode = "showing")
-    // Dipanggil berkali-kali di multiple events karena iOS Safari
-    // reset mode ke "disabled" sampai video benar-benar play
+    // Force-enable default subtitle (stop saat user interact)
     // ============================================================
-    const forceEnableSubtitle = () => {
+    const forceEnableDefault = () => {
+      if (userInteractedRef.current) return;
+
       const tracks = video.textTracks;
       for (let i = 0; i < tracks.length; i++) {
         const t = tracks[i];
-        if (t.label === subToLoad.label && t.mode !== "showing") {
+        if (t.label === defaultSub.label && t.mode !== "showing") {
           t.mode = "showing";
-          console.log("[Subtitle] Force-enabled:", t.label, "→", t.mode);
+          console.log("[Subtitle] Force-enabled:", t.label);
         }
       }
     };
 
     // ============================================================
-    // Execute: load track dulu, lalu paksa enable di multiple events
+    // DETECT user interaction → SAVE preference
     // ============================================================
-    if (video.readyState >= 1) {
-      loadAndEnableSubtitle();
-    } else {
-      video.addEventListener("loadedmetadata", loadAndEnableSubtitle, { once: true });
-    }
+    const onTrackChange = () => {
+      const tracks = video.textTracks;
+      let defaultShowing = false;
+      let otherShowing = false;
+      let allDisabled = true;
 
-    // Paksa enable di multiple events (iOS Safari butuh ini)
+      for (let i = 0; i < tracks.length; i++) {
+        if (tracks[i].mode === "showing") {
+          allDisabled = false;
+          if (tracks[i].label === defaultSub.label) {
+            defaultShowing = true;
+          } else {
+            otherShowing = true;
+            // SAVE: user pilih subtitle lain → simpan preferensi
+            const selectedSub = subtitles.find((s) => s.label === tracks[i].label);
+            if (selectedSub) {
+              saveSubtitlePref(selectedSub.label, selectedSub.language);
+              console.log("[Subtitle] Saved user pref:", selectedSub.label);
+            }
+          }
+        }
+      }
+
+      // User interacted: pilih track lain ATAU off
+      if (otherShowing || (allDisabled && !userInteractedRef.current)) {
+        userInteractedRef.current = true;
+        // Save "off" preference kalau user disable semua
+        if (allDisabled) {
+          saveSubtitlePref("__off__", "off");
+          console.log("[Subtitle] Saved user pref: OFF");
+        }
+      }
+    };
+
+    // ============================================================
+    // Setup listeners
+    // ============================================================
     const onLoadedMetadata = () => {
-      loadAndEnableSubtitle();
-      setTimeout(forceEnableSubtitle, 100);
-      setTimeout(forceEnableSubtitle, 500);
+      loadAllTracks();
+      setTimeout(forceEnableDefault, 100);
+      setTimeout(forceEnableDefault, 500);
     };
-    const onCanPlay = () => forceEnableSubtitle();
+    const onCanPlay = () => forceEnableDefault();
     const onPlay = () => {
-      forceEnableSubtitle();
-      setTimeout(forceEnableSubtitle, 500);
-      setTimeout(forceEnableSubtitle, 1500);
+      forceEnableDefault();
+      setTimeout(forceEnableDefault, 500);
+      setTimeout(forceEnableDefault, 1500);
     };
+
+    const textTracks = video.textTracks;
+    textTracks.addEventListener("change", onTrackChange);
 
     video.addEventListener("loadedmetadata", onLoadedMetadata);
     video.addEventListener("canplay", onCanPlay);
     video.addEventListener("play", onPlay);
 
-    // Also try force-enable periodically (fallback)
-    const interval = setInterval(forceEnableSubtitle, 2000);
+    // Initial load
+    if (video.readyState >= 1) {
+      loadAllTracks();
+      forceEnableDefault();
+    }
+
+    // Periodic force-enable
+    const interval = setInterval(() => {
+      if (!userInteractedRef.current) {
+        forceEnableDefault();
+      } else {
+        clearInterval(interval);
+      }
+    }, 2000);
 
     return () => {
       video.removeEventListener("loadedmetadata", onLoadedMetadata);
       video.removeEventListener("canplay", onCanPlay);
       video.removeEventListener("play", onPlay);
+      textTracks.removeEventListener("change", onTrackChange);
       clearInterval(interval);
     };
   }, [streamUrl, subtitles]);
@@ -515,7 +593,7 @@ export function PlayerModal() {
           </div>
         )}
 
-        {/* Video player — native controls only, NO key prop (no re-mount) */}
+        {/* Video player — native controls only */}
         {!loading && !error && streamUrl && (
           <div className="relative aspect-video w-full bg-black">
             <video
