@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useRef, useMemo } from "react";
+import { useEffect, useState, useRef, useMemo, useCallback } from "react";
 import { X, AlertCircle, Loader2 } from "lucide-react";
 import {
   Dialog,
@@ -34,7 +34,10 @@ interface StreamEpisode {
   episode?: string;
 }
 
-// Dynamically load HLS.js from CDN
+// ============================================================
+// HLS.js Loader — cache busting untuk m3u8 URLs
+// (mimic cinemacity's original CustomLoader)
+// ============================================================
 let hlsPromise: Promise<any> | null = null;
 async function loadHls(): Promise<any> {
   if (typeof window === "undefined") return null;
@@ -53,6 +56,25 @@ async function loadHls(): Promise<any> {
   return hlsPromise;
 }
 
+function makeCustomLoader(Hls: any) {
+  return class CustomLoader extends Hls.DefaultConfig.loader {
+    load(context: any, config: any, callbacks: any) {
+      const onSuccess = callbacks.onSuccess;
+      callbacks.onSuccess = (response: any, stats: any, ctx: any, details: any) => {
+        // Cache busting: add ?RANDOM ke setiap .m3u8 URL di playlist
+        if (typeof response.data === "string") {
+          response.data = response.data.replace(
+            /\.(m3u8)\b/g,
+            (match: string) => `${match}?${Math.floor(Math.random() * 1e9)}`
+          );
+        }
+        if (onSuccess) onSuccess.call(this, response, stats, ctx, details);
+      };
+      return super.load(context, config, callbacks);
+    }
+  };
+}
+
 export function PlayerModal() {
   const { playerMedia, closePlayer, addToHistory } = useAppStore();
 
@@ -63,9 +85,17 @@ export function PlayerModal() {
   const [episodes, setEpisodes] = useState<StreamEpisode[]>([]);
   const [currentSeason, setCurrentSeason] = useState<string>("");
   const [currentEpisodeIdx, setCurrentEpisodeIdx] = useState<number>(0);
+  const [retryCount, setRetryCount] = useState(0);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const hlsRef = useRef<any>(null);
+  const currentStreamUrlRef = useRef<string>("");
+  const playerMediaRef = useRef(playerMedia);
+
+  // Keep playerMediaRef in sync
+  useEffect(() => {
+    playerMediaRef.current = playerMedia;
+  }, [playerMedia]);
 
   // ============================================================
   // DERIVED: seasons list + current season episodes
@@ -80,24 +110,161 @@ export function PlayerModal() {
     return episodes.filter((e) => (e.season || "1") === currentSeason);
   }, [episodes, currentSeason]);
 
-  // Fetch stream URL when player opens
+  // ============================================================
+  // CHANGE STREAM SOURCE (no re-mount)
+  // Pakai hls.loadSource() untuk HLS.js, video.src untuk native
+  // ============================================================
+  const changeStreamSource = useCallback((newUrl: string) => {
+    const video = videoRef.current;
+    if (!video || !newUrl) return;
+
+    currentStreamUrlRef.current = newUrl;
+    setStreamUrl(newUrl);
+
+    // Native HLS (iOS Safari)
+    if (video.canPlayType("application/vnd.apple.mpegurl") && !hlsRef.current) {
+      video.src = newUrl;
+      video.play().catch(() => {});
+      return;
+    }
+
+    // HLS.js: langsung loadSource (gak destroy + re-create)
+    if (hlsRef.current) {
+      hlsRef.current.loadSource(newUrl);
+    }
+  }, []);
+
+  // ============================================================
+  // INIT HLS PLAYER (sekali saja, saat pertama buka)
+  // ============================================================
+  const initHlsPlayer = useCallback(async (url: string) => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    // Native HLS (Safari, iOS) — gak perlu HLS.js
+    if (video.canPlayType("application/vnd.apple.mpegurl")) {
+      video.src = url;
+      video.play().catch(() => {});
+      return;
+    }
+
+    // Cleanup previous instance
+    if (hlsRef.current) {
+      hlsRef.current.destroy();
+      hlsRef.current = null;
+    }
+
+    try {
+      const Hls = await loadHls();
+      if (!Hls) {
+        video.src = url;
+        return;
+      }
+
+      const hls = new Hls({
+        // ============================================================
+        // PERFORMANCE & STABILITY TUNING
+        // ============================================================
+        enableWorker: true,
+        lowLatencyMode: false,
+        // Buffer tuning — larger buffer = smoother seek
+        maxBufferLength: 60,
+        maxMaxBufferLength: 120,
+        maxBufferSize: 60 * 1024 * 1024, // 60MB
+        backBufferLength: 30,
+        // Retry tuning — lebih aggressive saat network error
+        fragLoadingMaxRetry: 8,
+        fragLoadingRetryDelay: 500,
+        fragLoadingMaxRetryTimeout: 8000,
+        manifestLoadingMaxRetry: 4,
+        manifestLoadingRetryDelay: 500,
+        levelLoadingMaxRetry: 4,
+        levelLoadingRetryDelay: 500,
+        // Custom loader untuk cache busting (mimic cinemacity)
+        loader: makeCustomLoader(Hls),
+      });
+      hlsRef.current = hls;
+
+      hls.loadSource(url);
+      hls.attachMedia(video);
+
+      hls.on(Hls.Events.MANIFEST_PARSED, () => {
+        video.play().catch(() => {});
+      });
+
+      // ============================================================
+      // ERROR RECOVERY — auto-retry saat fatal error
+      // ============================================================
+      hls.on(Hls.Events.ERROR, async (_event: any, data: any) => {
+        if (!data.fatal) return;
+
+        const currentMedia = playerMediaRef.current;
+        console.warn("[HLS FATAL ERROR]", data.type, data.details);
+
+        switch (data.type) {
+          case Hls.ErrorTypes.NETWORK_ERROR:
+            // Retry network error
+            console.log("[HLS] Network error, retrying...");
+            hls.startLoad();
+            break;
+
+          case Hls.ErrorTypes.MEDIA_ERROR:
+            // Retry media error
+            console.log("[HLS] Media error, recovering...");
+            hls.recoverMediaError();
+            break;
+
+          default:
+            // Fatal error (maybe token expired) — refresh stream URL
+            if (currentMedia?.source === "cinemacity" && currentMedia?.slug && retryCount < 3) {
+              console.log(`[HLS] Fatal error, refreshing stream URL (retry ${retryCount + 1}/3)...`);
+              setRetryCount((c) => c + 1);
+              try {
+                const freshData = await fetchCinemacityPlay(currentMedia.slug);
+                if (freshData.streamUrl) {
+                  changeStreamSource(freshData.streamUrl);
+                  setSubtitles(freshData.subtitles || []);
+                }
+              } catch (refreshErr) {
+                console.error("[HLS] Refresh failed:", refreshErr);
+                setError("Stream error. Please try again.");
+                hls.destroy();
+              }
+            } else {
+              setError("Stream playback error. Please try again.");
+              hls.destroy();
+            }
+            break;
+        }
+      });
+    } catch (err) {
+      console.error("[HLS Init Error]", err);
+      setError("Failed to load video player");
+    }
+  }, [changeStreamSource, retryCount]);
+
+  // ============================================================
+  // FETCH STREAM URL when player opens
+  // ============================================================
   useEffect(() => {
     if (!playerMedia) {
       setStreamUrl("");
       setSubtitles([]);
       setEpisodes([]);
       setError(null);
+      setRetryCount(0);
       return;
     }
 
     let cancelled = false;
     setLoading(true);
     setError(null);
+    setRetryCount(0);
 
     const loadStream = async () => {
       try {
         if (playerMedia.source !== "cinemacity" || !playerMedia.slug) {
-          throw new Error("Player only supports cinemacity source. Selected media has no slug.");
+          throw new Error("Player only supports cinemacity source.");
         }
 
         const data = await fetchCinemacityPlay(playerMedia.slug);
@@ -109,6 +276,7 @@ export function PlayerModal() {
         }
 
         setStreamUrl(data.streamUrl);
+        currentStreamUrlRef.current = data.streamUrl;
         setSubtitles(data.subtitles || []);
 
         // TV series: setup episodes
@@ -143,14 +311,42 @@ export function PlayerModal() {
   }, [playerMedia]);
 
   // ============================================================
-  // EPISODE CHANGE: update streamUrl + subtitles
+  // INIT PLAYER saat streamUrl pertama kali di-set
+  // ============================================================
+  useEffect(() => {
+    if (!streamUrl || !videoRef.current) return;
+
+    // Hanya init kalau HLS belum ada (initial load)
+    // Untuk perubahan source berikutnya, pakai changeStreamSource
+    if (!hlsRef.current) {
+      // Check native HLS first
+      const video = videoRef.current;
+      if (video.canPlayType("application/vnd.apple.mpegurl")) {
+        video.src = streamUrl;
+        video.play().catch(() => {});
+      } else {
+        initHlsPlayer(streamUrl);
+      }
+    }
+
+    return () => {
+      // Cleanup saat modal close
+      if (hlsRef.current && !playerMedia) {
+        hlsRef.current.destroy();
+        hlsRef.current = null;
+      }
+    };
+  }, [streamUrl, initHlsPlayer, playerMedia]);
+
+  // ============================================================
+  // EPISODE / SEASON CHANGE (no re-mount)
   // ============================================================
   const handleEpisodeChange = (idx: number) => {
     const ep = currentSeasonEpisodes[idx];
     if (!ep) return;
     setCurrentEpisodeIdx(idx);
-    setStreamUrl(ep.streamUrl);
     setSubtitles(ep.subtitles || []);
+    changeStreamSource(ep.streamUrl);
   };
 
   const handleSeasonChange = (season: string) => {
@@ -158,87 +354,29 @@ export function PlayerModal() {
     setCurrentEpisodeIdx(0);
     const firstEp = episodes.find((e) => (e.season || "1") === season);
     if (firstEp) {
-      setStreamUrl(firstEp.streamUrl);
       setSubtitles(firstEp.subtitles || []);
+      changeStreamSource(firstEp.streamUrl);
     }
   };
 
-  // Initialize video player when streamUrl changes
-  useEffect(() => {
-    if (!streamUrl || !videoRef.current) return;
-
-    const video = videoRef.current;
-    const videoSrc = streamUrl;
-
-    if (hlsRef.current) {
-      hlsRef.current.destroy();
-      hlsRef.current = null;
-    }
-
-    const initPlayer = async () => {
-      if (video.canPlayType("application/vnd.apple.mpegurl")) {
-        video.src = videoSrc;
-        return;
-      }
-
-      try {
-        const Hls = await loadHls();
-        if (!Hls) {
-          video.src = videoSrc;
-          return;
-        }
-
-        const hls = new Hls({
-          enableWorker: true,
-          lowLatencyMode: false,
-        });
-        hlsRef.current = hls;
-
-        hls.loadSource(videoSrc);
-        hls.attachMedia(video);
-
-        hls.on(Hls.Events.MANIFEST_PARSED, () => {
-          video.play().catch(() => {});
-        });
-
-        hls.on(Hls.Events.ERROR, (_event: any, data: any) => {
-          if (data.fatal) {
-            switch (data.type) {
-              case Hls.ErrorTypes.NETWORK_ERROR:
-                hls.startLoad();
-                break;
-              case Hls.ErrorTypes.MEDIA_ERROR:
-                hls.recoverMediaError();
-                break;
-              default:
-                setError("Stream playback error. Please try again.");
-                hls.destroy();
-                break;
-            }
-          }
-        });
-      } catch (err) {
-        setError("Failed to load video player");
-      }
-    };
-
-    initPlayer();
-
-    return () => {
-      if (hlsRef.current) {
-        hlsRef.current.destroy();
-        hlsRef.current = null;
-      }
-    };
-  }, [streamUrl]);
-
-  // Auto-load first English subtitle
+  // ============================================================
+  // AUTO-LOAD SUBTITLE (English priority)
+  // ============================================================
   useEffect(() => {
     if (!streamUrl || subtitles.length === 0) return;
     const video = videoRef.current;
     if (!video) return;
 
     const timer = setTimeout(() => {
+      // Clear existing tracks
+      while (video.firstChild) {
+        if (video.firstChild.nodeName === "TRACK") {
+          video.removeChild(video.firstChild);
+        } else {
+          break;
+        }
+      }
+
       const englishSub = subtitles.find((s) => s.language === "english");
       const subToLoad = englishSub || subtitles[0];
       if (!subToLoad) return;
@@ -256,10 +394,22 @@ export function PlayerModal() {
           lastTrack.mode = "showing";
         }
       }, 500);
-    }, 1000);
+    }, 1500);
 
     return () => clearTimeout(timer);
   }, [streamUrl, subtitles]);
+
+  // ============================================================
+  // CLEANUP on unmount
+  // ============================================================
+  useEffect(() => {
+    return () => {
+      if (hlsRef.current) {
+        hlsRef.current.destroy();
+        hlsRef.current = null;
+      }
+    };
+  }, []);
 
   if (!playerMedia) return null;
 
@@ -270,7 +420,7 @@ export function PlayerModal() {
       <DialogContent className="max-w-[95vw] overflow-hidden rounded-xl border-0 bg-black p-0 md:max-w-5xl">
         <DialogTitle className="sr-only">{playerMedia.title}</DialogTitle>
 
-        {/* Close button — minimal, hover only */}
+        {/* Close button */}
         <button
           onClick={closePlayer}
           className="absolute right-2 top-2 z-30 flex h-8 w-8 items-center justify-center rounded-full bg-black/50 text-white opacity-0 backdrop-blur-sm transition-all hover:bg-red-600 hover:opacity-100 focus:opacity-100"
@@ -300,7 +450,7 @@ export function PlayerModal() {
           </div>
         )}
 
-        {/* Video player — native controls only */}
+        {/* Video player — native controls only, NO key prop (no re-mount) */}
         {!loading && !error && streamUrl && (
           <div className="relative aspect-video w-full bg-black">
             <video
@@ -310,18 +460,13 @@ export function PlayerModal() {
               controlsList="nodownload"
               playsInline
               autoPlay
-              key={streamUrl}
             />
           </div>
         )}
 
-        {/* ============================================================ */}
-        {/* TV SERIES: Season & Episode Selector                        */}
-        {/* Ditaruh DI BAWAH video (di luar area video), jadi gak nutupin native controls */}
-        {/* ============================================================ */}
+        {/* TV SERIES: Season & Episode Selector */}
         {!loading && !error && isTV && (
           <div className="flex flex-wrap items-center gap-2 border-t border-white/10 bg-zinc-950 p-3">
-            {/* Season selector */}
             {seasons.length > 1 && (
               <Select value={currentSeason} onValueChange={handleSeasonChange}>
                 <SelectTrigger className="h-8 w-24 shrink-0 border-white/20 bg-zinc-900 text-xs text-white">
@@ -343,7 +488,6 @@ export function PlayerModal() {
               </span>
             )}
 
-            {/* Episode selector */}
             <Select
               value={String(currentEpisodeIdx)}
               onValueChange={(v) => handleEpisodeChange(Number(v))}
@@ -360,12 +504,10 @@ export function PlayerModal() {
               </SelectContent>
             </Select>
 
-            {/* Episode counter */}
             <span className="ml-auto text-[10px] text-white/50">
               {currentEpisodeIdx + 1} / {currentSeasonEpisodes.length}
             </span>
 
-            {/* Prev / Next episode buttons */}
             <div className="flex gap-1">
               <button
                 onClick={() => currentEpisodeIdx > 0 && handleEpisodeChange(currentEpisodeIdx - 1)}
