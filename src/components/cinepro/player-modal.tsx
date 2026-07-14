@@ -134,7 +134,9 @@ export function PlayerModal() {
     if (!streamUrl || !videoRef.current) return;
 
     const video = videoRef.current;
-    const proxyUrl = getStreamProxyUrl(streamUrl);
+    // FIX: Gunakan stream URL LANGSUNG (s1.cccdn.net punya CORS *)
+    // Proxy menyebabkan URL relatif di m3u8 (index-f1-a1.m3u8) resolve ke /api/cinemacity/stream/ → 404
+    const videoSrc = streamUrl;
 
     // Cleanup previous HLS instance
     if (hlsRef.current) {
@@ -145,15 +147,15 @@ export function PlayerModal() {
     const initPlayer = async () => {
       // Check if native HLS is supported (Safari, iOS)
       if (video.canPlayType("application/vnd.apple.mpegurl")) {
-        video.src = proxyUrl;
+        video.src = videoSrc;
         return;
       }
 
-      // Use HLS.js for other browsers
+      // Use HLS.js for other browsers (Chrome, Firefox)
       try {
         const Hls = await loadHls();
         if (!Hls) {
-          video.src = proxyUrl;
+          video.src = videoSrc;
           return;
         }
 
@@ -163,7 +165,7 @@ export function PlayerModal() {
         });
         hlsRef.current = hls;
 
-        hls.loadSource(proxyUrl);
+        hls.loadSource(videoSrc);
         hls.attachMedia(video);
 
         hls.on(Hls.Events.MANIFEST_PARSED, () => {
