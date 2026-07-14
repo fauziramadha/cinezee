@@ -398,8 +398,9 @@ export function PlayerModal() {
     const video = videoRef.current;
     if (!video) return;
 
-    // Reset interaction flag saat streamUrl berubah
+    // Reset flags saat streamUrl berubah
     userInteractedRef.current = false;
+    const initializationCompleteRef = { current: false };
 
     // ============================================================
     // DEFAULT: saved preference > Indonesian > English > First
@@ -444,7 +445,7 @@ export function PlayerModal() {
     };
 
     // ============================================================
-    // Force-enable default subtitle (stop saat user interact)
+    // Force-enable default subtitle
     // ============================================================
     const forceEnableDefault = () => {
       if (userInteractedRef.current) return;
@@ -455,14 +456,22 @@ export function PlayerModal() {
         if (t.label === defaultSub.label && t.mode !== "showing") {
           t.mode = "showing";
           console.log("[Subtitle] Force-enabled:", t.label);
+          // ============================================================
+          // MARK: initialization complete setelah first successful enable
+          // ============================================================
+          initializationCompleteRef.current = true;
         }
       }
     };
 
     // ============================================================
     // DETECT user interaction → SAVE preference
+    // Hanya save SETELAH initialization complete (avoid false "off" trigger)
     // ============================================================
     const onTrackChange = () => {
+      // Ignore changes during initialization phase
+      if (!initializationCompleteRef.current) return;
+
       const tracks = video.textTracks;
       let defaultShowing = false;
       let otherShowing = false;
@@ -486,13 +495,13 @@ export function PlayerModal() {
       }
 
       // User interacted: pilih track lain ATAU off
-      if (otherShowing || (allDisabled && !userInteractedRef.current)) {
+      if (otherShowing) {
         userInteractedRef.current = true;
-        // Save "off" preference kalau user disable semua
-        if (allDisabled) {
-          saveSubtitlePref("__off__", "off");
-          console.log("[Subtitle] Saved user pref: OFF");
-        }
+      } else if (allDisabled && !userInteractedRef.current) {
+        // User klik Off — hanya save kalau sebelumnya subtitle sedang show
+        userInteractedRef.current = true;
+        saveSubtitlePref("__off__", "off");
+        console.log("[Subtitle] Saved user pref: OFF");
       }
     };
 
@@ -503,12 +512,14 @@ export function PlayerModal() {
       loadAllTracks();
       setTimeout(forceEnableDefault, 100);
       setTimeout(forceEnableDefault, 500);
+      setTimeout(forceEnableDefault, 1000);
     };
     const onCanPlay = () => forceEnableDefault();
     const onPlay = () => {
       forceEnableDefault();
       setTimeout(forceEnableDefault, 500);
       setTimeout(forceEnableDefault, 1500);
+      setTimeout(forceEnableDefault, 3000);
     };
 
     const textTracks = video.textTracks;
@@ -521,7 +532,8 @@ export function PlayerModal() {
     // Initial load
     if (video.readyState >= 1) {
       loadAllTracks();
-      forceEnableDefault();
+      setTimeout(forceEnableDefault, 100);
+      setTimeout(forceEnableDefault, 500);
     }
 
     // Periodic force-enable
