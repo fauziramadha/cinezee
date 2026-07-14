@@ -2,6 +2,11 @@
  * src/lib/cinemacity-parser.ts
  *
  * Parser untuk HTML cinemacity.cc → JSON
+ *
+ * Changelog:
+ *   - v2: parseMovieList pakai "nearest xfieldimage" approach (fix poster bleeds)
+ *   - v3: extractStreamFromHtml support TV series nested folder structure
+ *         { title: "Season 1", folder: [{ title: "Episode 1", file: "..." }] }
  */
 
 export interface CinemacityMovie {
@@ -32,6 +37,7 @@ export interface CinemacityDetail {
   qualities?: string[];
   subtitles?: CinemacitySubtitle[];
   episodes?: CinemacityEpisode[];
+  streamEpisodes?: CinemacityStreamEpisode[];  // TV cinemacity (dengan stream URL per episode)
   seasons?: number;
 }
 
@@ -48,6 +54,15 @@ export interface CinemacityEpisode {
   url: string;
   season?: number;
   episode?: number;
+}
+
+// Extended episode dengan stream URL (untuk TV series cinemacity)
+export interface CinemacityStreamEpisode {
+  title: string;
+  streamUrl: string;
+  subtitles?: CinemacitySubtitle[];
+  season?: string;
+  episode?: string;
 }
 
 function decodeBase64(b64: string): string {
@@ -89,7 +104,7 @@ export function parseSlugFromUrl(url: string): {
 // =====================================================
 // PARSER 1: HOMEPAGE / SEARCH → list film (IMPROVED v2)
 // =====================================================
-// Strategi baru: 
+// Strategi: 
 //   1. Cari SEMUA <img class="xfieldimage ..."> positions di HTML
 //   2. Untuk setiap movie link, cari xfieldimage TERDEKAT sebelum link
 //   3. Itu poster-nya film tersebut
@@ -101,7 +116,6 @@ export function parseMovieList(html: string, baseUrl = "https://cinemacity.cc"):
   const seen = new Set<string>();
 
   // === Step 1: Find ALL xfieldimage images (poster + background) ===
-  // Pattern: <img class="xfieldimage poster" src="...">  OR  <img class="xfieldimage background" src="...">
   const imgPattern = /<img[^>]*class="[^"]*xfieldimage[^"]*"[^>]*src="([^"]+)"/gi;
   const images: Array<{ pos: number; src: string }> = [];
   let imgMatch;
@@ -136,9 +150,7 @@ export function parseMovieList(html: string, baseUrl = "https://cinemacity.cc"):
     }
 
     // === Step 4: Extract TITLE from link text ===
-    // Pattern: <a href=".../movies/2406-lockbox.html" class="...">Winthrop / Lockbox (2026)</a>
     let title = slugPart.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
-    // Cari text setelah href
     const afterMatch = html.slice(match.index!).match(/^[^>]*>([^<]+)</);
     if (afterMatch && afterMatch[1]) {
       title = afterMatch[1].trim();
@@ -151,7 +163,6 @@ export function parseMovieList(html: string, baseUrl = "https://cinemacity.cc"):
       year = yearFromTitle[1];
     }
     if (!year) {
-      // Cari /year/YYYY/ di context sekitar (500 chars setelah link)
       const context = html.slice(match.index!, match.index! + 500);
       const yearFromMeta = context.match(/\/year\/(\d{4})\//);
       if (yearFromMeta) {
@@ -228,6 +239,10 @@ export function parseDetailPage(html: string, url: string): CinemacityDetail {
     detail.streamUrl = streamInfo.streamUrl;
     detail.qualities = streamInfo.qualities;
     detail.subtitles = streamInfo.subtitles;
+    // TV series: simpan episode list dengan stream URLs
+    if (streamInfo.episodes) {
+      detail.streamEpisodes = streamInfo.episodes;
+    }
   }
 
   if (detail.type === "tv") {
@@ -240,10 +255,14 @@ export function parseDetailPage(html: string, url: string): CinemacityDetail {
 // =====================================================
 // PARSER 3: EXTRACT STREAM URL DARI eval(atob)
 // =====================================================
+// Support 2 struktur:
+//   1. Movie (flat): [{ title: "WEB-DL", file: "https://...", subtitle: "..." }]
+//   2. TV Series (nested): [{ title: "Season 1", folder: [{ title: "Episode 1", file: "...", subtitle: "..." }] }]
 export function extractStreamFromHtml(html: string): {
   streamUrl?: string;
   qualities?: string[];
   subtitles?: CinemacitySubtitle[];
+  episodes?: CinemacityStreamEpisode[];
 } | null {
   const atobPattern = /atob\("([^"]+)"\)/g;
   const matches = [...html.matchAll(atobPattern)];
@@ -262,39 +281,60 @@ export function extractStreamFromHtml(html: string): {
 
       try {
         const fileArray = JSON.parse(fileJson);
-        if (Array.isArray(fileArray) && fileArray.length > 0) {
-          const firstSource = fileArray[0];
+        if (!Array.isArray(fileArray) || fileArray.length === 0) continue;
+
+        const firstSource = fileArray[0];
+
+        // ============================================================
+        // CASE 1: MOVIE — flat structure { title, file, subtitle }
+        // ============================================================
+        if (firstSource.file && typeof firstSource.file === "string") {
           const streamUrl = firstSource.file as string;
+          const qualities = extractQualities(streamUrl);
+          const subtitles = parseSubtitles(firstSource.subtitle);
+          return { streamUrl, qualities, subtitles };
+        }
 
-          const qualities: string[] = [];
-          const qualityPattern = /(\d{3,4}p)/g;
-          let qMatch;
-          while ((qMatch = qualityPattern.exec(streamUrl)) !== null) {
-            if (!qualities.includes(qMatch[1])) {
-              qualities.push(qMatch[1]);
-            }
-          }
+        // ============================================================
+        // CASE 2: TV SERIES — nested { title: "Season X", folder: [...] }
+        // ============================================================
+        if (firstSource.folder && Array.isArray(firstSource.folder)) {
+          const episodes: CinemacityStreamEpisode[] = [];
 
-          const subtitles: CinemacitySubtitle[] = [];
-          if (firstSource.subtitle) {
-            const subPattern = /\[([^\]]+)\](https?:\/\/[^\s,\]]+)/g;
-            let subMatch;
-            while ((subMatch = subPattern.exec(firstSource.subtitle)) !== null) {
-              const label = subMatch[1];
-              const subUrl = subMatch[2];
-              const langMatch = label.match(/([A-Za-z]+)/);
-              const typeMatch = label.toLowerCase().match(/(full|sdh|forced)/);
+          for (const seasonObj of fileArray) {
+            const seasonTitle = seasonObj.title || "Season 1";
+            const seasonMatch = seasonTitle.match(/Season\s*(\d+)/i);
+            const seasonNum = seasonMatch ? seasonMatch[1] : undefined;
 
-              subtitles.push({
-                label,
-                url: subUrl,
-                language: langMatch?.[1].toLowerCase() || "unknown",
-                type: (typeMatch?.[1] as "full" | "sdh" | "forced") || "full",
+            if (!seasonObj.folder || !Array.isArray(seasonObj.folder)) continue;
+
+            for (const epObj of seasonObj.folder) {
+              if (!epObj.file) continue;
+              const epTitle = epObj.title || "Episode";
+              const epMatch = epTitle.match(/Episode\s*(\d+)/i);
+              const epNum = epMatch ? epMatch[1] : undefined;
+
+              episodes.push({
+                title: epTitle,
+                streamUrl: epObj.file,
+                subtitles: parseSubtitles(epObj.subtitle),
+                season: seasonNum,
+                episode: epNum,
               });
             }
           }
 
-          return { streamUrl, qualities, subtitles };
+          if (episodes.length > 0) {
+            // Return episode pertama sebagai default stream
+            const firstEp = episodes[0];
+            const qualities = extractQualities(firstEp.streamUrl);
+            return {
+              streamUrl: firstEp.streamUrl,
+              qualities,
+              subtitles: firstEp.subtitles,
+              episodes,
+            };
+          }
         }
       } catch (e) {
         console.error("[PLAYERJS JSON PARSE ERROR]", e);
@@ -306,8 +346,52 @@ export function extractStreamFromHtml(html: string): {
 }
 
 // =====================================================
-// PARSER 4: EPISODES (untuk TV series)
+// HELPER: Extract qualities dari stream URL
 // =====================================================
+function extractQualities(streamUrl: string): string[] {
+  const qualities: string[] = [];
+  const qualityPattern = /(\d{3,4}p)/g;
+  let qMatch;
+  while ((qMatch = qualityPattern.exec(streamUrl)) !== null) {
+    if (!qualities.includes(qMatch[1])) {
+      qualities.push(qMatch[1]);
+    }
+  }
+  return qualities;
+}
+
+// =====================================================
+// HELPER: Parse subtitles dari Playerjs format
+// =====================================================
+// Format: "[English (Full)]https://...,[SDH English]https://..."
+function parseSubtitles(subtitleField: string | undefined): CinemacitySubtitle[] {
+  const subtitles: CinemacitySubtitle[] = [];
+  if (!subtitleField) return subtitles;
+
+  const subPattern = /\[([^\]]+)\](https?:\/\/[^\s,\]]+)/g;
+  let subMatch;
+  while ((subMatch = subPattern.exec(subtitleField)) !== null) {
+    const label = subMatch[1];
+    const subUrl = subMatch[2];
+    const langMatch = label.match(/([A-Za-z]+)/);
+    const typeMatch = label.toLowerCase().match(/(full|sdh|forced)/);
+
+    subtitles.push({
+      label,
+      url: subUrl,
+      language: langMatch?.[1].toLowerCase() || "unknown",
+      type: (typeMatch?.[1] as "full" | "sdh" | "forced") || "full",
+    });
+  }
+  return subtitles;
+}
+
+// =====================================================
+// PARSER 4: EPISODES (untuk TV series — HTML-based, fallback)
+// =====================================================
+// Note: cinemacity TV series pakai Playerjs folder structure (bukan HTML links),
+// jadi function ini biasanya return empty array. Stream episodes ada di
+// detail.streamEpisodes (dari extractStreamFromHtml).
 function extractEpisodes(html: string): CinemacityEpisode[] {
   const episodes: CinemacityEpisode[] = [];
   const seen = new Set<string>();
