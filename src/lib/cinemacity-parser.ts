@@ -87,13 +87,29 @@ export function parseSlugFromUrl(url: string): {
 }
 
 // =====================================================
-// PARSER 1: HOMEPAGE / SEARCH → list film (IMPROVED)
+// PARSER 1: HOMEPAGE / SEARCH → list film (IMPROVED v2)
 // =====================================================
+// Strategi baru: 
+//   1. Cari SEMUA <img class="xfieldimage ..."> positions di HTML
+//   2. Untuk setiap movie link, cari xfieldimage TERDEKAT sebelum link
+//   3. Itu poster-nya film tersebut
+//
+// Kenapa: cinemacity punya 3 section types (dle-fast_item, dar-short_item, 
+// dar-home_item) dengan class berbeda. Block-based approach gak reliable.
 export function parseMovieList(html: string, baseUrl = "https://cinemacity.cc"): CinemacityMovie[] {
   const movies: CinemacityMovie[] = [];
   const seen = new Set<string>();
 
-  // Find all movie/TV links
+  // === Step 1: Find ALL xfieldimage images (poster + background) ===
+  // Pattern: <img class="xfieldimage poster" src="...">  OR  <img class="xfieldimage background" src="...">
+  const imgPattern = /<img[^>]*class="[^"]*xfieldimage[^"]*"[^>]*src="([^"]+)"/gi;
+  const images: Array<{ pos: number; src: string }> = [];
+  let imgMatch;
+  while ((imgMatch = imgPattern.exec(html)) !== null) {
+    images.push({ pos: imgMatch.index, src: imgMatch[1] });
+  }
+
+  // === Step 2: Find all movie/TV links ===
   const linkPattern = /href="(?:https?:\/\/cinemacity\.cc)?\/(movies|tv-series)\/(\d+)-([^"\/]+?)\.html"/g;
   let match;
 
@@ -103,67 +119,41 @@ export function parseMovieList(html: string, baseUrl = "https://cinemacity.cc"):
     if (seen.has(slug)) continue;
     seen.add(slug);
 
-    // Find the enclosing dar-short_item block (search backwards)
-    const blockStart = html.lastIndexOf('dar-short_item', match.index!);
-    const nextBlockStart = html.indexOf('dar-short_item', match.index! + 1);
-    const block = (blockStart !== -1 && nextBlockStart !== -1)
-      ? html.slice(blockStart, nextBlockStart)
-      : html.slice(Math.max(0, match.index! - 1000), Math.min(html.length, match.index! + 500));
-
-    // === Extract POSTER (priority order) ===
+    // === Step 3: Find nearest xfieldimage BEFORE this link ===
     let poster: string | undefined;
-
-    // Priority 1: <img class="xfieldimage poster" src="...">
-    const posterImgMatch = block.match(/<img[^>]*class="[^"]*xfieldimage\s+poster[^"]*"[^>]*src="([^"]+)"/i);
-    if (posterImgMatch) {
-      poster = posterImgMatch[1];
-    }
-
-    // Priority 2: any src containing /uploads/posts/ with image extension
-    if (!poster) {
-      const uploadsMatch = block.match(/src="([^"]*\/uploads\/posts\/[^"]+\.(?:webp|jpg|jpeg|png))/i);
-      if (uploadsMatch) {
-        poster = uploadsMatch[1];
+    for (let i = images.length - 1; i >= 0; i--) {
+      if (images[i].pos < match.index!) {
+        poster = images[i].src;
+        break;
       }
     }
 
-    // Priority 3: any src with image extension (fallback)
-    if (!poster) {
-      const anyImgMatch = block.match(/src="([^"]+\.(?:webp|jpg|jpeg|png))/i);
-      if (anyImgMatch) {
-        // Skip non-poster images (avatars, icons, etc)
-        const url = anyImgMatch[1];
-        if (!url.includes('noavatar') && !url.includes('templates/') && !url.includes('logo')) {
-          poster = url;
-        }
-      }
-    }
-
-    // Normalize poster URL (relative → absolute)
+    // Normalize poster URL
     if (poster) {
       poster = poster.startsWith("http")
         ? poster
         : baseUrl + (poster.startsWith("/") ? "" : "/") + poster;
     }
 
-    // === Extract TITLE from link text ===
-    // Pattern: <a href=".../movies/2406-lockbox.html" class="e-nowrap">Winthrop / Lockbox (2026)</a>
+    // === Step 4: Extract TITLE from link text ===
+    // Pattern: <a href=".../movies/2406-lockbox.html" class="...">Winthrop / Lockbox (2026)</a>
     let title = slugPart.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
-    const titleFromLink = fullMatch ? html.slice(match.index!).match(/^[^>]*>([^<]+)</) : null;
-    if (titleFromLink && titleFromLink[1]) {
-      title = titleFromLink[1].trim();
+    // Cari text setelah href
+    const afterMatch = html.slice(match.index!).match(/^[^>]*>([^<]+)</);
+    if (afterMatch && afterMatch[1]) {
+      title = afterMatch[1].trim();
     }
 
-    // === Extract YEAR ===
+    // === Step 5: Extract YEAR ===
     let year: string | undefined;
-    // From title parentheses: "Winthrop / Lockbox (2026)" → 2026
     const yearFromTitle = title.match(/\((\d{4})\)/);
     if (yearFromTitle) {
       year = yearFromTitle[1];
     }
-    // From meta: <a href=".../year/2026/">2026</a>
     if (!year) {
-      const yearFromMeta = block.match(/\/year\/(\d{4})\//);
+      // Cari /year/YYYY/ di context sekitar (500 chars setelah link)
+      const context = html.slice(match.index!, match.index! + 500);
+      const yearFromMeta = context.match(/\/year\/(\d{4})\//);
       if (yearFromMeta) {
         year = yearFromMeta[1];
       }
