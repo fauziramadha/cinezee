@@ -106,7 +106,7 @@ export default function Home() {
       )}
 
       {/* Content rows */}
-      <div className="relative z-10 -mt-8 space-y-8 pb-16 md:-mt-16">
+      <div className="relative z-10 space-y-8 pb-16 pt-6">
         {/* Continue Watching */}
         <WatchHistory />
 
