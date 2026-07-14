@@ -51,14 +51,17 @@ export async function GET(request: NextRequest) {
 
   const responseHeaders = new Headers();
 
-  const contentType = upstreamResponse.headers.get("content-type");
-  if (contentType) {
-    responseHeaders.set("Content-Type", contentType);
+    // Content-Type — FORCE correct type berdasarkan extension
+  // (s1.cccdn.net return "application/octet-stream" untuk VTT, browser nolak sebagai subtitle)
+  if (streamUrl.includes(".vtt")) {
+    responseHeaders.set("Content-Type", "text/vtt; charset=utf-8");
+  } else if (streamUrl.includes(".m3u8")) {
+    responseHeaders.set("Content-Type", "application/vnd.apple.mpegurl");
+  } else if (streamUrl.includes(".mp4")) {
+    responseHeaders.set("Content-Type", "video/mp4");
   } else {
-    if (streamUrl.includes(".m3u8")) responseHeaders.set("Content-Type", "application/vnd.apple.mpegurl");
-    else if (streamUrl.includes(".mp4")) responseHeaders.set("Content-Type", "video/mp4");
-    else if (streamUrl.includes(".vtt")) responseHeaders.set("Content-Type", "text/vtt");
-    else responseHeaders.set("Content-Type", "application/octet-stream");
+    const upstreamCt = upstreamResponse.headers.get("content-type");
+    responseHeaders.set("Content-Type", upstreamCt || "application/octet-stream");
   }
 
   const contentLength = upstreamResponse.headers.get("content-length");
