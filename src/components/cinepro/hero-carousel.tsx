@@ -86,7 +86,7 @@ export function HeroCarousel({ movies }: HeroCarouselProps) {
   };
 
   return (
-    <section className="relative h-[70vh] min-h-[480px] w-full overflow-hidden md:h-[85vh]">
+    <section className="relative h-[45vh] min-h-[300px] w-full overflow-hidden sm:h-[50vh] md:h-[55vh]">
       {/* Embla viewport */}
       <div ref={emblaRef} className="h-full overflow-hidden">
         <div className="flex h-full">
