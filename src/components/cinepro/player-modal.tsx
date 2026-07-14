@@ -361,42 +361,42 @@ export function PlayerModal() {
 
   // ============================================================
   // AUTO-LOAD SUBTITLE — Prioritas: Indonesia > English > First
+  // AUTO-SHOW: paksa mode="showing" di multiple events
+  //           (iOS Safari gak auto-show sampai video play)
   // ============================================================
   useEffect(() => {
     if (!streamUrl || subtitles.length === 0) return;
     const video = videoRef.current;
     if (!video) return;
 
-    const loadSubtitle = () => {
-      // Clear existing <track> elements
+    // ============================================================
+    // PRIORITY: Indonesian > English (Full) > English (any) > First
+    // ============================================================
+    const indoSub = subtitles.find(
+      (s) =>
+        s.label.toLowerCase().includes("indonesia") ||
+        s.label.toLowerCase().includes("bahasa indonesia")
+    );
+    const englishFull = subtitles.find(
+      (s) => s.language === "english" && s.type === "full"
+    );
+    const englishAny = subtitles.find((s) => s.language === "english");
+    const subToLoad = indoSub || englishFull || englishAny || subtitles[0];
+
+    if (!subToLoad) return;
+
+    // ============================================================
+    // Function: tambah track + paksa enable
+    // ============================================================
+    const loadAndEnableSubtitle = () => {
+      // Clear existing tracks
       const existingTracks = video.querySelectorAll("track");
       existingTracks.forEach((t) => t.remove());
 
-      // ============================================================
-      // PRIORITY: Indonesian > English > First available
-      // ============================================================
-      // Detection: cek label (lebih reliable daripada language field)
-      // karena cinemacity parse "Bahasa Indonesia" → language: "bahasa"
-      // dan "Bahasa Melayu" → language: "bahasa" (sama!)
-      const indoSub = subtitles.find(
-        (s) =>
-          s.label.toLowerCase().includes("indonesia") ||
-          s.label.toLowerCase().includes("bahasa indonesia")
-      );
-      const englishSub = subtitles.find(
-        (s) => s.language === "english" && s.type === "full"
-      );
-      const englishAny = subtitles.find((s) => s.language === "english");
-      const subToLoad = indoSub || englishSub || englishAny || subtitles[0];
-
-      if (!subToLoad) return;
-
-      console.log("[Subtitle] Loading:", subToLoad.label, "→", subToLoad.url.substring(0, 80));
-
+      // Add new track
       const track = document.createElement("track");
       track.kind = "subtitles";
       track.label = subToLoad.label;
-      // Set srclang proper (id untuk Indonesia, en untuk English)
       if (subToLoad.label.toLowerCase().includes("indonesia")) {
         track.srclang = "id";
       } else if (subToLoad.language === "english") {
@@ -408,27 +408,60 @@ export function PlayerModal() {
       track.default = true;
       video.appendChild(track);
 
-      // Enable track setelah di-load
-      setTimeout(() => {
-        const tracks = video.textTracks;
-        for (let i = tracks.length - 1; i >= 0; i--) {
-          if (tracks[i].mode === "disabled") {
-            tracks[i].mode = "showing";
-            console.log("[Subtitle] Enabled:", tracks[i].label);
-            break;
-          }
-        }
-      }, 800);
+      console.log("[Subtitle] Track added:", subToLoad.label);
     };
 
-    // Wait for video metadata loaded (lebih reliable daripada setTimeout)
+    // ============================================================
+    // Function: paksa enable track (set mode = "showing")
+    // Dipanggil berkali-kali di multiple events karena iOS Safari
+    // reset mode ke "disabled" sampai video benar-benar play
+    // ============================================================
+    const forceEnableSubtitle = () => {
+      const tracks = video.textTracks;
+      for (let i = 0; i < tracks.length; i++) {
+        const t = tracks[i];
+        if (t.label === subToLoad.label && t.mode !== "showing") {
+          t.mode = "showing";
+          console.log("[Subtitle] Force-enabled:", t.label, "→", t.mode);
+        }
+      }
+    };
+
+    // ============================================================
+    // Execute: load track dulu, lalu paksa enable di multiple events
+    // ============================================================
     if (video.readyState >= 1) {
-      const timer = setTimeout(loadSubtitle, 300);
-      return () => clearTimeout(timer);
+      loadAndEnableSubtitle();
     } else {
-      video.addEventListener("loadedmetadata", loadSubtitle, { once: true });
-      return () => video.removeEventListener("loadedmetadata", loadSubtitle);
+      video.addEventListener("loadedmetadata", loadAndEnableSubtitle, { once: true });
     }
+
+    // Paksa enable di multiple events (iOS Safari butuh ini)
+    const onLoadedMetadata = () => {
+      loadAndEnableSubtitle();
+      setTimeout(forceEnableSubtitle, 100);
+      setTimeout(forceEnableSubtitle, 500);
+    };
+    const onCanPlay = () => forceEnableSubtitle();
+    const onPlay = () => {
+      forceEnableSubtitle();
+      setTimeout(forceEnableSubtitle, 500);
+      setTimeout(forceEnableSubtitle, 1500);
+    };
+
+    video.addEventListener("loadedmetadata", onLoadedMetadata);
+    video.addEventListener("canplay", onCanPlay);
+    video.addEventListener("play", onPlay);
+
+    // Also try force-enable periodically (fallback)
+    const interval = setInterval(forceEnableSubtitle, 2000);
+
+    return () => {
+      video.removeEventListener("loadedmetadata", onLoadedMetadata);
+      video.removeEventListener("canplay", onCanPlay);
+      video.removeEventListener("play", onPlay);
+      clearInterval(interval);
+    };
   }, [streamUrl, subtitles]);
 
   // ============================================================
