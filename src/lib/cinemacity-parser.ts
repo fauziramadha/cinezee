@@ -6,7 +6,9 @@
  * Changelog:
  *   - v2: parseMovieList pakai "nearest xfieldimage" approach (fix poster bleeds)
  *   - v3: extractStreamFromHtml support TV series nested folder structure
- *         { title: "Season 1", folder: [{ title: "Episode 1", file: "..." }] }
+ *   - v4: Support multiple servers (Movie & TV Series)
+ *         - Movie: [{title: "WEB-DL", file: "..."}, {title: "TS-CAM", file: "..."}]
+ *         - TV: [{title: "Server 1", folder: [{title: "Season 1", folder: [...]}]}]
  */
 
 export interface CinemacityMovie {
@@ -17,6 +19,14 @@ export interface CinemacityMovie {
   url: string;
   poster?: string;
   year?: string;
+}
+
+export interface CinemacityServer {
+  title: string;
+  streamUrl: string;
+  subtitles?: CinemacitySubtitle[];
+  // Untuk TV series dengan multiple servers: episodes per server
+  episodes?: CinemacityStreamEpisode[];
 }
 
 export interface CinemacityDetail {
@@ -37,7 +47,8 @@ export interface CinemacityDetail {
   qualities?: string[];
   subtitles?: CinemacitySubtitle[];
   episodes?: CinemacityEpisode[];
-  streamEpisodes?: CinemacityStreamEpisode[];  // TV cinemacity (dengan stream URL per episode)
+  streamEpisodes?: CinemacityStreamEpisode[];
+  servers?: CinemacityServer[];  // Multiple server options (Movie & TV)
   seasons?: number;
 }
 
@@ -102,20 +113,13 @@ export function parseSlugFromUrl(url: string): {
 }
 
 // =====================================================
-// PARSER 1: HOMEPAGE / SEARCH → list film (IMPROVED v2)
+// PARSER 1: HOMEPAGE / SEARCH → list film
 // =====================================================
-// Strategi: 
-//   1. Cari SEMUA <img class="xfieldimage ..."> positions di HTML
-//   2. Untuk setiap movie link, cari xfieldimage TERDEKAT sebelum link
-//   3. Itu poster-nya film tersebut
-//
-// Kenapa: cinemacity punya 3 section types (dle-fast_item, dar-short_item, 
-// dar-home_item) dengan class berbeda. Block-based approach gak reliable.
 export function parseMovieList(html: string, baseUrl = "https://cinemacity.cc"): CinemacityMovie[] {
   const movies: CinemacityMovie[] = [];
   const seen = new Set<string>();
 
-  // === Step 1: Find ALL xfieldimage images (poster + background) ===
+  // Find ALL xfieldimage images (poster + background)
   const imgPattern = /<img[^>]*class="[^"]*xfieldimage[^"]*"[^>]*src="([^"]+)"/gi;
   const images: Array<{ pos: number; src: string }> = [];
   let imgMatch;
@@ -123,7 +127,7 @@ export function parseMovieList(html: string, baseUrl = "https://cinemacity.cc"):
     images.push({ pos: imgMatch.index, src: imgMatch[1] });
   }
 
-  // === Step 2: Find all movie/TV links ===
+  // Find all movie/TV links
   const linkPattern = /href="(?:https?:\/\/cinemacity\.cc)?\/(movies|tv-series)\/(\d+)-([^"\/]+?)\.html"/g;
   let match;
 
@@ -133,7 +137,7 @@ export function parseMovieList(html: string, baseUrl = "https://cinemacity.cc"):
     if (seen.has(slug)) continue;
     seen.add(slug);
 
-    // === Step 3: Find nearest xfieldimage BEFORE this link ===
+    // Find nearest xfieldimage BEFORE this link
     let poster: string | undefined;
     for (let i = images.length - 1; i >= 0; i--) {
       if (images[i].pos < match.index!) {
@@ -142,21 +146,20 @@ export function parseMovieList(html: string, baseUrl = "https://cinemacity.cc"):
       }
     }
 
-    // Normalize poster URL
     if (poster) {
       poster = poster.startsWith("http")
         ? poster
         : baseUrl + (poster.startsWith("/") ? "" : "/") + poster;
     }
 
-    // === Step 4: Extract TITLE from link text ===
+    // Extract TITLE from link text
     let title = slugPart.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
     const afterMatch = html.slice(match.index!).match(/^[^>]*>([^<]+)</);
     if (afterMatch && afterMatch[1]) {
       title = afterMatch[1].trim();
     }
 
-    // === Step 5: Extract YEAR ===
+    // Extract YEAR
     let year: string | undefined;
     const yearFromTitle = title.match(/\((\d{4})\)/);
     if (yearFromTitle) {
@@ -170,7 +173,6 @@ export function parseMovieList(html: string, baseUrl = "https://cinemacity.cc"):
       }
     }
 
-    // Clean title (remove year suffix)
     const cleanTitle = title.replace(/\s*\(\d{4}.*?\)\s*$/, "").trim();
 
     movies.push({
@@ -201,33 +203,28 @@ export function parseDetailPage(html: string, url: string): CinemacityDetail {
     url,
   };
 
-  // Title dari <title> tag
   const titleMatch = html.match(/<title>([^<]+)<\/title>/i);
   if (titleMatch) {
     detail.title = titleMatch[1].split("»")[0].trim();
   }
 
-  // Description dari meta
   const descMatch = html.match(/<meta\s+name="description"\s+content="([^"]+)"/i);
   if (descMatch) {
     detail.description = descMatch[1];
   }
 
-  // Poster/backdrop dari og:image
   const ogImageMatch = html.match(/<meta\s+property="og:image"\s+content="([^"]+)"/i);
   if (ogImageMatch) {
     detail.backdrop = ogImageMatch[1];
     detail.poster = ogImageMatch[1];
   }
 
-  // Year dari title
   const yearMatch = detail.title.match(/\((\d{4})/);
   if (yearMatch) {
     detail.year = yearMatch[1];
     detail.title = detail.title.replace(/\s*\(\d{4}.*?\)\s*$/, "").trim();
   }
 
-  // Genres dari keywords meta
   const keywordsMatch = html.match(/<meta\s+name="keywords"\s+content="([^"]+)"/i);
   if (keywordsMatch) {
     detail.genres = keywordsMatch[1].split(",").map((g) => g.trim()).filter(Boolean);
@@ -239,9 +236,11 @@ export function parseDetailPage(html: string, url: string): CinemacityDetail {
     detail.streamUrl = streamInfo.streamUrl;
     detail.qualities = streamInfo.qualities;
     detail.subtitles = streamInfo.subtitles;
-    // TV series: simpan episode list dengan stream URLs
     if (streamInfo.episodes) {
       detail.streamEpisodes = streamInfo.episodes;
+    }
+    if (streamInfo.servers) {
+      detail.servers = streamInfo.servers;
     }
   }
 
@@ -255,14 +254,17 @@ export function parseDetailPage(html: string, url: string): CinemacityDetail {
 // =====================================================
 // PARSER 3: EXTRACT STREAM URL DARI eval(atob)
 // =====================================================
-// Support 2 struktur:
-//   1. Movie (flat): [{ title: "WEB-DL", file: "https://...", subtitle: "..." }]
-//   2. TV Series (nested): [{ title: "Season 1", folder: [{ title: "Episode 1", file: "...", subtitle: "..." }] }]
+// Support 4 struktur:
+//   1. Movie single server:  [{ title: "WEB-DL", file: "..." }]
+//   2. Movie multi servers:  [{ title: "TS-DKS", file: "..." }, { title: "CAM-Rip", file: "..." }]
+//   3. TV single server:     [{ title: "Season 1", folder: [{ title: "Ep 1", file: "..." }] }]
+//   4. TV multi servers:     [{ title: "Server 1", folder: [{ title: "Season 1", folder: [...] }] }]
 export function extractStreamFromHtml(html: string): {
   streamUrl?: string;
   qualities?: string[];
   subtitles?: CinemacitySubtitle[];
   episodes?: CinemacityStreamEpisode[];
+  servers?: CinemacityServer[];
 } | null {
   const atobPattern = /atob\("([^"]+)"\)/g;
   const matches = [...html.matchAll(atobPattern)];
@@ -287,24 +289,16 @@ export function extractStreamFromHtml(html: string): {
 
         // ============================================================
         // CASE 1: MOVIE — flat structure { title, file, subtitle }
-        // Bisa ada 1 source (WEB-DL) ATAU multiple sources (TS, CAM-Rip, dll)
+        // Bisa single atau multiple servers
         // ============================================================
         if (firstSource.file && typeof firstSource.file === "string") {
           const streamUrl = firstSource.file as string;
           const qualities = extractQualities(streamUrl);
           const subtitles = parseSubtitles(firstSource.subtitle);
 
-          // ============================================================
-          // Detect multiple servers (kalau fileArray.length > 1)
-          // ============================================================
-          let servers: Array<{
-            title: string;
-            streamUrl: string;
-            subtitles?: CinemacitySubtitle[];
-          }> = [];
-
+          // Detect multiple servers
+          let servers: CinemacityServer[] = [];
           if (fileArray.length > 1) {
-            // Multiple servers — collect all
             for (const src of fileArray) {
               if (src.file && typeof src.file === "string") {
                 servers.push({
@@ -327,9 +321,77 @@ export function extractStreamFromHtml(html: string): {
         }
 
         // ============================================================
-        // CASE 2: TV SERIES — nested { title: "Season X", folder: [...] }
+        // CASE 2: TV SERIES — nested folder structure
         // ============================================================
         if (firstSource.folder && Array.isArray(firstSource.folder)) {
+          // Cek level 2: apakah ini TV multi-server atau TV single-server?
+          const secondLevel = firstSource.folder[0];
+
+          // ============================================================
+          // CASE 2a: TV MULTI-SERVER — 3 levels nested
+          // [{ title: "Server 1", folder: [{ title: "Season 1", folder: [{ title: "Ep 1", file: "..." }] }] }]
+          // ============================================================
+          if (secondLevel && secondLevel.folder && Array.isArray(secondLevel.folder)) {
+            console.log("[PARSER] TV Series with multiple servers detected");
+            const servers: CinemacityServer[] = [];
+
+            for (const serverObj of fileArray) {
+              const serverTitle = serverObj.title || `Server ${servers.length + 1}`;
+              const serverEpisodes: CinemacityStreamEpisode[] = [];
+
+              if (!serverObj.folder || !Array.isArray(serverObj.folder)) continue;
+
+              for (const seasonObj of serverObj.folder) {
+                const seasonTitle = seasonObj.title || "Season 1";
+                const seasonMatch = seasonTitle.match(/Season\s*(\d+)/i);
+                const seasonNum = seasonMatch ? seasonMatch[1] : undefined;
+
+                if (!seasonObj.folder || !Array.isArray(seasonObj.folder)) continue;
+
+                for (const epObj of seasonObj.folder) {
+                  if (!epObj.file) continue;
+                  const epTitle = epObj.title || "Episode";
+                  const epMatch = epTitle.match(/Episode\s*(\d+)/i);
+                  const epNum = epMatch ? epMatch[1] : undefined;
+
+                  serverEpisodes.push({
+                    title: epTitle,
+                    streamUrl: epObj.file,
+                    subtitles: parseSubtitles(epObj.subtitle),
+                    season: seasonNum,
+                    episode: epNum,
+                  });
+                }
+              }
+
+              servers.push({
+                title: serverTitle,
+                streamUrl: serverEpisodes[0]?.streamUrl || "",
+                subtitles: serverEpisodes[0]?.subtitles,
+                episodes: serverEpisodes,
+              });
+            }
+
+            if (servers.length > 0) {
+              const firstServer = servers[0];
+              const firstEp = firstServer.episodes?.[0];
+              const qualities = firstEp ? extractQualities(firstEp.streamUrl) : [];
+              console.log(`[PARSER] TV has ${servers.length} servers, ${firstServer.episodes?.length || 0} episodes in server 1`);
+              return {
+                streamUrl: firstEp?.streamUrl,
+                qualities,
+                subtitles: firstEp?.subtitles,
+                episodes: firstServer.episodes,
+                servers,
+              };
+            }
+          }
+
+          // ============================================================
+          // CASE 2b: TV SINGLE-SERVER — 2 levels nested
+          // [{ title: "Season 1", folder: [{ title: "Ep 1", file: "..." }] }]
+          // ============================================================
+          console.log("[PARSER] TV Series single server detected");
           const episodes: CinemacityStreamEpisode[] = [];
 
           for (const seasonObj of fileArray) {
@@ -356,7 +418,6 @@ export function extractStreamFromHtml(html: string): {
           }
 
           if (episodes.length > 0) {
-            // Return episode pertama sebagai default stream
             const firstEp = episodes[0];
             const qualities = extractQualities(firstEp.streamUrl);
             return {
@@ -394,7 +455,6 @@ function extractQualities(streamUrl: string): string[] {
 // =====================================================
 // HELPER: Parse subtitles dari Playerjs format
 // =====================================================
-// Format: "[English (Full)]https://...,[SDH English]https://..."
 function parseSubtitles(subtitleField: string | undefined): CinemacitySubtitle[] {
   const subtitles: CinemacitySubtitle[] = [];
   if (!subtitleField) return subtitles;
@@ -418,11 +478,8 @@ function parseSubtitles(subtitleField: string | undefined): CinemacitySubtitle[]
 }
 
 // =====================================================
-// PARSER 4: EPISODES (untuk TV series — HTML-based, fallback)
+// PARSER 4: EPISODES (HTML-based fallback)
 // =====================================================
-// Note: cinemacity TV series pakai Playerjs folder structure (bukan HTML links),
-// jadi function ini biasanya return empty array. Stream episodes ada di
-// detail.streamEpisodes (dari extractStreamFromHtml).
 function extractEpisodes(html: string): CinemacityEpisode[] {
   const episodes: CinemacityEpisode[] = [];
   const seen = new Set<string>();
