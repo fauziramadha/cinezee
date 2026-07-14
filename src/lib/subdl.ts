@@ -4,10 +4,11 @@
  * SubDL API integration untuk subtitle Indonesia.
  *
  * Alur:
- *   1. Search subtitle by film name (filter language=ID langsung di API)
- *   2. Download ZIP file dari dl.subdl.com
- *   3. Unzip (extract .srt dari dalam ZIP)
- *   4. Cache ke D1 (TTL 7 hari)
+ *   1. Search subtitle by film name (API language filter gak bekerja, filter manual)
+ *   2. Filter manual: cari yang language === "ID"
+ *   3. Download ZIP file dari dl.subdl.com
+ *   4. Unzip (extract .srt dari dalam ZIP)
+ *   5. Cache ke D1 (TTL 7 hari)
  *
  * API: https://api.subdl.com/api/v1/subtitles
  * Download: https://dl.subdl.com/subtitle/{id}-{id} (returns ZIP)
@@ -38,7 +39,9 @@ async function hashKey(input: string): Promise<string> {
 }
 
 // ============================================================
-// Search SubDL API (filter Indonesian langsung)
+// Search SubDL API
+// NOTE: language filter di API TIDAK BEKERJA (tetap return semua bahasa)
+// Filter manual di client side (di getIndonesianSubtitle)
 // ============================================================
 interface SubDLResult {
   release_name: string;
@@ -53,14 +56,9 @@ interface SubDLResult {
 
 export async function searchSubdlSubtitles(
   filmName: string,
-  apiKey: string,
-  language?: string
+  apiKey: string
 ): Promise<SubDLResult[]> {
-  // Build URL dengan language filter (ID untuk Indonesian)
-  let url = `${SUBDL_API_BASE}?api_key=${apiKey}&film_name=${encodeURIComponent(filmName)}`;
-  if (language) {
-    url += `&language=${language}`;
-  }
+  const url = `${SUBDL_API_BASE}?api_key=${apiKey}&film_name=${encodeURIComponent(filmName)}`;
   console.log("[SubDL] Search:", url.replace(apiKey, "***"));
 
   const res = await fetch(url, {
@@ -81,11 +79,22 @@ export async function searchSubdlSubtitles(
 }
 
 // ============================================================
+// Filter Indonesian subtitles (manual — API filter gak bekerja)
+// ============================================================
+export function filterIndonesian(results: SubDLResult[]): SubDLResult[] {
+  return results.filter(
+    (s) =>
+      s.language === "ID" ||
+      s.lang?.toLowerCase().includes("indonesian") ||
+      s.lang?.toLowerCase().includes("indonesia")
+  );
+}
+
+// ============================================================
 // Extract download URL dari SubDL result
 // /subtitle/3312671-10001056.zip?api_key=... → https://dl.subdl.com/subtitle/3312671-10001056
 // ============================================================
 function extractDownloadUrl(resultUrl: string): string | null {
-  // Pattern: /subtitle/{id}-{id}.zip?api_key=...
   const match = resultUrl.match(/\/subtitle\/(\d+-\d+)/);
   if (!match) return null;
   return `${SUBDL_DL_BASE}/${match[1]}`;
@@ -99,45 +108,27 @@ async function unzipSrtFromZip(zipBuffer: ArrayBuffer): Promise<string | null> {
   const view = new DataView(zipBuffer);
   const bytes = new Uint8Array(zipBuffer);
 
-  // ============================================================
   // Parse Local File Header (PK\x03\x04)
-  // ============================================================
-  // Offset 0: Signature (4 bytes) = 0x04034b50
   if (view.getUint32(0, true) !== 0x04034b50) {
     console.error("[Unzip] Invalid ZIP signature");
     return null;
   }
 
-  // Offset 8: Compression method (2 bytes) — 0=store, 8=deflate
   const compressionMethod = view.getUint16(8, true);
-
-  // Offset 18: Compressed size (4 bytes)
   let compressedSize = view.getUint32(18, true);
-
-  // Offset 26: Filename length (2 bytes)
   const filenameLength = view.getUint16(26, true);
-
-  // Offset 28: Extra field length (2 bytes)
   const extraFieldLength = view.getUint16(28, true);
-
-  // Data starts at: 30 + filenameLength + extraFieldLength
   const dataOffset = 30 + filenameLength + extraFieldLength;
 
-  // Cek apakah filename adalah .srt
   const filename = new TextDecoder().decode(bytes.slice(30, 30 + filenameLength));
   console.log(`[Unzip] File: ${filename}, method: ${compressionMethod}, compressed: ${compressedSize}`);
 
   if (!filename.toLowerCase().endsWith(".srt")) {
     console.warn("[Unzip] First file bukan .srt:", filename);
-    // Tetap coba extract (mungkin .srt di dalam)
   }
 
-  // ============================================================
-  // Extract compressed data
-  // ============================================================
   // Kalau compressed size = 0 (data descriptor used), cari end signature
   if (compressedSize === 0) {
-    // Cari Central Directory signature (PK\x01\x02)
     for (let i = dataOffset; i < zipBuffer.byteLength - 4; i++) {
       if (
         bytes[i] === 0x50 &&
@@ -158,9 +149,6 @@ async function unzipSrtFromZip(zipBuffer: ArrayBuffer): Promise<string | null> {
 
   const compressedData = bytes.slice(dataOffset, dataOffset + compressedSize);
 
-  // ============================================================
-  // Decompress
-  // ============================================================
   let decompressedBuffer: ArrayBuffer;
 
   if (compressionMethod === 0) {
@@ -183,10 +171,8 @@ async function unzipSrtFromZip(zipBuffer: ArrayBuffer): Promise<string | null> {
     return null;
   }
 
-  // Decode as UTF-8
   const text = new TextDecoder("utf-8").decode(decompressedBuffer);
 
-  // Validate: pastikan ini SRT
   if (text.length < 50 || text.includes("<!DOCTYPE html>")) {
     console.warn("[Unzip] Extracted content bukan SRT valid");
     return null;
@@ -227,7 +213,6 @@ export async function downloadSubdlSrt(
 
     const zipBuffer = await res.arrayBuffer();
 
-    // Cek apakah ini ZIP (PK signature)
     const view = new DataView(zipBuffer);
     if (view.getUint32(0, true) !== 0x04034b50) {
       // Bukan ZIP — mungkin langsung SRT
@@ -239,7 +224,6 @@ export async function downloadSubdlSrt(
       return null;
     }
 
-    // Unzip
     const srtText = await unzipSrtFromZip(zipBuffer);
     return srtText;
   } catch (err) {
@@ -344,20 +328,35 @@ export async function getIndonesianSubtitle(params: {
     return { text: cached, format: "srt" };
   }
 
-  // 2. Search SubDL (filter language=ID langsung di API)
+  // 2. Search SubDL (TANPA language filter — filter manual di bawah)
   let searchQuery = title;
   if (type === "tv" && season && episode) {
     searchQuery = `${title} S${season.padStart(2, "0")}E${episode.padStart(2, "0")}`;
   }
 
-  console.log("[SubDL] Searching Indonesian for:", searchQuery);
-  const results = await searchSubdlSubtitles(searchQuery, apiKey, "ID");
-  if (results.length === 0) {
-    console.log("[SubDL] No Indonesian results");
+  console.log("[SubDL] Searching for:", searchQuery);
+  const allResults = await searchSubdlSubtitles(searchQuery, apiKey);
+  if (allResults.length === 0) {
+    console.log("[SubDL] No results from API");
     return null;
   }
 
-  console.log(`[SubDL] Found ${results.length} Indonesian subtitles`);
+  // ============================================================
+  // FILTER MANUAL: cari yang language === "ID"
+  // (SubDL API language filter gak bekerja, tetap return semua bahasa)
+  // ============================================================
+  const results = filterIndonesian(allResults);
+
+  console.log(
+    `[SubDL] Total results: ${allResults.length}, Indonesian: ${results.length}`
+  );
+
+  if (results.length === 0) {
+    console.log("[SubDL] No Indonesian subtitles found");
+    const langs = allResults.map((s) => `${s.language}/${s.lang}`).join(", ");
+    console.log("[SubDL] Available languages:", langs);
+    return null;
+  }
 
   // 3. Try download (loop sampai dapet yang valid)
   for (const sub of results) {
