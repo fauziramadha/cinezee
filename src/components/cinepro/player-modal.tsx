@@ -34,6 +34,13 @@ interface StreamEpisode {
   episode?: string;
 }
 
+interface ServerOption {
+  title: string;
+  streamUrl: string;
+  subtitles?: Subtitle[];
+  episodes?: StreamEpisode[];
+}
+
 // ============================================================
 // SUBTITLE PREFERENCE — persist ke localStorage
 // ============================================================
@@ -55,27 +62,15 @@ function saveSubtitlePref(label: string, language: string) {
   } catch {}
 }
 
-// Get saved pref OR default (Indonesian)
-function getEffectiveDefaultSub(
-  subtitles: Subtitle[]
-): Subtitle | null {
+function getEffectiveDefaultSub(subtitles: Subtitle[]): Subtitle | null {
   const saved = getSavedSubtitlePref();
-
-  // Kalau user pernah pilih "off", return null (no subtitle)
-  if (saved && saved.label === "__off__") {
-    return null;
-  }
-
-  // Cari subtitle yang cocok dengan saved preference
+  if (saved && saved.label === "__off__") return null;
   if (saved) {
     const matchByLabel = subtitles.find((s) => s.label === saved.label);
     if (matchByLabel) return matchByLabel;
-
     const matchByLang = subtitles.find((s) => s.language === saved.language);
     if (matchByLang) return matchByLang;
   }
-
-  // Default: Indonesian > English (Full) > First
   const indoSub = subtitles.find(
     (s) =>
       s.label.toLowerCase().includes("indonesia") ||
@@ -89,13 +84,12 @@ function getEffectiveDefaultSub(
 }
 
 // ============================================================
-// HLS.js Loader — cache busting untuk m3u8 URLs
+// HLS.js Loader
 // ============================================================
 let hlsPromise: Promise<any> | null = null;
 async function loadHls(): Promise<any> {
   if (typeof window === "undefined") return null;
   if ((window as any).Hls) return (window as any).Hls;
-
   if (!hlsPromise) {
     hlsPromise = new Promise((resolve, reject) => {
       const script = document.createElement("script");
@@ -139,6 +133,16 @@ export function PlayerModal() {
   const [currentEpisodeIdx, setCurrentEpisodeIdx] = useState<number>(0);
   const [retryCount, setRetryCount] = useState(0);
 
+  // NEW: Server selector
+  const [servers, setServers] = useState<ServerOption[]>([]);
+  const [currentServerIdx, setCurrentServerIdx] = useState<number>(0);
+
+  // NEW: Quality & Audio
+  const [availableQualities, setAvailableQualities] = useState<Array<{ height: number; level: number }>>([]);
+  const [currentQuality, setCurrentQuality] = useState<number>(-1);
+  const [availableAudioTracks, setAvailableAudioTracks] = useState<Array<{ id: number; name: string }>>([]);
+  const [currentAudioTrack, setCurrentAudioTrack] = useState<number>(-1);
+
   const videoRef = useRef<HTMLVideoElement>(null);
   const hlsRef = useRef<any>(null);
   const currentStreamUrlRef = useRef<string>("");
@@ -168,16 +172,18 @@ export function PlayerModal() {
   const changeStreamSource = useCallback((newUrl: string) => {
     const video = videoRef.current;
     if (!video || !newUrl) return;
-
     currentStreamUrlRef.current = newUrl;
     setStreamUrl(newUrl);
-
+    // Reset quality/audio trackers (will be re-detected by HLS)
+    setAvailableQualities([]);
+    setAvailableAudioTracks([]);
+    setCurrentQuality(-1);
+    setCurrentAudioTrack(-1);
     if (video.canPlayType("application/vnd.apple.mpegurl") && !hlsRef.current) {
       video.src = newUrl;
       video.play().catch(() => {});
       return;
     }
-
     if (hlsRef.current) {
       hlsRef.current.loadSource(newUrl);
     }
@@ -233,26 +239,39 @@ export function PlayerModal() {
         video.play().catch(() => {});
       });
 
+      // ============================================================
+      // QUALITY & AUDIO DETECTION
+      // ============================================================
+      hls.on(Hls.Events.MANIFEST_PARSED, () => {
+        const levels = hls.levels || [];
+        const qualities = levels
+          .map((level: any, idx: number) => ({ height: level.height || 0, level: idx }))
+          .filter((q: any) => q.height > 0);
+        setAvailableQualities(qualities);
+      });
+
+      hls.on(Hls.Events.AUDIO_TRACKS_CREATED, () => {
+        const audioTracks = hls.audioTracks || [];
+        const tracks = audioTracks.map((track: any, idx: number) => ({
+          id: idx,
+          name: track.name || track.lang || `Track ${idx + 1}`,
+        }));
+        setAvailableAudioTracks(tracks);
+      });
+
       hls.on(Hls.Events.ERROR, async (_event: any, data: any) => {
         if (!data.fatal) return;
-
         const currentMedia = playerMediaRef.current;
         console.warn("[HLS FATAL ERROR]", data.type, data.details);
-
         switch (data.type) {
           case Hls.ErrorTypes.NETWORK_ERROR:
-            console.log("[HLS] Network error, retrying...");
             hls.startLoad();
             break;
-
           case Hls.ErrorTypes.MEDIA_ERROR:
-            console.log("[HLS] Media error, recovering...");
             hls.recoverMediaError();
             break;
-
           default:
             if (currentMedia?.source === "cinemacity" && currentMedia?.slug && retryCount < 3) {
-              console.log(`[HLS] Fatal error, refreshing stream URL (retry ${retryCount + 1}/3)...`);
               setRetryCount((c) => c + 1);
               try {
                 const freshData = await fetchCinemacityPlay(currentMedia.slug);
@@ -260,8 +279,7 @@ export function PlayerModal() {
                   changeStreamSource(freshData.streamUrl);
                   setSubtitles(freshData.subtitles || []);
                 }
-              } catch (refreshErr) {
-                console.error("[HLS] Refresh failed:", refreshErr);
+              } catch {
                 setError("Stream error. Please try again.");
                 hls.destroy();
               }
@@ -286,6 +304,7 @@ export function PlayerModal() {
       setStreamUrl("");
       setSubtitles([]);
       setEpisodes([]);
+      setServers([]);
       setError(null);
       setRetryCount(0);
       return;
@@ -303,7 +322,6 @@ export function PlayerModal() {
         }
 
         const data = await fetchCinemacityPlay(playerMedia.slug);
-
         if (cancelled) return;
 
         if (!data.streamUrl) {
@@ -314,11 +332,23 @@ export function PlayerModal() {
         currentStreamUrlRef.current = data.streamUrl;
         setSubtitles(data.subtitles || []);
 
+        // TV series: setup episodes
         const eps = (data.episodes || []) as StreamEpisode[];
         if (eps.length > 0) {
           setEpisodes(eps);
           setCurrentSeason(eps[0].season || "1");
           setCurrentEpisodeIdx(0);
+        } else {
+          setEpisodes([]);
+        }
+
+        // NEW: Multiple servers
+        const srvs = (data.servers || []) as ServerOption[];
+        if (srvs.length > 1) {
+          setServers(srvs);
+          setCurrentServerIdx(0);
+        } else {
+          setServers([]);
         }
 
         addToHistory({
@@ -349,7 +379,6 @@ export function PlayerModal() {
   // ============================================================
   useEffect(() => {
     if (!streamUrl || !videoRef.current) return;
-
     if (!hlsRef.current) {
       const video = videoRef.current;
       if (video.canPlayType("application/vnd.apple.mpegurl")) {
@@ -359,7 +388,6 @@ export function PlayerModal() {
         initHlsPlayer(streamUrl);
       }
     }
-
     return () => {
       if (hlsRef.current && !playerMedia) {
         hlsRef.current.destroy();
@@ -390,124 +418,115 @@ export function PlayerModal() {
   };
 
   // ============================================================
-  // AUTO-LOAD SUBTITLE — Load SEMUA tracks, default = saved pref OR Indonesian
-  // Save user preference saat user ganti subtitle
+  // SERVER CHANGE (Movie & TV)
+  // ============================================================
+  const handleServerChange = (idx: number) => {
+    const server = servers[idx];
+    if (!server) return;
+    setCurrentServerIdx(idx);
+    setSubtitles(server.subtitles || []);
+
+    // Kalau server punya episodes (TV multi-server), update episode list
+    if (server.episodes && server.episodes.length > 0) {
+      setEpisodes(server.episodes);
+      setCurrentSeason(server.episodes[0].season || "1");
+      setCurrentEpisodeIdx(0);
+      changeStreamSource(server.episodes[0].streamUrl);
+    } else {
+      // Movie multi-server
+      changeStreamSource(server.streamUrl);
+    }
+    console.log(`[Player] Switched to server: ${server.title}`);
+  };
+
+  // ============================================================
+  // QUALITY & AUDIO CHANGE
+  // ============================================================
+  const handleQualityChange = (level: number) => {
+    const hls = hlsRef.current;
+    if (!hls) return;
+    hls.currentLevel = level;
+    setCurrentQuality(level);
+  };
+
+  const handleAudioTrackChange = (trackId: number) => {
+    const hls = hlsRef.current;
+    if (!hls) return;
+    hls.audioTrack = trackId;
+    setCurrentAudioTrack(trackId);
+  };
+
+  // ============================================================
+  // AUTO-LOAD SUBTITLE
   // ============================================================
   useEffect(() => {
     if (!streamUrl || subtitles.length === 0) return;
     const video = videoRef.current;
     if (!video) return;
 
-    // Reset flags saat streamUrl berubah
     userInteractedRef.current = false;
     const initializationCompleteRef = { current: false };
 
-    // ============================================================
-    // DEFAULT: saved preference > Indonesian > English > First
-    // ============================================================
     const defaultSub = getEffectiveDefaultSub(subtitles);
 
-    // Case: user previously chose OFF → don't load any subtitle
     if (!defaultSub) {
-      console.log("[Subtitle] User preference: OFF");
       const existingTracks = video.querySelectorAll("track");
       existingTracks.forEach((t) => t.remove());
       userInteractedRef.current = true;
       return;
     }
 
-    // ============================================================
-    // Load SEMUA subtitle tracks
-    // ============================================================
     const loadAllTracks = () => {
       const existingTracks = video.querySelectorAll("track");
       existingTracks.forEach((t) => t.remove());
-
       subtitles.forEach((sub) => {
         const track = document.createElement("track");
         track.kind = "subtitles";
         track.label = sub.label;
-        if (sub.label.toLowerCase().includes("indonesia")) {
-          track.srclang = "id";
-        } else if (sub.language === "english") {
-          track.srclang = "en";
-        } else {
-          track.srclang = sub.language || "en";
-        }
+        if (sub.label.toLowerCase().includes("indonesia")) track.srclang = "id";
+        else if (sub.language === "english") track.srclang = "en";
+        else track.srclang = sub.language || "en";
         track.src = getStreamProxyUrl(sub.url);
-        if (sub === defaultSub) {
-          track.default = true;
-        }
+        if (sub === defaultSub) track.default = true;
         video.appendChild(track);
       });
-
-      console.log(`[Subtitle] Loaded ${subtitles.length} tracks, default: ${defaultSub.label}`);
     };
 
-    // ============================================================
-    // Force-enable default subtitle
-    // ============================================================
     const forceEnableDefault = () => {
       if (userInteractedRef.current) return;
-
       const tracks = video.textTracks;
       for (let i = 0; i < tracks.length; i++) {
         const t = tracks[i];
         if (t.label === defaultSub.label && t.mode !== "showing") {
           t.mode = "showing";
-          console.log("[Subtitle] Force-enabled:", t.label);
-          // ============================================================
-          // MARK: initialization complete setelah first successful enable
-          // ============================================================
           initializationCompleteRef.current = true;
         }
       }
     };
 
-    // ============================================================
-    // DETECT user interaction → SAVE preference
-    // Hanya save SETELAH initialization complete (avoid false "off" trigger)
-    // ============================================================
     const onTrackChange = () => {
-      // Ignore changes during initialization phase
       if (!initializationCompleteRef.current) return;
-
       const tracks = video.textTracks;
-      let defaultShowing = false;
       let otherShowing = false;
       let allDisabled = true;
-
       for (let i = 0; i < tracks.length; i++) {
         if (tracks[i].mode === "showing") {
           allDisabled = false;
-          if (tracks[i].label === defaultSub.label) {
-            defaultShowing = true;
-          } else {
+          if (tracks[i].label !== defaultSub.label) {
             otherShowing = true;
-            // SAVE: user pilih subtitle lain → simpan preferensi
             const selectedSub = subtitles.find((s) => s.label === tracks[i].label);
-            if (selectedSub) {
-              saveSubtitlePref(selectedSub.label, selectedSub.language);
-              console.log("[Subtitle] Saved user pref:", selectedSub.label);
-            }
+            if (selectedSub) saveSubtitlePref(selectedSub.label, selectedSub.language);
           }
         }
       }
-
-      // User interacted: pilih track lain ATAU off
       if (otherShowing) {
         userInteractedRef.current = true;
       } else if (allDisabled && !userInteractedRef.current) {
-        // User klik Off — hanya save kalau sebelumnya subtitle sedang show
         userInteractedRef.current = true;
         saveSubtitlePref("__off__", "off");
-        console.log("[Subtitle] Saved user pref: OFF");
       }
     };
 
-    // ============================================================
-    // Setup listeners
-    // ============================================================
     const onLoadedMetadata = () => {
       loadAllTracks();
       setTimeout(forceEnableDefault, 100);
@@ -524,25 +543,19 @@ export function PlayerModal() {
 
     const textTracks = video.textTracks;
     textTracks.addEventListener("change", onTrackChange);
-
     video.addEventListener("loadedmetadata", onLoadedMetadata);
     video.addEventListener("canplay", onCanPlay);
     video.addEventListener("play", onPlay);
 
-    // Initial load
     if (video.readyState >= 1) {
       loadAllTracks();
       setTimeout(forceEnableDefault, 100);
       setTimeout(forceEnableDefault, 500);
     }
 
-    // Periodic force-enable
     const interval = setInterval(() => {
-      if (!userInteractedRef.current) {
-        forceEnableDefault();
-      } else {
-        clearInterval(interval);
-      }
+      if (!userInteractedRef.current) forceEnableDefault();
+      else clearInterval(interval);
     }, 2000);
 
     return () => {
@@ -555,7 +568,7 @@ export function PlayerModal() {
   }, [streamUrl, subtitles]);
 
   // ============================================================
-  // CLEANUP on unmount
+  // CLEANUP
   // ============================================================
   useEffect(() => {
     return () => {
@@ -569,13 +582,16 @@ export function PlayerModal() {
   if (!playerMedia) return null;
 
   const isTV = playerMedia.type === "tv" && episodes.length > 0;
+  const hasMultipleServers = servers.length > 1;
+  const hasMultipleQualities = availableQualities.length > 1;
+  const hasMultipleAudio = availableAudioTracks.length > 1;
+  const showControlsBar = isTV || hasMultipleServers || hasMultipleQualities || hasMultipleAudio;
 
   return (
     <Dialog open={!!playerMedia} onOpenChange={(open) => !open && closePlayer()}>
       <DialogContent className="max-w-[95vw] overflow-hidden rounded-xl border-0 bg-black p-0 md:max-w-5xl">
         <DialogTitle className="sr-only">{playerMedia.title}</DialogTitle>
 
-        {/* Close button */}
         <button
           onClick={closePlayer}
           className="absolute right-2 top-2 z-30 flex h-8 w-8 items-center justify-center rounded-full bg-black/50 text-white opacity-0 backdrop-blur-sm transition-all hover:bg-red-600 hover:opacity-100 focus:opacity-100"
@@ -584,7 +600,6 @@ export function PlayerModal() {
           <X className="h-4 w-4" />
         </button>
 
-        {/* Loading */}
         {loading && (
           <div className="flex aspect-video items-center justify-center bg-black">
             <div className="flex flex-col items-center gap-3">
@@ -594,7 +609,6 @@ export function PlayerModal() {
           </div>
         )}
 
-        {/* Error */}
         {error && !loading && (
           <div className="flex aspect-video flex-col items-center justify-center gap-3 bg-black p-6 text-center">
             <AlertCircle className="h-10 w-10 text-red-500" />
@@ -605,7 +619,6 @@ export function PlayerModal() {
           </div>
         )}
 
-        {/* Video player — native controls only */}
         {!loading && !error && streamUrl && (
           <div className="relative aspect-video w-full bg-black">
             <video
@@ -619,10 +632,32 @@ export function PlayerModal() {
           </div>
         )}
 
-        {/* TV SERIES: Season & Episode Selector */}
-        {!loading && !error && isTV && (
+        {/* ============================================================ */}
+        {/* CONTROLS BAR: Server / Season / Episode / Quality / Audio    */}
+        {/* ============================================================ */}
+        {!loading && !error && streamUrl && showControlsBar && (
           <div className="flex flex-wrap items-center gap-2 border-t border-white/10 bg-zinc-950 p-3">
-            {seasons.length > 1 && (
+            {/* SERVER SELECTOR — hanya kalau multiple servers */}
+            {hasMultipleServers && (
+              <>
+                <span className="text-[10px] font-semibold uppercase tracking-wide text-white/60">Server:</span>
+                <Select value={String(currentServerIdx)} onValueChange={(v) => handleServerChange(Number(v))}>
+                  <SelectTrigger className="h-8 w-40 shrink-0 border-white/20 bg-zinc-900 text-xs text-white sm:w-52">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {servers.map((server, idx) => (
+                      <SelectItem key={idx} value={String(idx)} className="text-xs">
+                        {server.title}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </>
+            )}
+
+            {/* SEASON SELECTOR — hanya untuk TV */}
+            {isTV && seasons.length > 1 && (
               <Select value={currentSeason} onValueChange={handleSeasonChange}>
                 <SelectTrigger className="h-8 w-24 shrink-0 border-white/20 bg-zinc-900 text-xs text-white">
                   <SelectValue />
@@ -637,51 +672,94 @@ export function PlayerModal() {
               </Select>
             )}
 
-            {seasons.length === 1 && (
+            {isTV && seasons.length === 1 && (
               <span className="rounded-md bg-zinc-900 px-3 py-1.5 text-xs font-medium text-white/80">
                 Season {currentSeason}
               </span>
             )}
 
-            <Select
-              value={String(currentEpisodeIdx)}
-              onValueChange={(v) => handleEpisodeChange(Number(v))}
-            >
-              <SelectTrigger className="h-8 w-44 shrink-0 border-white/20 bg-zinc-900 text-xs text-white sm:w-56">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {currentSeasonEpisodes.map((ep, idx) => (
-                  <SelectItem key={idx} value={String(idx)} className="text-xs">
-                    E{ep.episode || idx + 1} — {ep.title}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-
-            <span className="ml-auto text-[10px] text-white/50">
-              {currentEpisodeIdx + 1} / {currentSeasonEpisodes.length}
-            </span>
-
-            <div className="flex gap-1">
-              <button
-                onClick={() => currentEpisodeIdx > 0 && handleEpisodeChange(currentEpisodeIdx - 1)}
-                disabled={currentEpisodeIdx === 0}
-                className="flex h-8 items-center justify-center rounded-md bg-zinc-900 px-3 text-xs text-white/80 transition-colors hover:bg-zinc-800 disabled:opacity-30"
+            {/* EPISODE SELECTOR — hanya untuk TV */}
+            {isTV && (
+              <Select
+                value={String(currentEpisodeIdx)}
+                onValueChange={(v) => handleEpisodeChange(Number(v))}
               >
-                ← Prev
-              </button>
-              <button
-                onClick={() =>
-                  currentEpisodeIdx < currentSeasonEpisodes.length - 1 &&
-                  handleEpisodeChange(currentEpisodeIdx + 1)
-                }
-                disabled={currentEpisodeIdx === currentSeasonEpisodes.length - 1}
-                className="flex h-8 items-center justify-center rounded-md bg-zinc-900 px-3 text-xs text-white/80 transition-colors hover:bg-zinc-800 disabled:opacity-30"
-              >
-                Next →
-              </button>
-            </div>
+                <SelectTrigger className="h-8 w-40 shrink-0 border-white/20 bg-zinc-900 text-xs text-white sm:w-52">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {currentSeasonEpisodes.map((ep, idx) => (
+                    <SelectItem key={idx} value={String(idx)} className="text-xs">
+                      E{ep.episode || idx + 1} — {ep.title}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+
+            {/* QUALITY SELECTOR — hanya kalau multiple qualities */}
+            {hasMultipleQualities && (
+              <Select value={String(currentQuality)} onValueChange={(v) => handleQualityChange(Number(v))}>
+                <SelectTrigger className="h-8 w-24 shrink-0 border-white/20 bg-zinc-900 text-xs text-white">
+                  <SelectValue placeholder="Quality" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="-1" className="text-xs">Auto</SelectItem>
+                  {availableQualities
+                    .slice()
+                    .sort((a, b) => b.height - a.height)
+                    .map((q) => (
+                      <SelectItem key={q.level} value={String(q.level)} className="text-xs">
+                        {q.height}p
+                      </SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
+            )}
+
+            {/* AUDIO TRACK SELECTOR — hanya kalau multiple audio */}
+            {hasMultipleAudio && (
+              <Select value={String(currentAudioTrack)} onValueChange={(v) => handleAudioTrackChange(Number(v))}>
+                <SelectTrigger className="h-8 w-32 shrink-0 border-white/20 bg-zinc-900 text-xs text-white sm:w-40">
+                  <SelectValue placeholder="Audio" />
+                </SelectTrigger>
+                <SelectContent>
+                  {availableAudioTracks.map((track) => (
+                    <SelectItem key={track.id} value={String(track.id)} className="text-xs">
+                      {track.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+
+            {/* Episode counter + Prev/Next (TV only) */}
+            {isTV && (
+              <>
+                <span className="ml-auto text-[10px] text-white/50">
+                  {currentEpisodeIdx + 1} / {currentSeasonEpisodes.length}
+                </span>
+                <div className="flex gap-1">
+                  <button
+                    onClick={() => currentEpisodeIdx > 0 && handleEpisodeChange(currentEpisodeIdx - 1)}
+                    disabled={currentEpisodeIdx === 0}
+                    className="flex h-8 items-center justify-center rounded-md bg-zinc-900 px-3 text-xs text-white/80 transition-colors hover:bg-zinc-800 disabled:opacity-30"
+                  >
+                    ← Prev
+                  </button>
+                  <button
+                    onClick={() =>
+                      currentEpisodeIdx < currentSeasonEpisodes.length - 1 &&
+                      handleEpisodeChange(currentEpisodeIdx + 1)
+                    }
+                    disabled={currentEpisodeIdx === currentSeasonEpisodes.length - 1}
+                    className="flex h-8 items-center justify-center rounded-md bg-zinc-900 px-3 text-xs text-white/80 transition-colors hover:bg-zinc-800 disabled:opacity-30"
+                  >
+                    Next →
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         )}
       </DialogContent>
