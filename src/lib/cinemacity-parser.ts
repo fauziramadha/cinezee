@@ -287,12 +287,43 @@ export function extractStreamFromHtml(html: string): {
 
         // ============================================================
         // CASE 1: MOVIE — flat structure { title, file, subtitle }
+        // Bisa ada 1 source (WEB-DL) ATAU multiple sources (TS, CAM-Rip, dll)
         // ============================================================
         if (firstSource.file && typeof firstSource.file === "string") {
           const streamUrl = firstSource.file as string;
           const qualities = extractQualities(streamUrl);
           const subtitles = parseSubtitles(firstSource.subtitle);
-          return { streamUrl, qualities, subtitles };
+
+          // ============================================================
+          // Detect multiple servers (kalau fileArray.length > 1)
+          // ============================================================
+          let servers: Array<{
+            title: string;
+            streamUrl: string;
+            subtitles?: CinemacitySubtitle[];
+          }> = [];
+
+          if (fileArray.length > 1) {
+            // Multiple servers — collect all
+            for (const src of fileArray) {
+              if (src.file && typeof src.file === "string") {
+                servers.push({
+                  title: src.title || `Server ${servers.length + 1}`,
+                  streamUrl: src.file,
+                  subtitles: parseSubtitles(src.subtitle),
+                });
+              }
+            }
+            console.log(`[PARSER] Movie has ${servers.length} servers:`,
+              servers.map((s) => s.title).join(", "));
+          }
+
+          return {
+            streamUrl,
+            qualities,
+            subtitles,
+            servers: servers.length > 0 ? servers : undefined,
+          };
         }
 
         // ============================================================
