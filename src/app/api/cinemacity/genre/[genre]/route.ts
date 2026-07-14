@@ -81,8 +81,15 @@ export async function GET(
     }, { status: 502 });
   }
 
-  const html = await cinemacityResponse.text();
-  const movies = parseMovieList(html, CINEMACITY_BASE);
+    const html = await cinemacityResponse.text();
+
+    // === SKIP featured section (dle-fast_item) ===
+    // Genre pages menampilkan 3 film "popular now" di atas (Obsession, Backrooms, dll)
+    // yang BUKAN film genre-specific. Skip sampai section dar-short_item.
+    const genreStart = html.indexOf('dar-short_item');
+    const genreHtml = genreStart !== -1 ? html.slice(genreStart) : html;
+
+    const movies = parseMovieList(genreHtml, CINEMACITY_BASE);
 
   const responseData = {
     genre,
