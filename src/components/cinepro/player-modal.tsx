@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useRef, useCallback } from "react";
+import { useEffect, useState, useRef, useMemo } from "react";
 import { X, AlertCircle, Loader2 } from "lucide-react";
 import {
   Dialog,
@@ -8,6 +8,13 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useAppStore } from "@/lib/store";
 import { getStreamProxyUrl, fetchCinemacityPlay } from "@/lib/cinemacity-api";
 import { cn } from "@/lib/utils";
@@ -17,6 +24,14 @@ interface Subtitle {
   url: string;
   language: string;
   type: "full" | "sdh" | "forced";
+}
+
+interface StreamEpisode {
+  title: string;
+  streamUrl: string;
+  subtitles?: Subtitle[];
+  season?: string;
+  episode?: string;
 }
 
 // Dynamically load HLS.js from CDN
@@ -45,15 +60,32 @@ export function PlayerModal() {
   const [error, setError] = useState<string | null>(null);
   const [streamUrl, setStreamUrl] = useState<string>("");
   const [subtitles, setSubtitles] = useState<Subtitle[]>([]);
+  const [episodes, setEpisodes] = useState<StreamEpisode[]>([]);
+  const [currentSeason, setCurrentSeason] = useState<string>("");
+  const [currentEpisodeIdx, setCurrentEpisodeIdx] = useState<number>(0);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const hlsRef = useRef<any>(null);
+
+  // ============================================================
+  // DERIVED: seasons list + current season episodes
+  // ============================================================
+  const seasons = useMemo(() => {
+    const set = new Set<string>();
+    episodes.forEach((e) => set.add(e.season || "1"));
+    return Array.from(set).sort((a, b) => Number(a) - Number(b));
+  }, [episodes]);
+
+  const currentSeasonEpisodes = useMemo(() => {
+    return episodes.filter((e) => (e.season || "1") === currentSeason);
+  }, [episodes, currentSeason]);
 
   // Fetch stream URL when player opens
   useEffect(() => {
     if (!playerMedia) {
       setStreamUrl("");
       setSubtitles([]);
+      setEpisodes([]);
       setError(null);
       return;
     }
@@ -79,7 +111,14 @@ export function PlayerModal() {
         setStreamUrl(data.streamUrl);
         setSubtitles(data.subtitles || []);
 
-        // Add to history
+        // TV series: setup episodes
+        const eps = (data.episodes || []) as StreamEpisode[];
+        if (eps.length > 0) {
+          setEpisodes(eps);
+          setCurrentSeason(eps[0].season || "1");
+          setCurrentEpisodeIdx(0);
+        }
+
         addToHistory({
           ...playerMedia,
           watchedAt: new Date().toISOString(),
@@ -103,28 +142,45 @@ export function PlayerModal() {
     };
   }, [playerMedia]);
 
+  // ============================================================
+  // EPISODE CHANGE: update streamUrl + subtitles
+  // ============================================================
+  const handleEpisodeChange = (idx: number) => {
+    const ep = currentSeasonEpisodes[idx];
+    if (!ep) return;
+    setCurrentEpisodeIdx(idx);
+    setStreamUrl(ep.streamUrl);
+    setSubtitles(ep.subtitles || []);
+  };
+
+  const handleSeasonChange = (season: string) => {
+    setCurrentSeason(season);
+    setCurrentEpisodeIdx(0);
+    const firstEp = episodes.find((e) => (e.season || "1") === season);
+    if (firstEp) {
+      setStreamUrl(firstEp.streamUrl);
+      setSubtitles(firstEp.subtitles || []);
+    }
+  };
+
   // Initialize video player when streamUrl changes
   useEffect(() => {
     if (!streamUrl || !videoRef.current) return;
 
     const video = videoRef.current;
-    // Gunakan stream URL LANGSUNG (s1.cccdn.net punya CORS *)
     const videoSrc = streamUrl;
 
-    // Cleanup previous HLS instance
     if (hlsRef.current) {
       hlsRef.current.destroy();
       hlsRef.current = null;
     }
 
     const initPlayer = async () => {
-      // Native HLS (Safari, iOS)
       if (video.canPlayType("application/vnd.apple.mpegurl")) {
         video.src = videoSrc;
         return;
       }
 
-      // HLS.js for Chrome/Firefox
       try {
         const Hls = await loadHls();
         if (!Hls) {
@@ -176,16 +232,13 @@ export function PlayerModal() {
     };
   }, [streamUrl]);
 
-  // Auto-load first subtitle (English) when subtitles available
-  // Native <video controls> CC button akan detect <track> elements
+  // Auto-load first English subtitle
   useEffect(() => {
     if (!streamUrl || subtitles.length === 0) return;
     const video = videoRef.current;
     if (!video) return;
 
-    // Wait for video element ready
     const timer = setTimeout(() => {
-      // Prefer English subtitle, fallback to first
       const englishSub = subtitles.find((s) => s.language === "english");
       const subToLoad = englishSub || subtitles[0];
       if (!subToLoad) return;
@@ -197,7 +250,6 @@ export function PlayerModal() {
       track.src = getStreamProxyUrl(subToLoad.url);
       video.appendChild(track);
 
-      // Enable the track after a short delay
       setTimeout(() => {
         const lastTrack = video.textTracks[video.textTracks.length - 1];
         if (lastTrack) {
@@ -211,12 +263,14 @@ export function PlayerModal() {
 
   if (!playerMedia) return null;
 
+  const isTV = playerMedia.type === "tv" && episodes.length > 0;
+
   return (
     <Dialog open={!!playerMedia} onOpenChange={(open) => !open && closePlayer()}>
       <DialogContent className="max-w-[95vw] overflow-hidden rounded-xl border-0 bg-black p-0 md:max-w-5xl">
         <DialogTitle className="sr-only">{playerMedia.title}</DialogTitle>
 
-        {/* Close button — minimal, hanya muncul saat hover */}
+        {/* Close button — minimal, hover only */}
         <button
           onClick={closePlayer}
           className="absolute right-2 top-2 z-30 flex h-8 w-8 items-center justify-center rounded-full bg-black/50 text-white opacity-0 backdrop-blur-sm transition-all hover:bg-red-600 hover:opacity-100 focus:opacity-100"
@@ -256,7 +310,81 @@ export function PlayerModal() {
               controlsList="nodownload"
               playsInline
               autoPlay
+              key={streamUrl}
             />
+          </div>
+        )}
+
+        {/* ============================================================ */}
+        {/* TV SERIES: Season & Episode Selector                        */}
+        {/* Ditaruh DI BAWAH video (di luar area video), jadi gak nutupin native controls */}
+        {/* ============================================================ */}
+        {!loading && !error && isTV && (
+          <div className="flex flex-wrap items-center gap-2 border-t border-white/10 bg-zinc-950 p-3">
+            {/* Season selector */}
+            {seasons.length > 1 && (
+              <Select value={currentSeason} onValueChange={handleSeasonChange}>
+                <SelectTrigger className="h-8 w-24 shrink-0 border-white/20 bg-zinc-900 text-xs text-white">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {seasons.map((s) => (
+                    <SelectItem key={s} value={s} className="text-xs">
+                      Season {s}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+
+            {seasons.length === 1 && (
+              <span className="rounded-md bg-zinc-900 px-3 py-1.5 text-xs font-medium text-white/80">
+                Season {currentSeason}
+              </span>
+            )}
+
+            {/* Episode selector */}
+            <Select
+              value={String(currentEpisodeIdx)}
+              onValueChange={(v) => handleEpisodeChange(Number(v))}
+            >
+              <SelectTrigger className="h-8 w-44 shrink-0 border-white/20 bg-zinc-900 text-xs text-white sm:w-56">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {currentSeasonEpisodes.map((ep, idx) => (
+                  <SelectItem key={idx} value={String(idx)} className="text-xs">
+                    E{ep.episode || idx + 1} — {ep.title}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            {/* Episode counter */}
+            <span className="ml-auto text-[10px] text-white/50">
+              {currentEpisodeIdx + 1} / {currentSeasonEpisodes.length}
+            </span>
+
+            {/* Prev / Next episode buttons */}
+            <div className="flex gap-1">
+              <button
+                onClick={() => currentEpisodeIdx > 0 && handleEpisodeChange(currentEpisodeIdx - 1)}
+                disabled={currentEpisodeIdx === 0}
+                className="flex h-8 items-center justify-center rounded-md bg-zinc-900 px-3 text-xs text-white/80 transition-colors hover:bg-zinc-800 disabled:opacity-30"
+              >
+                ← Prev
+              </button>
+              <button
+                onClick={() =>
+                  currentEpisodeIdx < currentSeasonEpisodes.length - 1 &&
+                  handleEpisodeChange(currentEpisodeIdx + 1)
+                }
+                disabled={currentEpisodeIdx === currentSeasonEpisodes.length - 1}
+                className="flex h-8 items-center justify-center rounded-md bg-zinc-900 px-3 text-xs text-white/80 transition-colors hover:bg-zinc-800 disabled:opacity-30"
+              >
+                Next →
+              </button>
+            </div>
           </div>
         )}
       </DialogContent>
