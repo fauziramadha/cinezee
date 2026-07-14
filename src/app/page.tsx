@@ -4,20 +4,20 @@ import { useEffect, useState } from "react";
 import { Header } from "@/components/cinepro/header";
 import { HeroCarousel } from "@/components/cinepro/hero-carousel";
 import { ContentRow } from "@/components/cinepro/content-row";
+import { Top10Row } from "@/components/cinepro/top10-row";
 import { WatchHistory } from "@/components/cinepro/watch-history";
 import { Footer } from "@/components/cinepro/footer";
 import { SearchModal } from "@/components/cinepro/search-modal";
 import { DetailModal } from "@/components/cinepro/detail-modal";
 import { PlayerModal } from "@/components/cinepro/player-modal";
 import { useAppStore } from "@/lib/store";
-import { fetchCinemacityHome } from "@/lib/cinemacity-api";
+import { fetchCinemacityHome, fetchCinemacityGenre } from "@/lib/cinemacity-api";
 import type { Movie } from "@/lib/tmdb";
 import { Loader2 } from "lucide-react";
 
 export default function Home() {
   const [allMovies, setAllMovies] = useState<Movie[]>([]);
-  const [movies, setMovies] = useState<Movie[]>([]);
-  const [tvShows, setTvShows] = useState<Movie[]>([]);
+  const [asianMovies, setAsianMovies] = useState<Movie[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -36,17 +36,15 @@ export default function Home() {
       setError(null);
 
       try {
-        // Fetch all content from cinemacity
-        const [all, moviesOnly, tvOnly] = await Promise.all([
+        // Fetch home + Asian genre in parallel
+        const [all, asian] = await Promise.all([
           fetchCinemacityHome("all"),
-          fetchCinemacityHome("movies"),
-          fetchCinemacityHome("tv"),
+          fetchCinemacityGenre("asian", 1).catch(() => [] as Movie[]),
         ]);
 
         if (cancelled) return;
         setAllMovies(all);
-        setMovies(moviesOnly);
-        setTvShows(tvOnly);
+        setAsianMovies(asian);
       } catch (err) {
         if (cancelled) return;
         setError(err instanceof Error ? err.message : "Failed to load content");
@@ -62,8 +60,22 @@ export default function Home() {
     };
   }, []);
 
-  // Hero = first 5 movies with posters
+  // Pisahkan jadi movies & TV untuk section unik
+  const moviesOnly = allMovies.filter((m) => m.media_type === "movie");
+  const tvOnly = allMovies.filter((m) => m.media_type === "tv");
+
+  // Hero = first 5 movies dengan poster
   const heroMovies = allMovies.filter((m) => m.poster_path).slice(0, 5);
+
+  // TOP 10 = 10 first movies
+  const top10 = allMovies.slice(0, 10);
+
+  // Latest Movies (cuma movies, max 20)
+  const latestMovies = moviesOnly.slice(0, 20);
+  // TV Series (cuma TV, max 20)
+  const latestTV = tvOnly.slice(0, 20);
+  // Asian (max 20)
+  const asian = asianMovies.slice(0, 20);
 
   return (
     <main className="min-h-screen bg-background">
@@ -98,24 +110,24 @@ export default function Home() {
         {/* Continue Watching */}
         <WatchHistory />
 
-        {/* All Movies & TV (cinemacity) */}
-        {!loading && allMovies.length > 0 && (
-          <ContentRow title="🎬 Latest Movies & TV" movies={allMovies.slice(0, 20)} />
+        {/* TOP 10 — dengan angka elegan */}
+        {!loading && top10.length > 0 && (
+          <Top10Row title="Top 10 Movies & TV" movies={top10} />
         )}
 
-        {/* Movies only */}
-        {!loading && movies.length > 0 && (
-          <ContentRow title="🎥 Movies" movies={movies} />
+        {/* Latest Movies (max 20) */}
+        {!loading && latestMovies.length > 0 && (
+          <ContentRow title="🎬 Latest Movies" movies={latestMovies} />
         )}
 
-        {/* TV Shows */}
-        {!loading && tvShows.length > 0 && (
-          <ContentRow title="📺 TV Series" movies={tvShows} />
+        {/* TV Series (max 20) */}
+        {!loading && latestTV.length > 0 && (
+          <ContentRow title="📺 TV Series" movies={latestTV} />
         )}
 
-        {/* All content */}
-        {!loading && allMovies.length > 20 && (
-          <ContentRow title="🌟 All Content" movies={allMovies} />
+        {/* Asian (max 20) */}
+        {!loading && asian.length > 0 && (
+          <ContentRow title="🌏 Asian" movies={asian} />
         )}
       </div>
 
