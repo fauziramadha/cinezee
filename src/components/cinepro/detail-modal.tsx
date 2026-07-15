@@ -8,7 +8,7 @@ import { useSafeSession } from "@/lib/use-safe-session";
 import {
   Play, X, Star, Calendar, Clock, Loader2, Bookmark, Check, Share2,
   MessageSquare, Send, Trash2, CornerDownRight, ChevronLeft, ChevronRight,
-  User as UserIcon,
+  User as UserIcon, Film,
 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -24,17 +24,6 @@ interface UserRating { id: string; rating: number; review: string | null; }
 interface RatingItem { id: string; rating: number; review: string | null; createdAt: string; userId: string; name: string | null; image: string | null; }
 interface CommentItem { id: string; userId: string; mediaId: number; mediaType: string; content: string; parentId: string | null; createdAt: string; updatedAt: string; userName: string | null; userImage: string | null; replies: CommentItem[]; }
 interface Episode { episodeNumber: number; name: string; overview: string; stillPath: string | null; airDate: string; runtime: number | null; }
-
-// Helper: cek apakah cinemacity subtitles punya Indonesian
-function cinemacitySubtitlesHasIndo(detail: MovieDetail): boolean {
-  const subs = (detail as any).subtitles as any[] | undefined;
-  if (!subs || !Array.isArray(subs)) return false;
-  return subs.some(
-    (s) =>
-      s.label?.toLowerCase().includes("indonesia") ||
-      s.label?.toLowerCase().includes("bahasa indonesia")
-  );
-}
 
 export function DetailModal() {
   const { selectedMedia, setSelectedMedia, openPlayer, addToHistory, setAuthModalOpen } = useAppStore();
@@ -68,9 +57,6 @@ export function DetailModal() {
   const [episodes, setEpisodes] = useState<Episode[]>([]);
   const [episodesLoading, setEpisodesLoading] = useState(false);
 
-  // ============================================================
-  // HELPER: Cek apakah media berasal dari cinemacity
-  // ============================================================
   const isCinemacity = selectedMedia?.source === "cinemacity" && !!selectedMedia?.slug;
 
   useEffect(() => {
@@ -90,7 +76,7 @@ export function DetailModal() {
       setLoading(true); setError(null);
       try {
         // ============================================================
-        // CINEMACITY SOURCE: fetch dari /api/cinemacity/movie/[slug]
+        // CINEMACITY SOURCE
         // ============================================================
         if (selectedMedia.source === "cinemacity" && selectedMedia.slug) {
           const res = await fetch(`/api/cinemacity/movie/${selectedMedia.slug}`);
@@ -99,7 +85,10 @@ export function DetailModal() {
           const cd = data.movie;
           if (cancelled) return;
 
-          // Convert cinemacity detail → TMDB MovieDetail shape
+          // Extract YouTube trailer ID dari cinemacity detail
+          // Cinemacity embed: data-vbg="https://www.youtube.com/watch?v=XXXXX"
+          const youtubeId = (cd as any).youtubeId || undefined;
+
           const adapted: MovieDetail = {
             id: Number(cd.id),
             title: cd.title,
@@ -117,10 +106,14 @@ export function DetailModal() {
             status: "Released",
             tagline: "",
             credits: { cast: [], crew: [] },
-            videos: { results: [] },
+            // ============================================================
+            // TRAILER: inject YouTube key supaya tombol Trailer muncul
+            // ============================================================
+            videos: youtubeId
+              ? { results: [{ id: "1", key: youtubeId, name: "Trailer", site: "YouTube", type: "Trailer", official: true }] }
+              : { results: [] },
             similar: { results: [] },
             recommendations: { results: [] },
-            // Cinemacity extras (disimpan untuk player modal)
             ...({
               streamUrl: cd.streamUrl,
               qualities: cd.qualities,
@@ -131,11 +124,19 @@ export function DetailModal() {
             } as any),
           };
           setDetail(adapted);
+
+          // ============================================================
+          // PRELOAD stream URL (fire-and-forget)
+          // Saat user klik play nanti, /api/cinemacity/play udah cached
+          // ============================================================
+          if (cd.slug) {
+            fetch(`/api/cinemacity/play/${cd.slug}`).catch(() => {});
+          }
           return;
         }
 
         // ============================================================
-        // TMDB SOURCE (existing): fetch dari /api/detail/[id]
+        // TMDB SOURCE
         // ============================================================
         const res = await fetch(`/api/detail/${selectedMedia.id}?type=${selectedMedia.type}`);
         if (!res.ok) throw new Error("Failed to load");
@@ -151,7 +152,7 @@ export function DetailModal() {
     };
     loadDetail();
 
-    // Watchlist check (works for both sources, pakai mediaId)
+    // Watchlist check
     if (status === "authenticated" && session?.user) {
       fetch("/api/watchlist").then((res) => res.json()).then((data) => {
         if (cancelled) return;
@@ -160,7 +161,7 @@ export function DetailModal() {
       }).catch(() => {});
     }
 
-    // Ratings & Comments (works for both sources, pakai mediaId + mediaType)
+    // Ratings & Comments
     fetch(`/api/ratings?mediaId=${selectedMedia.id}&mediaType=${selectedMedia.type}`).then((res) => res.json()).then((data) => {
       if (cancelled) return;
       setRatings(data.ratings || []); setUserRating(data.userRating || null);
@@ -172,9 +173,8 @@ export function DetailModal() {
     return () => { cancelled = true; };
   }, [selectedMedia, session, status]);
 
-  // Episodes: skip untuk cinemacity (pakai episodes dari detail langsung)
+  // Episodes: skip untuk cinemacity
   useEffect(() => {
-    // Cinemacity: skip TMDB season fetch, episodes sudah ada di detail
     if (isCinemacity) return;
     if (!selectedMedia || selectedMedia.type !== "tv" || !detail) return;
     let cancelled = false;
@@ -265,19 +265,20 @@ export function DetailModal() {
   const director = detail?.credits?.crew?.find((c) => c.job === "Director")?.name;
   const creator = detail?.created_by?.[0]?.name;
   const cast = detail?.credits?.cast?.slice(0, 12) || [];
+  // ============================================================
+  // TRAILER: support TMDB + Cinemacity (youtubeId di-inject ke videos)
+  // ============================================================
   const trailer = detail?.videos?.results?.find((v) => v.site === "YouTube" && v.type === "Trailer");
   const similar = detail?.recommendations?.results?.slice(0, 12) || [];
   const avgUserRating = ratings.length > 0 ? (ratings.reduce((sum, r) => sum + r.rating, 0) / ratings.length).toFixed(1) : null;
   const isTV = selectedMedia.type === "tv";
 
-  // === FIX #4: Cari logo judul dari TMDB (skip untuk cinemacity) ===
   const logo = !isCinemacity
     ? ((detail as any)?.images?.logos?.find((l: any) => l.iso_639_1 === "en")
       || (detail as any)?.images?.logos?.[0]
       || null)
     : null;
 
-  // === Cinemacity: ambil episodes dari detail (bukan dari TMDB season API) ===
   const cinemacityEpisodes = isCinemacity ? (detail as any)?.episodes : null;
 
   return (
@@ -294,7 +295,6 @@ export function DetailModal() {
       >
         <DialogHeader className="sr-only"><DialogTitle>{title}</DialogTitle></DialogHeader>
 
-        {/* Close button */}
         <button
           onClick={() => setSelectedMedia(null)}
           className="absolute right-3 top-3 z-50 flex h-9 w-9 items-center justify-center rounded-full bg-black/80 text-white backdrop-blur-sm transition-colors hover:bg-primary"
@@ -303,7 +303,6 @@ export function DetailModal() {
           <X className="h-4 w-4" />
         </button>
 
-        {/* Scrollable content area */}
         <div className="flex-1 overflow-y-auto overflow-x-hidden">
           {loading ? (
             <div className="flex h-96 items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
@@ -357,10 +356,13 @@ export function DetailModal() {
                 <Button size="sm" onClick={() => handlePlay()} className="gap-2 bg-primary text-primary-foreground hover:bg-primary/90 sm:size-lg">
                   <Play className="h-4 w-4 fill-current" /><span className="text-xs sm:text-sm">Play</span>
                 </Button>
+                {/* ============================================================ */}
+                {/* TRAILER: muncul untuk TMDB + Cinemacity                     */}
+                {/* ============================================================ */}
                 {trailer && (
                   <a href={`https://www.youtube.com/watch?v=${trailer.key}`} target="_blank" rel="noopener noreferrer">
                     <Button size="sm" variant="secondary" className="gap-2 sm:size-lg">
-                      <Play className="h-3 w-3 sm:h-4 sm:w-4" /><span className="text-xs sm:text-sm">Trailer</span>
+                      <Film className="h-3 w-3 sm:h-4 sm:w-4" /><span className="text-xs sm:text-sm">Trailer</span>
                     </Button>
                   </a>
                 )}
@@ -426,7 +428,7 @@ export function DetailModal() {
                 </div>
               )}
 
-              {/* === Cinemacity TV Episodes (kalau ada) === */}
+              {/* === Cinemacity TV Episodes === */}
               {isTV && isCinemacity && cinemacityEpisodes && cinemacityEpisodes.length > 0 && (
                 <div className="border-b border-border bg-card/30 px-4 py-3 sm:px-6 md:px-8">
                   <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground sm:text-sm">
@@ -458,7 +460,7 @@ export function DetailModal() {
               {/* === Content grid === */}
               <div className="grid gap-4 p-4 sm:gap-6 sm:p-6 md:grid-cols-3 md:p-8">
                 <div className="min-w-0 md:col-span-2">
-                  {/* Meta info */}
+                  {/* Meta info — HAPUS cinemacity.cc badge */}
                   <div className="mb-3 flex flex-wrap items-center gap-2 text-xs sm:mb-4 sm:gap-3 sm:text-sm">
                     {!isCinemacity && (
                       <span className="flex items-center gap-1">
@@ -485,7 +487,6 @@ export function DetailModal() {
                       </span>
                     )}
                     {detail.status && <Badge variant="secondary" className="text-xs">{detail.status}</Badge>}
-                    {isCinemacity && <Badge variant="outline" className="text-xs text-primary">cinemacity.cc</Badge>}
                   </div>
 
                   {/* Genres */}
