@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getManualSubtitle, srtToVtt } from "@/lib/manual-subtitle";
+import { getManualSubtitle, srtToVtt, applySubtitleOffset } from "@/lib/manual-subtitle";
 
 export async function GET(request: NextRequest) {
   const url = new URL(request.url);
@@ -19,8 +19,20 @@ export async function GET(request: NextRequest) {
     if (!subtitle) {
       return NextResponse.json({ error: "Subtitle not found" }, { status: 404 });
     }
-    const body = format === "vtt" ? srtToVtt(subtitle.subtitle_text) : subtitle.subtitle_text;
+
+    // ============================================================
+    // APPLY OFFSET ke subtitle text
+    // ============================================================
+    let text = subtitle.subtitle_text;
+    if (subtitle.offset_ms && subtitle.offset_ms !== 0) {
+      console.log(`[Subtitle] Applying offset: ${subtitle.offset_ms}ms`);
+      text = applySubtitleOffset(text, subtitle.offset_ms);
+    }
+
+    // Convert ke VTT kalau diminta
+    const body = format === "vtt" ? srtToVtt(text) : text;
     const contentType = format === "vtt" ? "text/vtt; charset=utf-8" : "text/srt; charset=utf-8";
+
     return new NextResponse(body, {
       status: 200,
       headers: {
@@ -28,6 +40,7 @@ export async function GET(request: NextRequest) {
         "Cache-Control": "public, max-age=3600",
         "Access-Control-Allow-Origin": "*",
         "X-Subtitle-Source": "manual",
+        "X-Subtitle-Offset": String(subtitle.offset_ms || 0),
       },
     });
   } catch (error) {
