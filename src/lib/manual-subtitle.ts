@@ -19,6 +19,7 @@ export interface ManualSubtitle {
   type: string;
   season: string | null;
   episode: string | null;
+  server: string | null;
   quality: string | null;
   subtitle_text: string;
   language: string;
@@ -28,69 +29,95 @@ export interface ManualSubtitle {
 }
 
 // ============================================================
-// GET: Lookup subtitle by title/type/season/episode
+// GET: Lookup subtitle by title/type/season/episode/server
+// Priority: exact match > server=NULL fallback
 // ============================================================
 export async function getManualSubtitle(params: {
   title: string;
   type: string;
   season?: string;
   episode?: string;
+  server?: string;
 }): Promise<ManualSubtitle | null> {
   const d1 = await getD1();
-  const { title, type, season, episode } = params;
+  const { title, type, season, episode, server } = params;
 
-  // Exact match: title + type + season + episode
-  let result = await d1
+  // Strategy 1: Exact match (title + type + season + episode + server)
+  if (server) {
+    const r1 = await d1
+      .prepare(
+        `SELECT * FROM manual_subtitles
+         WHERE LOWER(title) = LOWER(?) AND type = ? AND season IS ? AND episode IS ? AND server = ?
+         LIMIT 1`
+      )
+      .bind(title.trim(), type, season || null, episode || null, server)
+      .all<ManualSubtitle>();
+    if (r1.results[0]) return r1.results[0];
+  }
+
+  // Strategy 2: title + type + season + episode + server IS NULL (generic subtitle)
+  const r2 = await d1
     .prepare(
       `SELECT * FROM manual_subtitles
-       WHERE LOWER(title) = LOWER(?) AND type = ? AND season = ? AND episode = ?
+       WHERE LOWER(title) = LOWER(?) AND type = ? AND season IS ? AND episode IS ? AND server IS NULL
        LIMIT 1`
     )
     .bind(title.trim(), type, season || null, episode || null)
     .all<ManualSubtitle>();
+  if (r2.results[0]) return r2.results[0];
 
-  if (result.results[0]) return result.results[0];
+  // Strategy 3: title + type + server (untuk movie tanpa season/episode)
+  if (server) {
+    const r3 = await d1
+      .prepare(
+        `SELECT * FROM manual_subtitles
+         WHERE LOWER(title) = LOWER(?) AND type = ? AND season IS NULL AND episode IS NULL AND server = ?
+         LIMIT 1`
+      )
+      .bind(title.trim(), type, server)
+      .all<ManualSubtitle>();
+    if (r3.results[0]) return r3.results[0];
+  }
 
-  // Fallback: title + type only (untuk movie, atau TV tanpa season/episode spesifik)
-  result = await d1
+  // Strategy 4: title + type + server IS NULL (generic movie subtitle)
+  const r4 = await d1
     .prepare(
       `SELECT * FROM manual_subtitles
-       WHERE LOWER(title) = LOWER(?) AND type = ? AND season IS NULL AND episode IS NULL
+       WHERE LOWER(title) = LOWER(?) AND type = ? AND season IS NULL AND episode IS NULL AND server IS NULL
        LIMIT 1`
     )
     .bind(title.trim(), type)
     .all<ManualSubtitle>();
 
-  return result.results[0] || null;
+  return r4.results[0] || null;
 }
 
 // ============================================================
-// UPSERT: Insert or update by title/type/season/episode
+// UPSERT
 // ============================================================
 export async function upsertManualSubtitle(data: {
   title: string;
   type: string;
   season?: string;
   episode?: string;
+  server?: string;
   quality?: string;
   subtitle_text: string;
   release_name?: string;
 }): Promise<{ id: number; updated: boolean }> {
   const d1 = await getD1();
-  const { title, type, season, episode, quality, subtitle_text, release_name } = data;
+  const { title, type, season, episode, server, quality, subtitle_text, release_name } = data;
 
-  // Cek existing
   const existing = await d1
     .prepare(
       `SELECT id FROM manual_subtitles
-       WHERE LOWER(title) = LOWER(?) AND type = ? AND season IS ? AND episode IS ?
+       WHERE LOWER(title) = LOWER(?) AND type = ? AND season IS ? AND episode IS ? AND server IS ?
        LIMIT 1`
     )
-    .bind(title.trim(), type, season || null, episode || null)
+    .bind(title.trim(), type, season || null, episode || null, server || null)
     .all<{ id: number }>();
 
   if (existing.results[0]) {
-    // Update existing (replace subtitle text)
     await d1
       .prepare(
         `UPDATE manual_subtitles SET
@@ -102,20 +129,14 @@ export async function upsertManualSubtitle(data: {
     return { id: existing.results[0].id, updated: true };
   }
 
-  // Insert new
   const result = await d1
     .prepare(
-      `INSERT INTO manual_subtitles (title, type, season, episode, quality, subtitle_text, release_name)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO manual_subtitles (title, type, season, episode, server, quality, subtitle_text, release_name)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .bind(
-      title.trim(),
-      type,
-      season || null,
-      episode || null,
-      quality || null,
-      subtitle_text,
-      release_name || null
+      title.trim(), type, season || null, episode || null, server || null,
+      quality || null, subtitle_text, release_name || null
     )
     .run();
 
@@ -124,27 +145,32 @@ export async function upsertManualSubtitle(data: {
 }
 
 // ============================================================
-// LIST ALL (admin)
+// LIST ALL (admin) — with optional search
 // ============================================================
-export async function listManualSubtitles(): Promise<ManualSubtitle[]> {
+export async function listManualSubtitles(search?: string): Promise<ManualSubtitle[]> {
   const d1 = await getD1();
+  if (search && search.trim()) {
+    const result = await d1
+      .prepare(
+        `SELECT * FROM manual_subtitles
+         WHERE LOWER(title) LIKE LOWER(?)
+         ORDER BY updated_at DESC`
+      )
+      .bind(`%${search.trim()}%`)
+      .all<ManualSubtitle>();
+    return result.results || [];
+  }
   const result = await d1
     .prepare(`SELECT * FROM manual_subtitles ORDER BY updated_at DESC`)
     .all<ManualSubtitle>();
   return result.results || [];
 }
 
-// ============================================================
-// DELETE by id
-// ============================================================
 export async function deleteManualSubtitle(id: number): Promise<void> {
   const d1 = await getD1();
   await d1.prepare(`DELETE FROM manual_subtitles WHERE id = ?`).bind(id).run();
 }
 
-// ============================================================
-// SRT → VTT converter
-// ============================================================
 export function srtToVtt(srt: string): string {
   return (
     "WEBVTT\n\n" +
