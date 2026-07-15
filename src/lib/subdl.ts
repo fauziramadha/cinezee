@@ -4,13 +4,13 @@
  * SubDL API integration untuk subtitle Indonesia.
  *
  * Alur:
- *   1. Search subtitle by film name (API language filter gak bekerja, filter manual)
+ *   1. Search subtitle via allorigins proxy (SubDL block Cloudflare Workers IP)
  *   2. Filter manual: cari yang language === "ID"
- *   3. Download ZIP file dari dl.subdl.com
- *   4. Unzip (extract .srt dari dalam ZIP)
+ *   3. Download ZIP file (Strategy 1: direct, Strategy 2: via proxy + base64 decode)
+ *   4. Unzip + clean HTML tags
  *   5. Cache ke D1 (TTL 7 hari)
  *
- * API: https://api.subdl.com/api/v1/subtitles
+ * API: https://api.subdl.com/api/v1/subtitles (via allorigins proxy)
  * Download: https://dl.subdl.com/subtitle/{id}-{id} (returns ZIP)
  */
 
@@ -20,6 +20,18 @@ const SUBDL_API_BASE = "https://api.subdl.com/api/v1/subtitles";
 const SUBDL_DL_BASE = "https://dl.subdl.com/subtitle";
 const SUBDL_WEB_BASE = "https://subdl.com";
 const CACHE_TTL_DAYS = 7;
+
+// ============================================================
+// CORS PROXY — bypass SubDL IP block (Cloudflare Workers di-block 403)
+// allorigins.win: gratis, support JSON & binary (base64)
+// ============================================================
+const CORS_PROXY_RAW = "https://api.allorigins.win/raw?url=";
+const CORS_PROXY_GET = "https://api.allorigins.win/get?url=";
+
+function buildProxyUrl(targetUrl: string, mode: "raw" | "get" = "raw"): string {
+  const proxyBase = mode === "raw" ? CORS_PROXY_RAW : CORS_PROXY_GET;
+  return proxyBase + encodeURIComponent(targetUrl);
+}
 
 // ============================================================
 // D1 Helpers
@@ -39,7 +51,7 @@ async function hashKey(input: string): Promise<string> {
 }
 
 // ============================================================
-// Search SubDL API
+// Search SubDL API (via allorigins proxy)
 // NOTE: language filter di API TIDAK BEKERJA (tetap return semua bahasa)
 // Filter manual di client side (di getIndonesianSubtitle)
 // ============================================================
@@ -58,10 +70,12 @@ export async function searchSubdlSubtitles(
   filmName: string,
   apiKey: string
 ): Promise<SubDLResult[]> {
-  const url = `${SUBDL_API_BASE}?api_key=${apiKey}&film_name=${encodeURIComponent(filmName)}`;
-  console.log("[SubDL] Search:", url.replace(apiKey, "***"));
+  const directUrl = `${SUBDL_API_BASE}?api_key=${apiKey}&film_name=${encodeURIComponent(filmName)}`;
+  // Pakai CORS proxy karena SubDL memblokir Cloudflare Workers IP (403)
+  const proxyUrl = buildProxyUrl(directUrl, "raw");
+  console.log("[SubDL] Search via proxy:", directUrl.replace(apiKey, "***"));
 
-  const res = await fetch(url, {
+  const res = await fetch(proxyUrl, {
     headers: {
       "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
       "Accept": "application/json",
@@ -69,7 +83,20 @@ export async function searchSubdlSubtitles(
   });
 
   if (!res.ok) {
-    console.error("[SubDL] Search failed:", res.status);
+    console.error("[SubDL] Search failed (proxy):", res.status);
+    // Fallback: coba direct fetch (mungkin Worker IP gak di-block saat ini)
+    try {
+      const directRes = await fetch(directUrl, {
+        headers: {
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+          "Accept": "application/json",
+        },
+      });
+      if (directRes.ok) {
+        const data = await directRes.json();
+        return (data.subtitles || []) as SubDLResult[];
+      }
+    } catch {}
     return [];
   }
 
@@ -101,6 +128,22 @@ function extractDownloadUrl(resultUrl: string): string | null {
 }
 
 // ============================================================
+// Clean SRT — hapus HTML tags (font color, b, i, dll)
+// SubDL sering ada subtitle dengan <font color="#xxx"> per karakter
+// ============================================================
+function cleanSrtHtml(srt: string): string {
+  return srt
+    .replace(/<font[^>]*>/gi, "")
+    .replace(/<\/font>/gi, "")
+    .replace(/<[^>]+>/g, "")
+    .replace(/\n{3,}/g, "\n\n")
+    .split("\n")
+    .map((line) => line.trim())
+    .join("\n")
+    .trim();
+}
+
+// ============================================================
 // Unzip ZIP file (extract .srt content)
 // Pakai DecompressionStream('deflate-raw') yang available di Workers
 // ============================================================
@@ -108,7 +151,6 @@ async function unzipSrtFromZip(zipBuffer: ArrayBuffer): Promise<string | null> {
   const view = new DataView(zipBuffer);
   const bytes = new Uint8Array(zipBuffer);
 
-  // Parse Local File Header (PK\x03\x04)
   if (view.getUint32(0, true) !== 0x04034b50) {
     console.error("[Unzip] Invalid ZIP signature");
     return null;
@@ -123,11 +165,6 @@ async function unzipSrtFromZip(zipBuffer: ArrayBuffer): Promise<string | null> {
   const filename = new TextDecoder().decode(bytes.slice(30, 30 + filenameLength));
   console.log(`[Unzip] File: ${filename}, method: ${compressionMethod}, compressed: ${compressedSize}`);
 
-  if (!filename.toLowerCase().endsWith(".srt")) {
-    console.warn("[Unzip] First file bukan .srt:", filename);
-  }
-
-  // Kalau compressed size = 0 (data descriptor used), cari end signature
   if (compressedSize === 0) {
     for (let i = dataOffset; i < zipBuffer.byteLength - 4; i++) {
       if (
@@ -152,10 +189,8 @@ async function unzipSrtFromZip(zipBuffer: ArrayBuffer): Promise<string | null> {
   let decompressedBuffer: ArrayBuffer;
 
   if (compressionMethod === 0) {
-    // Store (no compression)
     decompressedBuffer = compressedData.buffer;
   } else if (compressionMethod === 8) {
-    // Deflate
     try {
       const ds = new DecompressionStream("deflate-raw");
       const blob = new Blob([compressedData]);
@@ -173,13 +208,11 @@ async function unzipSrtFromZip(zipBuffer: ArrayBuffer): Promise<string | null> {
 
   let text = new TextDecoder("utf-8").decode(decompressedBuffer);
 
-  // Validate: pastikan ini SRT (bukan HTML error page)
   if (text.length < 50 || text.includes("<!DOCTYPE html>") || text.includes("<html")) {
     console.warn("[Unzip] Extracted content bukan SRT valid");
     return null;
   }
 
-  // Clean HTML tags (SubDL sering ada <font color> per karakter)
   if (text.includes("<font") || text.includes("<span") || text.includes("<div")) {
     console.log("[Unzip] Cleaning HTML tags from SRT...");
     text = cleanSrtHtml(text);
@@ -189,7 +222,7 @@ async function unzipSrtFromZip(zipBuffer: ArrayBuffer): Promise<string | null> {
 }
 
 // ============================================================
-// Download & Unzip subtitle
+// Download & Unzip subtitle (2 strategies: direct + proxy)
 // ============================================================
 export async function downloadSubdlSrt(
   result: SubDLResult
@@ -200,67 +233,110 @@ export async function downloadSubdlSrt(
     return null;
   }
 
-  console.log("[SubDL] Download ZIP:", downloadUrl);
+  console.log("[SubDL] Download ZIP via proxy:", downloadUrl);
 
+  let zipBuffer: ArrayBuffer | null = null;
+
+  // ============================================================
+  // Strategy 1: Direct fetch (cepat, kalau Worker IP gak di-block)
+  // ============================================================
   try {
-    const res = await fetch(downloadUrl, {
+    const directRes = await fetch(downloadUrl, {
       headers: {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
         "Accept": "application/zip,application/octet-stream,*/*",
-        "Accept-Language": "en-US,en;q=0.9",
         "Referer": SUBDL_WEB_BASE + "/",
       },
       redirect: "follow",
     });
-
-    if (!res.ok) {
-      console.warn("[SubDL] Download failed:", res.status);
-      return null;
+    if (directRes.ok) {
+      zipBuffer = await directRes.arrayBuffer();
+      console.log("[SubDL] Direct download OK:", zipBuffer.byteLength, "bytes");
     }
+  } catch (directErr) {
+    console.warn("[SubDL] Direct download failed, trying proxy");
+  }
 
-    const zipBuffer = await res.arrayBuffer();
+  // ============================================================
+  // Strategy 2: Via allorigins proxy (fallback)
+  // allorigins /get returns JSON: {"contents":"data:...;base64,..."}
+  // ============================================================
+  if (!zipBuffer) {
+    const proxyUrl = buildProxyUrl(downloadUrl, "get");
+    console.log("[SubDL] Download via allorigins proxy");
 
-    const view = new DataView(zipBuffer);
-    if (view.getUint32(0, true) !== 0x04034b50) {
-      // Bukan ZIP — mungkin langsung SRT
-      let text = new TextDecoder("utf-8").decode(zipBuffer);
-      if (text.length > 50 && !text.includes("<!DOCTYPE html>") && !text.includes("<html")) {
-        // Clean HTML tags kalau ada
-        if (text.includes("<font") || text.includes("<span")) {
-          text = cleanSrtHtml(text);
-        }
-        return text;
+    try {
+      const proxyRes = await fetch(proxyUrl, {
+        headers: {
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+          "Accept": "application/json",
+        },
+      });
+
+      if (!proxyRes.ok) {
+        console.warn("[SubDL] Proxy download failed:", proxyRes.status);
+        return null;
       }
-      console.warn("[SubDL] Response bukan ZIP dan bukan SRT");
+
+      const proxyData = await proxyRes.json() as { contents?: string };
+      if (!proxyData.contents) {
+        console.warn("[SubDL] Proxy returned no contents");
+        return null;
+      }
+
+      // Parse data URL: "data:application/octet-stream;base64,UEsDBBQ..."
+      const dataUrl = proxyData.contents;
+      const base64Match = dataUrl.match(/^data:[^;]*;base64,(.+)$/);
+      if (!base64Match) {
+        // Mungkin contents adalah text langsung (SRT)
+        if (dataUrl.length > 50 && !dataUrl.includes("<!DOCTYPE html>")) {
+          let text = dataUrl;
+          if (text.includes("<font") || text.includes("<span")) {
+            text = cleanSrtHtml(text);
+          }
+          return text;
+        }
+        console.warn("[SubDL] Proxy contents format unknown");
+        return null;
+      }
+
+      // Decode base64 ke ArrayBuffer
+      const base64Data = base64Match[1];
+      const binaryString = atob(base64Data);
+      const bytes = new Uint8Array(binaryString.length);
+      for (let i = 0; i < binaryString.length; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+      }
+      zipBuffer = bytes.buffer;
+      console.log("[SubDL] Proxy download OK:", zipBuffer.byteLength, "bytes");
+    } catch (proxyErr) {
+      console.error("[SubDL] Proxy download error:", proxyErr);
       return null;
     }
+  }
 
-    const srtText = await unzipSrtFromZip(zipBuffer);
-    return srtText;
-  } catch (err) {
-    console.error("[SubDL] Download error:", err);
+  if (!zipBuffer) {
+    console.warn("[SubDL] All download strategies failed");
     return null;
   }
-}
 
-// ============================================================
-// Clean SRT — hapus HTML tags (font color, b, i, dll)
-// SubDL sering ada subtitle dengan <font color="#xxx"> per karakter
-// ============================================================
-function cleanSrtHtml(srt: string): string {
-  return srt
-    // Hapus semua <font ...> dan </font>
-    .replace(/<font[^>]*>/gi, "")
-    .replace(/<\/font>/gi, "")
-    // Hapus tag HTML lain (b, i, u, s, span, div, dll)
-    .replace(/<[^>]+>/g, "")
-    // Hapus baris kosong berlebih
-    .replace(/\n{3,}/g, "\n\n")
-    // Trim setiap baris
-    .split("\n")
-    .map((line) => line.trim())
-    .join("\n")
-    .trim();
+  // Cek apakah ini ZIP (PK signature)
+  const view = new DataView(zipBuffer);
+  if (view.getUint32(0, true) !== 0x04034b50) {
+    // Bukan ZIP — mungkin langsung SRT
+    let text = new TextDecoder("utf-8").decode(zipBuffer);
+    if (text.length > 50 && !text.includes("<!DOCTYPE html>") && !text.includes("<html")) {
+      if (text.includes("<font") || text.includes("<span")) {
+        text = cleanSrtHtml(text);
+      }
+      return text;
+    }
+    console.warn("[SubDL] Response bukan ZIP dan bukan SRT");
+    return null;
+  }
+
+  const srtText = await unzipSrtFromZip(zipBuffer);
+  return srtText;
 }
 
 // ============================================================
