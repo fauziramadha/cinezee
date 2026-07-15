@@ -4,13 +4,13 @@
  * SubDL API integration untuk subtitle Indonesia.
  *
  * Alur:
- *   1. Search subtitle via allorigins proxy (SubDL block Cloudflare Workers IP)
+ *   1. Search subtitle (Strategy 1: direct, Strategy 2: multiple proxies dengan retry)
  *   2. Filter manual: cari yang language === "ID"
  *   3. Download ZIP file (Strategy 1: direct, Strategy 2: via proxy + base64 decode)
  *   4. Unzip + clean HTML tags
  *   5. Cache ke D1 (TTL 7 hari)
  *
- * API: https://api.subdl.com/api/v1/subtitles (via allorigins proxy)
+ * API: https://api.subdl.com/api/v1/subtitles
  * Download: https://dl.subdl.com/subtitle/{id}-{id} (returns ZIP)
  */
 
@@ -23,14 +23,40 @@ const CACHE_TTL_DAYS = 7;
 
 // ============================================================
 // CORS PROXY — bypass SubDL IP block (Cloudflare Workers di-block 403)
-// allorigins.win: gratis, support JSON & binary (base64)
+// Pakai multiple proxy dengan retry mechanism (allorigins kadang intermittent)
 // ============================================================
-const CORS_PROXY_RAW = "https://api.allorigins.win/raw?url=";
+const CORS_PROXIES = [
+  "https://api.allorigins.win/raw?url=",
+  "https://api.allorigins.win/get?url=",
+  "https://corsproxy.io/?url=",
+];
+
 const CORS_PROXY_GET = "https://api.allorigins.win/get?url=";
 
-function buildProxyUrl(targetUrl: string, mode: "raw" | "get" = "raw"): string {
-  const proxyBase = mode === "raw" ? CORS_PROXY_RAW : CORS_PROXY_GET;
-  return proxyBase + encodeURIComponent(targetUrl);
+function buildProxyUrl(targetUrl: string, proxyIdx: number = 0): string {
+  return CORS_PROXIES[proxyIdx] + encodeURIComponent(targetUrl);
+}
+
+// Fetch dengan retry (3x per proxy, 3 proxies = max 9 attempts)
+async function fetchWithRetry(
+  url: string,
+  options: RequestInit = {},
+  maxRetries: number = 3
+): Promise<Response | null> {
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      const res = await fetch(url, options);
+      if (res.ok) return res;
+      console.warn(`[Proxy] Attempt ${attempt}/${maxRetries} failed: ${res.status}`);
+    } catch (err) {
+      console.warn(`[Proxy] Attempt ${attempt}/${maxRetries} error:`, err);
+    }
+    // Delay sebelum retry (1s, 2s, 3s)
+    if (attempt < maxRetries) {
+      await new Promise((r) => setTimeout(r, 1000 * attempt));
+    }
+  }
+  return null;
 }
 
 // ============================================================
@@ -51,7 +77,7 @@ async function hashKey(input: string): Promise<string> {
 }
 
 // ============================================================
-// Search SubDL API (via allorigins proxy)
+// Search SubDL API
 // NOTE: language filter di API TIDAK BEKERJA (tetap return semua bahasa)
 // Filter manual di client side (di getIndonesianSubtitle)
 // ============================================================
@@ -71,38 +97,75 @@ export async function searchSubdlSubtitles(
   apiKey: string
 ): Promise<SubDLResult[]> {
   const directUrl = `${SUBDL_API_BASE}?api_key=${apiKey}&film_name=${encodeURIComponent(filmName)}`;
-  // Pakai CORS proxy karena SubDL memblokir Cloudflare Workers IP (403)
-  const proxyUrl = buildProxyUrl(directUrl, "raw");
-  console.log("[SubDL] Search via proxy:", directUrl.replace(apiKey, "***"));
+  console.log("[SubDL] Search:", directUrl.replace(apiKey, "***"));
 
-  const res = await fetch(proxyUrl, {
-    headers: {
-      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-      "Accept": "application/json",
-    },
-  });
+  // ============================================================
+  // Strategy 1: Direct fetch (cepat, kalau Worker IP gak di-block)
+  // ============================================================
+  try {
+    const directRes = await fetch(directUrl, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept": "application/json",
+      },
+    });
+    if (directRes.ok) {
+      const data = await directRes.json();
+      console.log("[SubDL] Direct search OK:", (data.subtitles || []).length, "results");
+      return (data.subtitles || []) as SubDLResult[];
+    }
+    console.warn("[SubDL] Direct search failed:", directRes.status);
+  } catch (err) {
+    console.warn("[SubDL] Direct search error:", err);
+  }
 
-  if (!res.ok) {
-    console.error("[SubDL] Search failed (proxy):", res.status);
-    // Fallback: coba direct fetch (mungkin Worker IP gak di-block saat ini)
-    try {
-      const directRes = await fetch(directUrl, {
+  // ============================================================
+  // Strategy 2: Via proxy dengan retry (3x per proxy)
+  // ============================================================
+  console.log("[SubDL] Trying via proxy...");
+
+  for (let proxyIdx = 0; proxyIdx < CORS_PROXIES.length; proxyIdx++) {
+    const proxyUrl = buildProxyUrl(directUrl, proxyIdx);
+    console.log(`[SubDL] Proxy ${proxyIdx + 1}/${CORS_PROXIES.length}:`, CORS_PROXIES[proxyIdx]);
+
+    const res = await fetchWithRetry(
+      proxyUrl,
+      {
         headers: {
           "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
           "Accept": "application/json",
         },
-      });
-      if (directRes.ok) {
-        const data = await directRes.json();
-        return (data.subtitles || []) as SubDLResult[];
+      },
+      3 // 3 retries per proxy
+    );
+
+    if (!res) continue;
+
+    try {
+      const text = await res.text();
+
+      // allorigins /raw returns JSON langsung
+      // allorigins /get returns {"contents":"<json string>",...}
+      let jsonString = text;
+      try {
+        const parsed = JSON.parse(text);
+        if (parsed.contents && typeof parsed.contents === "string") {
+          jsonString = parsed.contents;
+        }
+      } catch {}
+
+      const data = JSON.parse(jsonString);
+      if (data.subtitles) {
+        console.log(`[SubDL] Proxy ${proxyIdx + 1} OK:`, data.subtitles.length, "results");
+        return data.subtitles as SubDLResult[];
       }
-    } catch {}
-    return [];
+    } catch (err) {
+      console.warn(`[SubDL] Proxy ${proxyIdx + 1} parse error:`, err);
+    }
   }
 
-  const data = await res.json();
-  // Response field: "subtitles" (bukan "result")
-  return (data.subtitles || []) as SubDLResult[];
+  console.error("[SubDL] All proxies failed");
+  return [];
 }
 
 // ============================================================
@@ -233,7 +296,7 @@ export async function downloadSubdlSrt(
     return null;
   }
 
-  console.log("[SubDL] Download ZIP via proxy:", downloadUrl);
+  console.log("[SubDL] Download ZIP:", downloadUrl);
 
   let zipBuffer: ArrayBuffer | null = null;
 
@@ -258,26 +321,30 @@ export async function downloadSubdlSrt(
   }
 
   // ============================================================
-  // Strategy 2: Via allorigins proxy (fallback)
-  // allorigins /get returns JSON: {"contents":"data:...;base64,..."}
+  // Strategy 2: Via allorigins /get proxy dengan retry
+  // Returns JSON: {"contents":"data:...;base64,..."}
   // ============================================================
   if (!zipBuffer) {
-    const proxyUrl = buildProxyUrl(downloadUrl, "get");
-    console.log("[SubDL] Download via allorigins proxy");
+    const proxyUrl = CORS_PROXY_GET + encodeURIComponent(downloadUrl);
+    console.log("[SubDL] Download via allorigins /get proxy (with retry)");
 
-    try {
-      const proxyRes = await fetch(proxyUrl, {
+    const proxyRes = await fetchWithRetry(
+      proxyUrl,
+      {
         headers: {
           "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
           "Accept": "application/json",
         },
-      });
+      },
+      5 // 5 retries (allorigins intermittent)
+    );
 
-      if (!proxyRes.ok) {
-        console.warn("[SubDL] Proxy download failed:", proxyRes.status);
-        return null;
-      }
+    if (!proxyRes) {
+      console.warn("[SubDL] Proxy download failed after retries");
+      return null;
+    }
 
+    try {
       const proxyData = await proxyRes.json() as { contents?: string };
       if (!proxyData.contents) {
         console.warn("[SubDL] Proxy returned no contents");
