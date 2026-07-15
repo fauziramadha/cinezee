@@ -171,11 +171,18 @@ async function unzipSrtFromZip(zipBuffer: ArrayBuffer): Promise<string | null> {
     return null;
   }
 
-  const text = new TextDecoder("utf-8").decode(decompressedBuffer);
+  let text = new TextDecoder("utf-8").decode(decompressedBuffer);
 
-  if (text.length < 50 || text.includes("<!DOCTYPE html>")) {
+  // Validate: pastikan ini SRT (bukan HTML error page)
+  if (text.length < 50 || text.includes("<!DOCTYPE html>") || text.includes("<html")) {
     console.warn("[Unzip] Extracted content bukan SRT valid");
     return null;
+  }
+
+  // Clean HTML tags (SubDL sering ada <font color> per karakter)
+  if (text.includes("<font") || text.includes("<span") || text.includes("<div")) {
+    console.log("[Unzip] Cleaning HTML tags from SRT...");
+    text = cleanSrtHtml(text);
   }
 
   return text;
@@ -216,8 +223,12 @@ export async function downloadSubdlSrt(
     const view = new DataView(zipBuffer);
     if (view.getUint32(0, true) !== 0x04034b50) {
       // Bukan ZIP — mungkin langsung SRT
-      const text = new TextDecoder("utf-8").decode(zipBuffer);
-      if (text.length > 50 && !text.includes("<!DOCTYPE html>")) {
+      let text = new TextDecoder("utf-8").decode(zipBuffer);
+      if (text.length > 50 && !text.includes("<!DOCTYPE html>") && !text.includes("<html")) {
+        // Clean HTML tags kalau ada
+        if (text.includes("<font") || text.includes("<span")) {
+          text = cleanSrtHtml(text);
+        }
         return text;
       }
       console.warn("[SubDL] Response bukan ZIP dan bukan SRT");
@@ -233,12 +244,33 @@ export async function downloadSubdlSrt(
 }
 
 // ============================================================
+// Clean SRT — hapus HTML tags (font color, b, i, dll)
+// SubDL sering ada subtitle dengan <font color="#xxx"> per karakter
+// ============================================================
+function cleanSrtHtml(srt: string): string {
+  return srt
+    // Hapus semua <font ...> dan </font>
+    .replace(/<font[^>]*>/gi, "")
+    .replace(/<\/font>/gi, "")
+    // Hapus tag HTML lain (b, i, u, s, span, div, dll)
+    .replace(/<[^>]+>/g, "")
+    // Hapus baris kosong berlebih
+    .replace(/\n{3,}/g, "\n\n")
+    // Trim setiap baris
+    .split("\n")
+    .map((line) => line.trim())
+    .join("\n")
+    .trim();
+}
+
+// ============================================================
 // SRT → VTT converter
 // ============================================================
 export function srtToVtt(srt: string): string {
+  const cleaned = cleanSrtHtml(srt);
   return (
     "WEBVTT\n\n" +
-    srt
+    cleaned
       .replace(/\r\n/g, "\n")
       .replace(/\r/g, "\n")
       .replace(/(\d{2}:\d{2}:\d{2}),(\d{3})/g, "$1.$2")
