@@ -159,6 +159,25 @@ async function loadHls(): Promise<any> {
 }
 
 function makeCustomLoader(Hls: any) {
+  // Reorder audio tracks by language (sama persis cinemacity asli)
+  function reorderAudioByLang(m3u8: string): string {
+    const nl = /\r\n/.test(m3u8) ? "\r\n" : "\n";
+    const lines = m3u8.split(/\r?\n/);
+    const isA = (s: string) => /^#EXT-X-MEDIA:TYPE=AUDIO\b/i.test(s);
+    const pick = (re: RegExp, s: string) => (s.match(re) || [, ""])[1] || "";
+    const lang = (s: string) => pick(/(?:^|,)LANGUAGE="([^"]*)"/i, s).toLowerCase();
+    const name = (s: string) => pick(/(?:^|,)NAME="([^"]*)"/i, s);
+    const audio = lines.filter(isA);
+    if (!audio.length) return m3u8;
+    const cmp = new Intl.Collator("en", { sensitivity: "base" }).compare;
+    audio.sort((a, b) => cmp(lang(a), lang(b)) || cmp(name(a), name(b)) || cmp(a, b));
+    let injected = false;
+    return lines
+      .map((l) => (isA(l) ? (injected ? null : ((injected = true), audio.join(nl))) : l))
+      .filter(Boolean)
+      .join(nl);
+  }
+
   return class CustomLoader extends Hls.DefaultConfig.loader {
     load(context: any, config: any, callbacks: any) {
       const onSuccess = callbacks.onSuccess;
@@ -168,6 +187,9 @@ function makeCustomLoader(Hls: any) {
             /\.(m3u8)\b/g,
             (match: string) => `${match}?${Math.floor(Math.random() * 1e9)}`
           );
+        }
+        if (context.type === "manifest" && typeof response.data === "string") {
+          response.data = reorderAudioByLang(response.data);
         }
         if (onSuccess) onSuccess.call(this, response, stats, ctx, details);
       };
@@ -299,17 +321,10 @@ export function PlayerModal() {
       const hls = new Hls({
         enableWorker: true,
         lowLatencyMode: false,
-        maxBufferLength: 60,
-        maxMaxBufferLength: 120,
-        maxBufferSize: 60 * 1024 * 1024,
-        backBufferLength: 30,
-        fragLoadingMaxRetry: 8,
-        fragLoadingRetryDelay: 500,
-        fragLoadingMaxRetryTimeout: 8000,
-        manifestLoadingMaxRetry: 4,
-        manifestLoadingRetryDelay: 500,
-        levelLoadingMaxRetry: 4,
-        levelLoadingRetryDelay: 500,
+        maxBufferLength: 30,
+        maxMaxBufferLength: 60,
+        maxBufferSize: 134217728,
+        backBufferLength: 10,
         loader: makeCustomLoader(Hls),
       });
       hlsRef.current = hls;
@@ -340,17 +355,20 @@ export function PlayerModal() {
 
       hls.on(Hls.Events.ERROR, async (_event: any, data: any) => {
         if (!data.fatal) return;
-        const currentMedia = playerMediaRef.current;
         console.warn("[HLS FATAL ERROR]", data.type, data.details);
         switch (data.type) {
           case Hls.ErrorTypes.NETWORK_ERROR:
+            console.log("[HLS] Network error, retrying startLoad...");
             hls.startLoad();
             break;
           case Hls.ErrorTypes.MEDIA_ERROR:
+            console.log("[HLS] Media error, recovering...");
             hls.recoverMediaError();
             break;
           default:
+            const currentMedia = playerMediaRef.current;
             if (currentMedia?.source === "cinemacity" && currentMedia?.slug && retryCount < 3) {
+              console.log(`[HLS] Fatal error, refreshing stream URL (retry ${retryCount + 1}/3)...`);
               setRetryCount((c) => c + 1);
               try {
                 const freshData = await fetchCinemacityPlay(currentMedia.slug);
