@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import dynamic from "next/dynamic";
+import { AuthModal } from "@/components/cinepro/auth-modal";
 
 /**
  * FIX: "This page couldn't load" on iPhone Safari
@@ -44,11 +45,15 @@ export default function ClientLayout({
   }, []);
 
   // Phase 1: SSR + initial client hydration — render children directly
-  // This produces valid HTML that Safari can render immediately.
   if (!mounted) {
     return <>{children}</>;
   }
 
   // Phase 2: After mount — wrap with SessionProvider (client-only)
-  return <SessionProviderWrapper>{children}</SessionProviderWrapper>;
+  return (
+    <SessionProviderWrapper>
+      {children}
+      <AuthModal />
+    </SessionProviderWrapper>
+  );
 }
