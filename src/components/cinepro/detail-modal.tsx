@@ -25,6 +25,17 @@ interface RatingItem { id: string; rating: number; review: string | null; create
 interface CommentItem { id: string; userId: string; mediaId: number; mediaType: string; content: string; parentId: string | null; createdAt: string; updatedAt: string; userName: string | null; userImage: string | null; replies: CommentItem[]; }
 interface Episode { episodeNumber: number; name: string; overview: string; stillPath: string | null; airDate: string; runtime: number | null; }
 
+// Helper: cek apakah cinemacity subtitles punya Indonesian
+function cinemacitySubtitlesHasIndo(detail: MovieDetail): boolean {
+  const subs = (detail as any).subtitles as any[] | undefined;
+  if (!subs || !Array.isArray(subs)) return false;
+  return subs.some(
+    (s) =>
+      s.label?.toLowerCase().includes("indonesia") ||
+      s.label?.toLowerCase().includes("bahasa indonesia")
+  );
+}
+
 export function DetailModal() {
   const { selectedMedia, setSelectedMedia, openPlayer, addToHistory, setAuthModalOpen } = useAppStore();
   const { data: session, status } = useSafeSession();
