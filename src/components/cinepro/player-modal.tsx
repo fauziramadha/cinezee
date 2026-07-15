@@ -102,6 +102,7 @@ async function fetchManualIndonesian(params: {
   type: "movie" | "tv";
   season?: string;
   episode?: string;
+  server?: string;
 }): Promise<Subtitle | null> {
   try {
     const searchParams = new URLSearchParams({
@@ -111,8 +112,9 @@ async function fetchManualIndonesian(params: {
     });
     if (params.season) searchParams.set("season", params.season);
     if (params.episode) searchParams.set("episode", params.episode);
+    if (params.server) searchParams.set("server", params.server);
 
-    console.log("[Subtitle] Fetching manual Indonesian for:", params.title);
+    console.log("[Subtitle] Fetching manual Indonesian for:", params.title, "server:", params.server);
     const res = await fetch(`/api/subtitle/manual?${searchParams.toString()}`);
     if (!res.ok) {
       console.warn("[Subtitle] Manual subtitle not found:", res.status);
@@ -493,12 +495,11 @@ export function PlayerModal() {
       }
 
       // ============================================================
-      // Extract film quality dari server title (kalau ada)
-      // Cinemacity server titles: "WEB-DL", "TS - DKS - clean", "CAM-Rip - OnlyFlix"
+      // Extract server info (untuk subtitle lookup spesifik per server)
       // ============================================================
-      let filmQuality: string | undefined;
+      let serverTitle: string | undefined;
       if (servers.length > 0 && servers[currentServerIdx]) {
-        filmQuality = servers[currentServerIdx].title;
+        serverTitle = servers[currentServerIdx].title;
       }
 
       if (!title) {
@@ -506,7 +507,7 @@ export function PlayerModal() {
         return;
       }
 
-      const manualSub = await fetchManualIndonesian({ title, type, season, episode });
+      const manualSub = await fetchManualIndonesian({ title, type, season, episode, server: serverTitle });
       if (cancelled) return;
 
       if (manualSub) {
