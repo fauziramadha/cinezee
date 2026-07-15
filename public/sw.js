@@ -9,7 +9,7 @@
  * 5. Offline fallback page saat semua gagal
  */
 
-const CACHE_VERSION = "cinestream-v1";
+const CACHE_VERSION = "cinestream-v2"; // Naikkan versi untuk force update SW
 const OFFLINE_URL = "/offline.html";
 
 // Resources yang di-cache saat install (app shell)
@@ -72,6 +72,17 @@ self.addEventListener("fetch", (event) => {
   const { request } = event;
   const url = new URL(request.url);
 
+  // ============================================================
+  // WAJIB: Skip Auth routes & POST requests!
+  // NextAuth (login Google) akan break kalau di-intercept SW.
+  // ============================================================
+  if (
+    url.pathname.startsWith("/api/auth/") || 
+    url.pathname.includes("/auth/")
+  ) {
+    return; // Biarkan browser handle langsung ke network
+  }
+
   // Skip non-GET requests (POST, PUT, DELETE, dll)
   if (request.method !== "GET") {
     return;
@@ -108,7 +119,13 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // === Strategy 4: Navigation requests (Network First with offline fallback) ===
+  // === Strategy 4: Cinemacity Images Proxy (Cache First) ===
+  if (url.pathname.startsWith("/api/cinemacity/image")) {
+    event.respondWith(cacheFirst(request));
+    return;
+  }
+
+  // === Strategy 5: Navigation requests (Network First with offline fallback) ===
   // HTML pages — selalu coba network dulu, fallback ke cache/offline
   if (request.mode === "navigate") {
     event.respondWith(networkFirstWithOfflineFallback(request));
