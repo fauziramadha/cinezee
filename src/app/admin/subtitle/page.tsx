@@ -18,6 +18,7 @@ interface SubtitleEntry {
   server: string | null;
   quality: string | null;
   release_name: string | null;
+  offset_ms: number;
   updated_at: string;
 }
 
@@ -58,6 +59,7 @@ export default function AdminSubtitlePage() {
   const [quality, setQuality] = useState("");
   const [subtitleText, setSubtitleText] = useState("");
   const [releaseName, setReleaseName] = useState("");
+  const [offsetSeconds, setOffsetSeconds] = useState("");
 
   // Search state (find film)
   const [searchQuery, setSearchQuery] = useState("");
@@ -181,13 +183,14 @@ export default function AdminSubtitlePage() {
           title: title.trim(), type, season: season || null, episode: episode || null,
           server: server || null, quality: quality || null,
           subtitle_text: subtitleText, release_name: releaseName || null,
+          offset_seconds: offsetSeconds || 0,
         }),
       });
       if (res.ok) {
         const data = await res.json();
         setSuccess(data.message || "Subtitle saved");
         setTitle(""); setSeason(""); setEpisode(""); setServer("");
-        setQuality(""); setSubtitleText(""); setReleaseName("");
+        setQuality(""); setSubtitleText(""); setReleaseName(""); setOffsetSeconds("");
         setSelectedMedia(null); setSeasons([]); setEpisodes([]); setServers([]);
         fetchEntries();
       } else {
@@ -428,6 +431,43 @@ export default function AdminSubtitlePage() {
                 </div>
               )}
 
+              {/* ============================================================ */}
+              {/* SUBTITLE OFFSET (Sync Adjustment)                            */}
+              {/* ============================================================ */}
+              <div className="rounded-md border border-orange-500/30 bg-orange-500/5 p-3">
+                <Label htmlFor="offsetSeconds">Subtitle Sync Adjustment (detik)</Label>
+                <div className="mt-1 flex items-center gap-2">
+                  <Input
+                    id="offsetSeconds"
+                    type="number"
+                    step="0.1"
+                    value={offsetSeconds}
+                    onChange={(e) => setOffsetSeconds(e.target.value)}
+                    placeholder="0"
+                    className="w-24"
+                  />
+                  <span className="text-xs text-muted-foreground">
+                    {offsetSeconds === "" || offsetSeconds === "0"
+                      ? "Tidak ada offset"
+                      : Number(offsetSeconds) > 0
+                      ? `Subtitle di-delay ${offsetSeconds}s (kalau subtitle terlalu CEPAT)`
+                      : `Subtitle di-advance ${Math.abs(Number(offsetSeconds))}s (kalau subtitle terlalu LAMBAT)`}
+                  </span>
+                </div>
+                <div className="mt-2 flex gap-1">
+                  <button type="button" onClick={() => setOffsetSeconds(String((Number(offsetSeconds) || 0) - 0.5))}
+                    className="rounded bg-muted px-2 py-1 text-xs hover:bg-muted/80">-0.5s</button>
+                  <button type="button" onClick={() => setOffsetSeconds(String((Number(offsetSeconds) || 0) + 0.5))}
+                    className="rounded bg-muted px-2 py-1 text-xs hover:bg-muted/80">+0.5s</button>
+                  <button type="button" onClick={() => setOffsetSeconds(String((Number(offsetSeconds) || 0) - 1))}
+                    className="rounded bg-muted px-2 py-1 text-xs hover:bg-muted/80">-1s</button>
+                  <button type="button" onClick={() => setOffsetSeconds(String((Number(offsetSeconds) || 0) + 1))}
+                    className="rounded bg-muted px-2 py-1 text-xs hover:bg-muted/80">+1s</button>
+                  <button type="button" onClick={() => setOffsetSeconds("0")}
+                    className="rounded bg-muted px-2 py-1 text-xs hover:bg-muted/80">Reset</button>
+                </div>
+              </div>
+
               <div>
                 <Label htmlFor="file">Upload .srt File</Label>
                 <Input id="file" type="file" accept="*/*" onChange={handleFileUpload} className="cursor-pointer" />
@@ -501,6 +541,11 @@ export default function AdminSubtitlePage() {
                           {entry.episode && <Badge variant="outline" className="text-[10px]">E{entry.episode}</Badge>}
                           {entry.server && <Badge variant="outline" className="text-[10px] text-purple-600">{entry.server}</Badge>}
                           {entry.quality && <Badge variant="outline" className="text-[10px]">{entry.quality}</Badge>}
+                          {entry.offset_ms && entry.offset_ms !== 0 && (
+                            <Badge variant="outline" className="text-[10px] text-orange-600">
+                              {entry.offset_ms > 0 ? "+" : ""}{(entry.offset_ms / 1000).toFixed(1)}s
+                            </Badge>
+                          )}
                         </div>
                       </div>
                       <button
