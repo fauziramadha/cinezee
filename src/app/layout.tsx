@@ -3,6 +3,7 @@ import { Geist } from "next/font/google";
 import "./globals.css";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as SonnerToaster } from "@/components/ui/sonner";
+import { Providers } from "@/components/providers";
 import { SplashOverlay } from "@/components/pwa/splash-screen";
 import Script from "next/script";
 import ClientLayout from "./client-layout";
