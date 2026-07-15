@@ -51,9 +51,15 @@ export function AuthModal() {
   const handleGoogleLogin = async () => {
     setGoogleLoading(true);
     try {
+      // PENTING: redirect: true (default) supaya browser yang handle redirect ke Google.
+      // Kalau redirect: false, fetch API dipakai, tapi Cloudflare Workers gak handle
+      // cookies dengan baik di fetch internal → redirect gagal → modal stuck loading.
       await signIn("google", { callbackUrl: "/" });
+      // signIn dengan redirect:true akan otomatis reload page,
+      // jadi setGoogleLoading(false) gak kepanggil, biarin aja.
     } catch (error) {
-      toast.error("Gagal login dengan Google");
+      console.error("[Auth] Google login error:", error);
+      toast.error("Gagal login dengan Google. Cek console untuk detail.");
       setGoogleLoading(false);
     }
   };
