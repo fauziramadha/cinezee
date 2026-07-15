@@ -95,14 +95,13 @@ function hasIndonesianSubtitle(subs: Subtitle[]): boolean {
 }
 
 // ============================================================
-// Helper: fetch subtitle Indonesia dari SubDL (via backend)
+// Helper: fetch subtitle Indonesia dari Manual DB (no SubDL)
 // ============================================================
-async function fetchSubdlIndonesian(params: {
+async function fetchManualIndonesian(params: {
   title: string;
   type: "movie" | "tv";
   season?: string;
   episode?: string;
-  filmQuality?: string;  // NEW
 }): Promise<Subtitle | null> {
   try {
     const searchParams = new URLSearchParams({
@@ -112,31 +111,27 @@ async function fetchSubdlIndonesian(params: {
     });
     if (params.season) searchParams.set("season", params.season);
     if (params.episode) searchParams.set("episode", params.episode);
-    if (params.filmQuality) searchParams.set("quality", params.filmQuality);
 
-    console.log("[Subtitle] Fetching SubDL Indonesian for:", params.title, "quality:", params.filmQuality);
-    const res = await fetch(`/api/subtitle/indonesian?${searchParams.toString()}`);
+    console.log("[Subtitle] Fetching manual Indonesian for:", params.title);
+    const res = await fetch(`/api/subtitle/manual?${searchParams.toString()}`);
     if (!res.ok) {
-      console.warn("[Subtitle] SubDL fetch failed:", res.status);
+      console.warn("[Subtitle] Manual subtitle not found:", res.status);
       return null;
     }
 
     const blob = await res.blob();
-    if (blob.size < 50) {
-      console.warn("[Subtitle] SubDL returned empty/too small");
-      return null;
-    }
+    if (blob.size < 50) return null;
 
     const blobUrl = URL.createObjectURL(blob);
-    console.log("[Subtitle] SubDL Indonesian loaded:", blobUrl.substring(0, 50));
+    console.log("[Subtitle] Manual Indonesian loaded");
     return {
-      label: "Bahasa Indonesia (SubDL)",
+      label: "Bahasa Indonesia",
       url: blobUrl,
       language: "bahasa",
       type: "full",
     };
   } catch (err) {
-    console.warn("[Subtitle] SubDL fetch error:", err);
+    console.warn("[Subtitle] Manual fetch error:", err);
     return null;
   }
 }
@@ -511,12 +506,12 @@ export function PlayerModal() {
         return;
       }
 
-      const subdlSub = await fetchSubdlIndonesian({ title, type, season, episode, filmQuality });
+      const manualSub = await fetchManualIndonesian({ title, type, season, episode });
       if (cancelled) return;
 
-      if (subdlSub) {
-        prevBlobUrlRef.current = subdlSub.url; // simpan untuk cleanup nanti
-        setSubdlSubtitle(subdlSub);
+      if (manualSub) {
+        prevBlobUrlRef.current = manualSub.url;
+        setSubdlSubtitle(manualSub);
       } else {
         setSubdlSubtitle(null);
       }
