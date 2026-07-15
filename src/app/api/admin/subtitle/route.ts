@@ -42,6 +42,19 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
+
+    // Parse offset_ms (bisa dari number atau string "2.5" detik)
+    let offsetMs = 0;
+    if (body.offset_ms !== undefined && body.offset_ms !== null && body.offset_ms !== "") {
+      offsetMs = Math.round(Number(body.offset_ms));
+      if (Number.isNaN(offsetMs)) offsetMs = 0;
+    }
+    // Kalau dari offset_seconds (UI pakai detik)
+    if (body.offset_seconds !== undefined && body.offset_seconds !== null && body.offset_seconds !== "") {
+      offsetMs = Math.round(Number(body.offset_seconds) * 1000);
+      if (Number.isNaN(offsetMs)) offsetMs = 0;
+    }
+
     const result = await upsertManualSubtitle({
       title: body.title,
       type: body.type,
@@ -51,11 +64,14 @@ export async function POST(request: NextRequest) {
       quality: body.quality,
       subtitle_text: body.subtitle_text,
       release_name: body.release_name,
+      offset_ms: offsetMs,
     });
+
     return NextResponse.json({
       ...result,
       success: true,
       message: result.updated ? "Subtitle updated" : "Subtitle created",
+      offset_ms: offsetMs,
     });
   } catch (error) {
     return NextResponse.json({ error: "Failed", detail: String(error) }, { status: 500 });
