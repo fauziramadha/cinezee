@@ -131,26 +131,6 @@ export function DetailModal() {
             } as any),
           };
           setDetail(adapted);
-
-          // ============================================================
-          // PRE-FETCH SubDL Indonesian subtitle (background, gak blocking)
-          // Saat user klik play nanti, subtitle udah ke-cache di D1 → instant
-          // ============================================================
-          if (!cinemacitySubtitlesHasIndo(adapted)) {
-            // Ambil quality dari server pertama (kalau ada multiple servers)
-            const allServers = (cd as any).servers as any[] | undefined;
-            const filmQuality = allServers?.[0]?.title;
-            const prefetchParams = new URLSearchParams({
-              title: cd.title,
-              type: cd.type,
-              format: "vtt",
-            });
-            if (filmQuality) prefetchParams.set("quality", filmQuality);
-            // Fire-and-forget (gak perlu await)
-            fetch(`/api/subtitle/indonesian?${prefetchParams.toString()}`)
-              .then(() => console.log("[Subtitle] Pre-fetch completed"))
-              .catch(() => {});
-          }
           return;
         }
 
