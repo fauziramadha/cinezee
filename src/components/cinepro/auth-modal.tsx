@@ -50,18 +50,25 @@ export function AuthModal() {
   // Handle Google OAuth login
   const handleGoogleLogin = async () => {
     setGoogleLoading(true);
+    
     try {
-      // PENTING: redirect: true (default) supaya browser yang handle redirect ke Google.
-      // Kalau redirect: false, fetch API dipakai, tapi Cloudflare Workers gak handle
-      // cookies dengan baik di fetch internal → redirect gagal → modal stuck loading.
-      await signIn("google", { callbackUrl: "/" });
-      // signIn dengan redirect:true akan otomatis reload page,
-      // jadi setGoogleLoading(false) gak kepanggil, biarin aja.
-    } catch (error) {
-      console.error("[Auth] Google login error:", error);
-      toast.error("Gagal login dengan Google. Cek console untuk detail.");
-      setGoogleLoading(false);
+      // ============================================================
+      // METHOD 1: Coba pakai signIn dari next-auth/react
+      // ============================================================
+      if (typeof signIn === "function") {
+        await signIn("google", { callbackUrl: "/", redirect: true });
+        return;
+      }
+    } catch (err) {
+      console.warn("[Auth] signIn function failed, fallback to direct redirect:", err);
     }
+
+    // ============================================================
+    // METHOD 2: Fallback — direct browser redirect ke NextAuth endpoint
+    // Lebih reliable di Cloudflare Workers (gak依赖 SessionProvider)
+    // ============================================================
+    const callbackUrl = encodeURIComponent("/");
+    window.location.href = `/api/auth/signin/google?callbackUrl=${callbackUrl}`;
   };
 
   // Handle email/password login
