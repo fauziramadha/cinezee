@@ -230,6 +230,13 @@ export function parseDetailPage(html: string, url: string): CinemacityDetail {
     detail.genres = keywordsMatch[1].split(",").map((g) => g.trim()).filter(Boolean);
   }
 
+  // Extract YouTube trailer ID dari data-vbg attribute
+  const vbgMatch = html.match(/data-vbg="https?:\/\/(?:www\.)?youtube\.com\/watch\?v=([a-zA-Z0-9_-]{11})"/);
+  if (vbgMatch) {
+    detail.youtubeId = vbgMatch[1];
+    console.log("[Parser] YouTube trailer ID:", vbgMatch[1]);
+  }
+
   // Stream URL: cari eval(atob("..."))
   const streamInfo = extractStreamFromHtml(html);
   if (streamInfo) {
