@@ -479,16 +479,63 @@ export async function invalidateCacheByTitle(title: string, type: string): Promi
 }
 
 // ============================================================
-// MAIN: Get Indonesian subtitle
+// HELPER: Sort Indonesian subtitles by quality match
+// Prioritaskan subtitle yang release_name match dengan film quality
 // ============================================================
+function sortByQualityMatch(
+  subs: SubDLResult[],
+  filmQuality?: string
+): SubDLResult[] {
+  if (!filmQuality) return subs;
+
+  const qualityLower = filmQuality.toLowerCase();
+  console.log("[SubDL] Sorting by quality match:", filmQuality);
+
+  // Extract quality keywords dari film
+  const qualityKeywords: string[] = [];
+  if (qualityLower.includes("web-dl") || qualityLower.includes("web dl")) {
+    qualityKeywords.push("web-dl", "webdl", "web");
+  }
+  if (qualityLower.includes("webrip")) {
+    qualityKeywords.push("webrip", "web-rip", "web");
+  }
+  if (qualityLower.includes("cam") || qualityLower.includes("cam-rip")) {
+    qualityKeywords.push("cam", "cam-rip", "camrip");
+  }
+  if (qualityLower.includes("ts") || qualityLower.includes("telesync")) {
+    qualityKeywords.push("ts", "telesync");
+  }
+  if (qualityLower.includes("bluray") || qualityLower.includes("blu-ray")) {
+    qualityKeywords.push("bluray", "brrip", "bdrip", "blu-ray");
+  }
+  if (qualityLower.includes("hdrip")) {
+    qualityKeywords.push("hdrip", "hd-rip");
+  }
+
+  console.log("[SubDL] Quality keywords to match:", qualityKeywords);
+
+  // Sort: subtitle yang release_name match quality keyword di atas
+  return subs.sort((a, b) => {
+    const aName = (a.release_name || "").toLowerCase();
+    const bName = (b.release_name || "").toLowerCase();
+
+    // Hitung match score (jumlah keyword yang match)
+    const aScore = qualityKeywords.filter((kw) => aName.includes(kw)).length;
+    const bScore = qualityKeywords.filter((kw) => bName.includes(kw)).length;
+
+    return bScore - aScore; // yang match lebih banyak di atas
+  });
+}
+
 export async function getIndonesianSubtitle(params: {
   title: string;
   type: "movie" | "tv";
   season?: string;
   episode?: string;
+  filmQuality?: string;  // NEW: WEB-DL, CAM-Rip, TS, dll
   apiKey: string;
 }): Promise<{ text: string; format: "srt" } | null> {
-  const { title, type, season, episode, apiKey } = params;
+  const { title, type, season, episode, filmQuality, apiKey } = params;
 
   // Build cache key
   const keyParts = [title.toLowerCase().trim(), type];
@@ -520,17 +567,29 @@ export async function getIndonesianSubtitle(params: {
   // FILTER MANUAL: cari yang language === "ID"
   // (SubDL API language filter gak bekerja, tetap return semua bahasa)
   // ============================================================
-  const results = filterIndonesian(allResults);
+    const indoSubs = filterIndonesian(allResults);
 
   console.log(
-    `[SubDL] Total results: ${allResults.length}, Indonesian: ${results.length}`
+    `[SubDL] Total results: ${allResults.length}, Indonesian: ${indoSubs.length}`
   );
 
-  if (results.length === 0) {
+  if (indoSubs.length === 0) {
     console.log("[SubDL] No Indonesian subtitles found");
     const langs = allResults.map((s) => `${s.language}/${s.lang}`).join(", ");
     console.log("[SubDL] Available languages:", langs);
     return null;
+  }
+
+  // ============================================================
+  // SORT by quality match (prioritaskan subtitle yang match film quality)
+  // ============================================================
+  const results = sortByQualityMatch(indoSubs, filmQuality);
+
+  if (filmQuality) {
+    console.log(
+      "[SubDL] Indonesian subtitles (sorted by quality match):",
+      results.map((s) => `${s.release_name?.substring(0, 50)}`).slice(0, 3)
+    );
   }
 
   // 3. Try download (loop sampai dapet yang valid)
