@@ -102,6 +102,7 @@ async function fetchSubdlIndonesian(params: {
   type: "movie" | "tv";
   season?: string;
   episode?: string;
+  filmQuality?: string;  // NEW
 }): Promise<Subtitle | null> {
   try {
     const searchParams = new URLSearchParams({
@@ -111,8 +112,9 @@ async function fetchSubdlIndonesian(params: {
     });
     if (params.season) searchParams.set("season", params.season);
     if (params.episode) searchParams.set("episode", params.episode);
+    if (params.filmQuality) searchParams.set("quality", params.filmQuality);
 
-    console.log("[Subtitle] Fetching SubDL Indonesian for:", params.title);
+    console.log("[Subtitle] Fetching SubDL Indonesian for:", params.title, "quality:", params.filmQuality);
     const res = await fetch(`/api/subtitle/indonesian?${searchParams.toString()}`);
     if (!res.ok) {
       console.warn("[Subtitle] SubDL fetch failed:", res.status);
@@ -495,12 +497,21 @@ export function PlayerModal() {
         episode = currentSeasonEpisodes[currentEpisodeIdx].episode || String(currentEpisodeIdx + 1);
       }
 
+      // ============================================================
+      // Extract film quality dari server title (kalau ada)
+      // Cinemacity server titles: "WEB-DL", "TS - DKS - clean", "CAM-Rip - OnlyFlix"
+      // ============================================================
+      let filmQuality: string | undefined;
+      if (servers.length > 0 && servers[currentServerIdx]) {
+        filmQuality = servers[currentServerIdx].title;
+      }
+
       if (!title) {
         setSubdlLoading(false);
         return;
       }
 
-      const subdlSub = await fetchSubdlIndonesian({ title, type, season, episode });
+      const subdlSub = await fetchSubdlIndonesian({ title, type, season, episode, filmQuality });
       if (cancelled) return;
 
       if (subdlSub) {
