@@ -6,12 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import {
-  Loader2,
-  Trash2,
-  Upload,
-  FileText,
-  Search,
-  X,
+  Loader2, Trash2, Upload, FileText, Search, X,
 } from "lucide-react";
 
 interface SubtitleEntry {
@@ -20,6 +15,7 @@ interface SubtitleEntry {
   type: string;
   season: string | null;
   episode: string | null;
+  server: string | null;
   quality: string | null;
   release_name: string | null;
   updated_at: string;
@@ -34,6 +30,10 @@ interface SearchResult {
   year?: string;
 }
 
+interface ServerOption {
+  title: string;
+  streamUrl: string;
+}
 interface Episode {
   title: string;
   streamUrl: string;
@@ -43,6 +43,7 @@ interface Episode {
 
 export default function AdminSubtitlePage() {
   const [entries, setEntries] = useState<SubtitleEntry[]>([]);
+  const [entriesSearch, setEntriesSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -53,21 +54,22 @@ export default function AdminSubtitlePage() {
   const [type, setType] = useState<"movie" | "tv">("movie");
   const [season, setSeason] = useState("");
   const [episode, setEpisode] = useState("");
+  const [server, setServer] = useState("");
   const [quality, setQuality] = useState("");
   const [subtitleText, setSubtitleText] = useState("");
   const [releaseName, setReleaseName] = useState("");
 
-  // Search state
+  // Search state (find film)
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [searchLoading, setSearchLoading] = useState(false);
   const [selectedMedia, setSelectedMedia] = useState<SearchResult | null>(null);
 
-  // TV episodes state
+  // TV episodes + servers state
   const [seasons, setSeasons] = useState<string[]>([]);
   const [episodes, setEpisodes] = useState<Episode[]>([]);
+  const [servers, setServers] = useState<ServerOption[]>([]);
 
-  // API key
   const [apiKey, setApiKey] = useState("");
 
   useEffect(() => {
@@ -82,9 +84,12 @@ export default function AdminSubtitlePage() {
     }
   }, [apiKey]);
 
-  // ============================================================
-  // SEARCH: debounce 400ms
-  // ============================================================
+  // Refetch entries saat entriesSearch berubah
+  useEffect(() => {
+    if (apiKey) fetchEntries();
+  }, [entriesSearch]);
+
+  // Search cinemacity (debounce)
   useEffect(() => {
     if (!searchQuery.trim()) {
       setSearchResults([]);
@@ -93,24 +98,18 @@ export default function AdminSubtitlePage() {
     setSearchLoading(true);
     const timer = setTimeout(async () => {
       try {
-        const res = await fetch(
-          `/api/cinemacity/search?q=${encodeURIComponent(searchQuery)}`
-        );
+        const res = await fetch(`/api/cinemacity/search?q=${encodeURIComponent(searchQuery)}`);
         if (res.ok) {
           const data = await res.json();
           setSearchResults(data.movies || []);
         }
-      } catch {
-      } finally {
+      } catch {} finally {
         setSearchLoading(false);
       }
     }, 400);
     return () => clearTimeout(timer);
   }, [searchQuery]);
 
-  // ============================================================
-  // SELECT MEDIA: auto-fill title + type, fetch episodes kalau TV
-  // ============================================================
   const handleSelectMedia = async (media: SearchResult) => {
     setSelectedMedia(media);
     setTitle(media.title);
@@ -119,48 +118,45 @@ export default function AdminSubtitlePage() {
     setSearchResults([]);
     setSeason("");
     setEpisode("");
+    setServer("");
     setSeasons([]);
     setEpisodes([]);
+    setServers([]);
 
-    // Kalau TV, fetch detail untuk dapet episodes
-    if (media.type === "tv") {
-      try {
-        const res = await fetch(`/api/cinemacity/movie/${media.slug}`);
-        if (res.ok) {
-          const data = await res.json();
-          const eps = data.movie?.streamEpisodes || [];
-          setEpisodes(eps);
-          // Extract unique seasons
-          const seasonSet = new Set<string>();
-          eps.forEach((e: Episode) => seasonSet.add(e.season || "1"));
-          setSeasons(Array.from(seasonSet).sort((a, b) => Number(a) - Number(b)));
-        }
-      } catch {}
-    }
+    try {
+      const res = await fetch(`/api/cinemacity/movie/${media.slug}`);
+      if (res.ok) {
+        const data = await res.json();
+        const movie = data.movie || {};
+        // Episodes (TV)
+        const eps = movie.streamEpisodes || [];
+        setEpisodes(eps);
+        const seasonSet = new Set<string>();
+        eps.forEach((e: Episode) => seasonSet.add(e.season || "1"));
+        setSeasons(Array.from(seasonSet).sort((a, b) => Number(a) - Number(b)));
+        // Servers
+        const srvs = movie.servers || [];
+        setServers(srvs);
+      }
+    } catch {}
   };
 
-  // ============================================================
-  // Get episodes for selected season
-  // ============================================================
-  const currentSeasonEpisodes = episodes.filter(
-    (e) => (e.season || "1") === season
-  );
+  const currentSeasonEpisodes = episodes.filter((e) => (e.season || "1") === season);
 
   const fetchEntries = async () => {
     setLoading(true);
     try {
-      const res = await fetch("/api/admin/subtitle", {
+      const url = entriesSearch
+        ? `/api/admin/subtitle?search=${encodeURIComponent(entriesSearch)}`
+        : "/api/admin/subtitle";
+      const res = await fetch(url, {
         headers: { "X-Admin-API-Key": apiKey },
       });
       if (res.ok) {
         const data = await res.json();
         setEntries(data.subtitles || []);
-      } else {
-        setError("Failed to load subtitles");
       }
-    } catch {
-      setError("Network error");
-    } finally {
+    } catch {} finally {
       setLoading(false);
     }
   };
@@ -171,11 +167,9 @@ export default function AdminSubtitlePage() {
       setError("Title and Subtitle Text are required");
       return;
     }
-
     setSubmitting(true);
     setError(null);
     setSuccess(null);
-
     try {
       const res = await fetch("/api/admin/subtitle", {
         method: "POST",
@@ -184,39 +178,23 @@ export default function AdminSubtitlePage() {
           "X-Admin-API-Key": apiKey,
         },
         body: JSON.stringify({
-          title: title.trim(),
-          type,
-          season: season || null,
-          episode: episode || null,
-          quality: quality || null,
-          subtitle_text: subtitleText,
-          release_name: releaseName || null,
+          title: title.trim(), type, season: season || null, episode: episode || null,
+          server: server || null, quality: quality || null,
+          subtitle_text: subtitleText, release_name: releaseName || null,
         }),
       });
-
       if (res.ok) {
         const data = await res.json();
         setSuccess(data.message || "Subtitle saved");
-        // Reset form (keep API key)
-        setTitle("");
-        setSeason("");
-        setEpisode("");
-        setQuality("");
-        setSubtitleText("");
-        setReleaseName("");
-        setSelectedMedia(null);
-        setSeasons([]);
-        setEpisodes([]);
+        setTitle(""); setSeason(""); setEpisode(""); setServer("");
+        setQuality(""); setSubtitleText(""); setReleaseName("");
+        setSelectedMedia(null); setSeasons([]); setEpisodes([]); setServers([]);
         fetchEntries();
       } else {
         const err = await res.json();
         setError(err.error || "Failed to save");
       }
-    } catch {
-      setError("Network error");
-    } finally {
-      setSubmitting(false);
-    }
+    } catch { setError("Network error"); } finally { setSubmitting(false); }
   };
 
   const handleDelete = async (id: number) => {
@@ -233,27 +211,19 @@ export default function AdminSubtitlePage() {
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-
     const reader = new FileReader();
     reader.onload = (event) => {
       const text = event.target?.result as string;
-
       if (text.includes("%PDF") || text.includes("\u0000")) {
         setError("File bukan subtitle text. Upload .srt atau .vtt.");
         e.target.value = "";
         return;
       }
-
       if (!text.match(/\d{2}:\d{2}:\d{2}/)) {
         setError("File gak terlihat sebagai SRT/VTT valid.");
-      } else {
-        setError(null);
-      }
-
+      } else { setError(null); }
       setSubtitleText(text);
-      if (!releaseName) {
-        setReleaseName(file.name.replace(/\.(srt|vtt|txt)$/i, ""));
-      }
+      if (!releaseName) setReleaseName(file.name.replace(/\.(srt|vtt|txt)$/i, ""));
     };
     reader.readAsText(file);
   };
@@ -268,7 +238,6 @@ export default function AdminSubtitlePage() {
           </p>
         </div>
 
-        {/* API Key Input */}
         {!apiKey && (
           <div className="rounded-lg border border-yellow-500/30 bg-yellow-500/5 p-4">
             <Label className="text-sm font-semibold">Admin API Key</Label>
@@ -284,9 +253,7 @@ export default function AdminSubtitlePage() {
 
         {apiKey && (
           <>
-            {/* ============================================================ */}
-            {/* SEARCH FILM                                                  */}
-            {/* ============================================================ */}
+            {/* SEARCH FILM */}
             <div className="space-y-3 rounded-lg border bg-card p-4">
               <h2 className="text-lg font-semibold">1. Cari Film / TV Series</h2>
               <div className="relative">
@@ -303,7 +270,6 @@ export default function AdminSubtitlePage() {
                 )}
               </div>
 
-              {/* Search Results */}
               {searchResults.length > 0 && (
                 <div className="max-h-80 space-y-1 overflow-y-auto rounded-md border bg-background p-2">
                   {searchResults.map((media) => (
@@ -327,7 +293,7 @@ export default function AdminSubtitlePage() {
                       )}
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-sm font-medium">{media.title}</p>
-                        <div className="flex items-center gap-1 mt-0.5">
+                        <div className="mt-0.5 flex items-center gap-1">
                           <Badge variant="secondary" className="text-[10px]">
                             {media.type === "tv" ? "TV" : "Movie"}
                           </Badge>
@@ -341,7 +307,6 @@ export default function AdminSubtitlePage() {
                 </div>
               )}
 
-              {/* Selected Media Badge */}
               {selectedMedia && (
                 <div className="flex items-center gap-2 rounded-md bg-primary/10 p-2">
                   <Badge variant="secondary" className="text-[10px]">
@@ -350,12 +315,8 @@ export default function AdminSubtitlePage() {
                   <span className="flex-1 truncate text-sm font-medium">{selectedMedia.title}</span>
                   <button
                     onClick={() => {
-                      setSelectedMedia(null);
-                      setTitle("");
-                      setSeason("");
-                      setEpisode("");
-                      setSeasons([]);
-                      setEpisodes([]);
+                      setSelectedMedia(null); setTitle(""); setSeason(""); setEpisode("");
+                      setServer(""); setSeasons([]); setEpisodes([]); setServers([]);
                     }}
                     className="text-muted-foreground hover:text-destructive"
                   >
@@ -365,65 +326,63 @@ export default function AdminSubtitlePage() {
               )}
             </div>
 
-            {/* Upload Form */}
+            {/* UPLOAD FORM */}
             <form onSubmit={handleSubmit} className="space-y-4 rounded-lg border bg-card p-4">
               <h2 className="text-lg font-semibold">2. Upload Subtitle</h2>
 
-              {/* Title (auto-filled, masih bisa edit) */}
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div>
                   <Label htmlFor="title">Title *</Label>
-                  <Input
-                    id="title"
-                    value={title}
-                    onChange={(e) => setTitle(e.target.value)}
-                    placeholder="Cari film di atas dulu..."
-                    required
-                  />
+                  <Input id="title" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Cari film di atas dulu..." required />
                 </div>
                 <div>
                   <Label htmlFor="type">Type</Label>
-                  <select
-                    id="type"
-                    value={type}
-                    onChange={(e) => setType(e.target.value as "movie" | "tv")}
-                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                  >
+                  <select id="type" value={type} onChange={(e) => setType(e.target.value as "movie" | "tv")}
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm">
                     <option value="movie">Movie</option>
                     <option value="tv">TV Series</option>
                   </select>
                 </div>
               </div>
 
-              {/* Season & Episode (hanya untuk TV, pakai data cinemacity) */}
+              {/* SERVER SELECTOR — hanya kalau film punya multiple servers */}
+              {servers.length > 1 && (
+                <div className="rounded-md border border-purple-500/30 bg-purple-500/5 p-3">
+                  <Label htmlFor="serverSelect">Server (pilih untuk subtitle spesifik)</Label>
+                  <select
+                    id="serverSelect"
+                    value={server}
+                    onChange={(e) => setServer(e.target.value)}
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  >
+                    <option value="">All servers (generic subtitle)</option>
+                    {servers.map((srv, idx) => (
+                      <option key={idx} value={srv.title}>{srv.title}</option>
+                    ))}
+                  </select>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Pilih server spesifik kalau subtitle cuma sync untuk server itu. Biarkan "All servers" kalau subtitle sync untuk semua.
+                  </p>
+                </div>
+              )}
+
+              {/* TV: Season & Episode */}
               {type === "tv" && seasons.length > 0 && (
                 <div className="grid grid-cols-2 gap-3 rounded-md border border-blue-500/30 bg-blue-500/5 p-3">
                   <div>
-                    <Label htmlFor="seasonSelect">Season (dari cinemacity)</Label>
-                    <select
-                      id="seasonSelect"
-                      value={season}
-                      onChange={(e) => {
-                        setSeason(e.target.value);
-                        setEpisode("");
-                      }}
-                      className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                    >
+                    <Label htmlFor="seasonSelect">Season</Label>
+                    <select id="seasonSelect" value={season}
+                      onChange={(e) => { setSeason(e.target.value); setEpisode(""); }}
+                      className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm">
                       <option value="">Pilih Season...</option>
-                      {seasons.map((s) => (
-                        <option key={s} value={s}>Season {s}</option>
-                      ))}
+                      {seasons.map((s) => <option key={s} value={s}>Season {s}</option>)}
                     </select>
                   </div>
                   <div>
-                    <Label htmlFor="episodeSelect">Episode (dari cinemacity)</Label>
-                    <select
-                      id="episodeSelect"
-                      value={episode}
-                      onChange={(e) => setEpisode(e.target.value)}
-                      disabled={!season}
-                      className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm disabled:opacity-50"
-                    >
+                    <Label htmlFor="episodeSelect">Episode</Label>
+                    <select id="episodeSelect" value={episode}
+                      onChange={(e) => setEpisode(e.target.value)} disabled={!season}
+                      className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm disabled:opacity-50">
                       <option value="">Pilih Episode...</option>
                       {currentSeasonEpisodes.map((ep, idx) => (
                         <option key={idx} value={ep.episode || String(idx + 1)}>
@@ -435,118 +394,91 @@ export default function AdminSubtitlePage() {
                 </div>
               )}
 
-              {/* Manual season/episode input (fallback kalau search gak dipakai) */}
               {seasons.length === 0 && (
                 <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                   <div>
                     <Label htmlFor="season">Season</Label>
-                    <Input
-                      id="season"
-                      value={season}
-                      onChange={(e) => setSeason(e.target.value)}
-                      placeholder="1"
-                    />
+                    <Input id="season" value={season} onChange={(e) => setSeason(e.target.value)} placeholder="1" />
                   </div>
                   <div>
                     <Label htmlFor="episode">Episode</Label>
-                    <Input
-                      id="episode"
-                      value={episode}
-                      onChange={(e) => setEpisode(e.target.value)}
-                      placeholder="1"
-                    />
+                    <Input id="episode" value={episode} onChange={(e) => setEpisode(e.target.value)} placeholder="1" />
                   </div>
                   <div>
                     <Label htmlFor="quality">Quality</Label>
-                    <Input
-                      id="quality"
-                      value={quality}
-                      onChange={(e) => setQuality(e.target.value)}
-                      placeholder="WEB-DL"
-                    />
+                    <Input id="quality" value={quality} onChange={(e) => setQuality(e.target.value)} placeholder="WEB-DL" />
                   </div>
                   <div>
                     <Label htmlFor="releaseName">Release Name</Label>
-                    <Input
-                      id="releaseName"
-                      value={releaseName}
-                      onChange={(e) => setReleaseName(e.target.value)}
-                      placeholder="Obsession.2025.WEB-DL"
-                    />
+                    <Input id="releaseName" value={releaseName} onChange={(e) => setReleaseName(e.target.value)} placeholder="..." />
                   </div>
                 </div>
               )}
 
-              {/* Quality & Release (kalau pakai search) */}
               {seasons.length > 0 && (
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <Label htmlFor="quality">Quality</Label>
-                    <Input
-                      id="quality"
-                      value={quality}
-                      onChange={(e) => setQuality(e.target.value)}
-                      placeholder="WEB-DL"
-                    />
+                    <Input id="quality" value={quality} onChange={(e) => setQuality(e.target.value)} placeholder="WEB-DL" />
                   </div>
                   <div>
                     <Label htmlFor="releaseName">Release Name</Label>
-                    <Input
-                      id="releaseName"
-                      value={releaseName}
-                      onChange={(e) => setReleaseName(e.target.value)}
-                      placeholder="Obsession.2025.WEB-DL"
-                    />
+                    <Input id="releaseName" value={releaseName} onChange={(e) => setReleaseName(e.target.value)} placeholder="..." />
                   </div>
                 </div>
               )}
 
-              {/* File Upload */}
               <div>
                 <Label htmlFor="file">Upload .srt File</Label>
-                <Input
-                  id="file"
-                  type="file"
-                  accept="*/*"
-                  onChange={handleFileUpload}
-                  className="cursor-pointer"
-                />
+                <Input id="file" type="file" accept="*/*" onChange={handleFileUpload} className="cursor-pointer" />
                 <p className="mt-1 text-xs text-muted-foreground">
                   Atau paste SRT text langsung di bawah. Pilih "All Files" di file picker kalau perlu.
                 </p>
               </div>
 
-              {/* Subtitle Text */}
               <div>
                 <Label htmlFor="subtitleText">Subtitle Text *</Label>
-                <textarea
-                  id="subtitleText"
-                  value={subtitleText}
-                  onChange={(e) => setSubtitleText(e.target.value)}
+                <textarea id="subtitleText" value={subtitleText} onChange={(e) => setSubtitleText(e.target.value)}
                   placeholder="1&#10;00:00:01,000 --> 00:00:04,000&#10;Subtitle text here..."
-                  className="min-h-[200px] w-full rounded-md border border-input bg-background px-3 py-2 font-mono text-xs"
-                  required
-                />
+                  className="min-h-[200px] w-full rounded-md border border-input bg-background px-3 py-2 font-mono text-xs" required />
               </div>
 
               {error && <p className="text-sm text-destructive">{error}</p>}
               {success && <p className="text-sm text-green-600">{success}</p>}
 
               <Button type="submit" disabled={submitting} className="w-full">
-                {submitting ? (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                ) : (
-                  <Upload className="mr-2 h-4 w-4" />
-                )}
+                {submitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Upload className="mr-2 h-4 w-4" />}
                 {submitting ? "Saving..." : "Save Subtitle"}
               </Button>
             </form>
 
-            {/* List Existing Subtitles */}
+            {/* EXISTING SUBTITLES WITH SEARCH */}
             <div className="space-y-3">
-              <h2 className="text-lg font-semibold">
-                Existing Subtitles ({entries.length})
-              </h2>
+              <div className="flex items-center gap-2">
+                <h2 className="text-lg font-semibold flex-1">
+                  Existing Subtitles ({entries.length})
+                </h2>
+              </div>
+
+              {/* Search existing subtitles */}
+              <div className="relative">
+                <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                <Input
+                  type="text"
+                  placeholder="Cari subtitle yang sudah di-upload..."
+                  value={entriesSearch}
+                  onChange={(e) => setEntriesSearch(e.target.value)}
+                  className="pl-10"
+                />
+                {entriesSearch && (
+                  <button
+                    onClick={() => setEntriesSearch("")}
+                    className="absolute right-3 top-3 text-muted-foreground hover:text-foreground"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                )}
+              </div>
 
               {loading ? (
                 <div className="flex justify-center py-8">
@@ -554,31 +486,21 @@ export default function AdminSubtitlePage() {
                 </div>
               ) : entries.length === 0 ? (
                 <p className="py-8 text-center text-sm text-muted-foreground">
-                  No subtitles yet. Upload one above.
+                  {entriesSearch ? `Tidak ada subtitle untuk "${entriesSearch}"` : "No subtitles yet. Upload one above."}
                 </p>
               ) : (
                 <div className="space-y-2">
                   {entries.map((entry) => (
-                    <div
-                      key={entry.id}
-                      className="flex items-center gap-3 rounded-lg border bg-card p-3"
-                    >
+                    <div key={entry.id} className="flex items-center gap-3 rounded-lg border bg-card p-3">
                       <FileText className="h-5 w-5 shrink-0 text-primary" />
                       <div className="min-w-0 flex-1">
                         <p className="truncate font-medium">{entry.title}</p>
                         <div className="mt-1 flex flex-wrap items-center gap-1">
-                          <Badge variant="secondary" className="text-[10px]">
-                            {entry.type}
-                          </Badge>
-                          {entry.season && (
-                            <Badge variant="outline" className="text-[10px]">S{entry.season}</Badge>
-                          )}
-                          {entry.episode && (
-                            <Badge variant="outline" className="text-[10px]">E{entry.episode}</Badge>
-                          )}
-                          {entry.quality && (
-                            <Badge variant="outline" className="text-[10px]">{entry.quality}</Badge>
-                          )}
+                          <Badge variant="secondary" className="text-[10px]">{entry.type}</Badge>
+                          {entry.season && <Badge variant="outline" className="text-[10px]">S{entry.season}</Badge>}
+                          {entry.episode && <Badge variant="outline" className="text-[10px]">E{entry.episode}</Badge>}
+                          {entry.server && <Badge variant="outline" className="text-[10px] text-purple-600">{entry.server}</Badge>}
+                          {entry.quality && <Badge variant="outline" className="text-[10px]">{entry.quality}</Badge>}
                         </div>
                       </div>
                       <button
