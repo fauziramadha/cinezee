@@ -460,15 +460,21 @@ export function PlayerModal() {
   // ============================================================
   // FETCH SUBDL INDONESIAN (kalau cinemacity gak punya Indonesian)
   // ============================================================
-  useEffect(() => {
-    if (!playerMedia || subtitles.length === 0) {
+    useEffect(() => {
+    // ============================================================
+    // FIX: Jangan return early kalau subtitles.length === 0
+    // Film dengan multiple servers (Supergirl) punya 0 cinemacity
+    // subtitles di top level, tapi tetap perlu fetch manual subtitle!
+    // ============================================================
+    if (!playerMedia) {
       setSubdlSubtitle(null);
       return;
     }
 
     // Cek apakah cinemacity sudah punya Indonesian
-    if (hasIndonesianSubtitle(subtitles)) {
-      console.log("[Subtitle] Cinemacity has Indonesian, skip SubDL");
+    // Hanya skip kalau cinemacity PUNYA subtitles dan ada Indonesian
+    if (subtitles.length > 0 && hasIndonesianSubtitle(subtitles)) {
+      console.log("[Subtitle] Cinemacity has Indonesian, skip manual");
       setSubdlSubtitle(null);
       return;
     }
