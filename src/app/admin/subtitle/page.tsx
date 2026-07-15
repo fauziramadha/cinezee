@@ -5,7 +5,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Trash2, Upload, FileText } from "lucide-react";
+import {
+  Loader2,
+  Trash2,
+  Upload,
+  FileText,
+  Search,
+  X,
+} from "lucide-react";
 
 interface SubtitleEntry {
   id: number;
@@ -16,6 +23,22 @@ interface SubtitleEntry {
   quality: string | null;
   release_name: string | null;
   updated_at: string;
+}
+
+interface SearchResult {
+  id: string;
+  slug: string;
+  type: string;
+  title: string;
+  poster?: string;
+  year?: string;
+}
+
+interface Episode {
+  title: string;
+  streamUrl: string;
+  season?: string;
+  episode?: string;
 }
 
 export default function AdminSubtitlePage() {
@@ -34,7 +57,17 @@ export default function AdminSubtitlePage() {
   const [subtitleText, setSubtitleText] = useState("");
   const [releaseName, setReleaseName] = useState("");
 
-  // Get admin API key from localStorage (atau prompt user)
+  // Search state
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [selectedMedia, setSelectedMedia] = useState<SearchResult | null>(null);
+
+  // TV episodes state
+  const [seasons, setSeasons] = useState<string[]>([]);
+  const [episodes, setEpisodes] = useState<Episode[]>([]);
+
+  // API key
   const [apiKey, setApiKey] = useState("");
 
   useEffect(() => {
@@ -48,6 +81,70 @@ export default function AdminSubtitlePage() {
       fetchEntries();
     }
   }, [apiKey]);
+
+  // ============================================================
+  // SEARCH: debounce 400ms
+  // ============================================================
+  useEffect(() => {
+    if (!searchQuery.trim()) {
+      setSearchResults([]);
+      return;
+    }
+    setSearchLoading(true);
+    const timer = setTimeout(async () => {
+      try {
+        const res = await fetch(
+          `/api/cinemacity/search?q=${encodeURIComponent(searchQuery)}`
+        );
+        if (res.ok) {
+          const data = await res.json();
+          setSearchResults(data.movies || []);
+        }
+      } catch {
+      } finally {
+        setSearchLoading(false);
+      }
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
+  // ============================================================
+  // SELECT MEDIA: auto-fill title + type, fetch episodes kalau TV
+  // ============================================================
+  const handleSelectMedia = async (media: SearchResult) => {
+    setSelectedMedia(media);
+    setTitle(media.title);
+    setType(media.type as "movie" | "tv");
+    setSearchQuery("");
+    setSearchResults([]);
+    setSeason("");
+    setEpisode("");
+    setSeasons([]);
+    setEpisodes([]);
+
+    // Kalau TV, fetch detail untuk dapet episodes
+    if (media.type === "tv") {
+      try {
+        const res = await fetch(`/api/cinemacity/movie/${media.slug}`);
+        if (res.ok) {
+          const data = await res.json();
+          const eps = data.movie?.streamEpisodes || [];
+          setEpisodes(eps);
+          // Extract unique seasons
+          const seasonSet = new Set<string>();
+          eps.forEach((e: Episode) => seasonSet.add(e.season || "1"));
+          setSeasons(Array.from(seasonSet).sort((a, b) => Number(a) - Number(b)));
+        }
+      } catch {}
+    }
+  };
+
+  // ============================================================
+  // Get episodes for selected season
+  // ============================================================
+  const currentSeasonEpisodes = episodes.filter(
+    (e) => (e.season || "1") === season
+  );
 
   const fetchEntries = async () => {
     setLoading(true);
@@ -100,14 +197,16 @@ export default function AdminSubtitlePage() {
       if (res.ok) {
         const data = await res.json();
         setSuccess(data.message || "Subtitle saved");
-        // Reset form
+        // Reset form (keep API key)
         setTitle("");
         setSeason("");
         setEpisode("");
         setQuality("");
         setSubtitleText("");
         setReleaseName("");
-        // Refresh list
+        setSelectedMedia(null);
+        setSeasons([]);
+        setEpisodes([]);
         fetchEntries();
       } else {
         const err = await res.json();
@@ -127,9 +226,7 @@ export default function AdminSubtitlePage() {
         method: "DELETE",
         headers: { "X-Admin-API-Key": apiKey },
       });
-      if (res.ok) {
-        fetchEntries();
-      }
+      if (res.ok) fetchEntries();
     } catch {}
   };
 
@@ -141,23 +238,19 @@ export default function AdminSubtitlePage() {
     reader.onload = (event) => {
       const text = event.target?.result as string;
 
-      // Validasi: pastikan ini text file (bukan PDF/binary)
       if (text.includes("%PDF") || text.includes("\u0000")) {
-        setError("File bukan subtitle text. Upload file .srt atau .vtt yang valid.");
-        e.target.value = ""; // reset input
+        setError("File bukan subtitle text. Upload .srt atau .vtt.");
+        e.target.value = "";
         return;
       }
 
-      // Cek minimal SRT format (ada timestamp 00:00:00,000 --> )
       if (!text.match(/\d{2}:\d{2}:\d{2}/)) {
-        setError("File gak terlihat sebagai SRT/VTT valid. Tetap bisa save kalau kamu yakin.");
+        setError("File gak terlihat sebagai SRT/VTT valid.");
       } else {
         setError(null);
       }
 
       setSubtitleText(text);
-
-      // Auto-fill release_name dari filename
       if (!releaseName) {
         setReleaseName(file.name.replace(/\.(srt|vtt|txt)$/i, ""));
       }
@@ -186,182 +279,320 @@ export default function AdminSubtitlePage() {
               onChange={(e) => setApiKey(e.target.value)}
               className="mt-1"
             />
-            <p className="mt-1 text-xs text-muted-foreground">
-              Key disimpan di localStorage browser kamu
-            </p>
           </div>
         )}
 
-        {/* Upload Form */}
         {apiKey && (
-          <form onSubmit={handleSubmit} className="space-y-4 rounded-lg border bg-card p-4">
-            <h2 className="text-lg font-semibold">Upload Subtitle</h2>
-
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <div>
-                <Label htmlFor="title">Title *</Label>
+          <>
+            {/* ============================================================ */}
+            {/* SEARCH FILM                                                  */}
+            {/* ============================================================ */}
+            <div className="space-y-3 rounded-lg border bg-card p-4">
+              <h2 className="text-lg font-semibold">1. Cari Film / TV Series</h2>
+              <div className="relative">
+                <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                 <Input
-                  id="title"
-                  value={title}
-                  onChange={(e) => setTitle(e.target.value)}
-                  placeholder="Obsession"
+                  type="text"
+                  placeholder="Ketik judul film..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-10"
+                />
+                {searchLoading && (
+                  <Loader2 className="absolute right-3 top-3 h-4 w-4 animate-spin" />
+                )}
+              </div>
+
+              {/* Search Results */}
+              {searchResults.length > 0 && (
+                <div className="max-h-80 space-y-1 overflow-y-auto rounded-md border bg-background p-2">
+                  {searchResults.map((media) => (
+                    <button
+                      key={media.slug}
+                      onClick={() => handleSelectMedia(media)}
+                      className="flex w-full items-center gap-3 rounded-md p-2 text-left hover:bg-muted"
+                    >
+                      {media.poster ? (
+                        <img
+                          src={media.poster.includes("cinemacity.cc")
+                            ? `/api/cinemacity/image?url=${encodeURIComponent(media.poster)}`
+                            : media.poster}
+                          alt={media.title}
+                          className="h-14 w-10 shrink-0 rounded object-cover"
+                        />
+                      ) : (
+                        <div className="flex h-14 w-10 shrink-0 items-center justify-center rounded bg-muted">
+                          <FileText className="h-4 w-4 text-muted-foreground" />
+                        </div>
+                      )}
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-medium">{media.title}</p>
+                        <div className="flex items-center gap-1 mt-0.5">
+                          <Badge variant="secondary" className="text-[10px]">
+                            {media.type === "tv" ? "TV" : "Movie"}
+                          </Badge>
+                          {media.year && (
+                            <span className="text-[10px] text-muted-foreground">{media.year}</span>
+                          )}
+                        </div>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {/* Selected Media Badge */}
+              {selectedMedia && (
+                <div className="flex items-center gap-2 rounded-md bg-primary/10 p-2">
+                  <Badge variant="secondary" className="text-[10px]">
+                    {selectedMedia.type === "tv" ? "TV Series" : "Movie"}
+                  </Badge>
+                  <span className="flex-1 truncate text-sm font-medium">{selectedMedia.title}</span>
+                  <button
+                    onClick={() => {
+                      setSelectedMedia(null);
+                      setTitle("");
+                      setSeason("");
+                      setEpisode("");
+                      setSeasons([]);
+                      setEpisodes([]);
+                    }}
+                    className="text-muted-foreground hover:text-destructive"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* Upload Form */}
+            <form onSubmit={handleSubmit} className="space-y-4 rounded-lg border bg-card p-4">
+              <h2 className="text-lg font-semibold">2. Upload Subtitle</h2>
+
+              {/* Title (auto-filled, masih bisa edit) */}
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div>
+                  <Label htmlFor="title">Title *</Label>
+                  <Input
+                    id="title"
+                    value={title}
+                    onChange={(e) => setTitle(e.target.value)}
+                    placeholder="Cari film di atas dulu..."
+                    required
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="type">Type</Label>
+                  <select
+                    id="type"
+                    value={type}
+                    onChange={(e) => setType(e.target.value as "movie" | "tv")}
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  >
+                    <option value="movie">Movie</option>
+                    <option value="tv">TV Series</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Season & Episode (hanya untuk TV, pakai data cinemacity) */}
+              {type === "tv" && seasons.length > 0 && (
+                <div className="grid grid-cols-2 gap-3 rounded-md border border-blue-500/30 bg-blue-500/5 p-3">
+                  <div>
+                    <Label htmlFor="seasonSelect">Season (dari cinemacity)</Label>
+                    <select
+                      id="seasonSelect"
+                      value={season}
+                      onChange={(e) => {
+                        setSeason(e.target.value);
+                        setEpisode("");
+                      }}
+                      className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                    >
+                      <option value="">Pilih Season...</option>
+                      {seasons.map((s) => (
+                        <option key={s} value={s}>Season {s}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <Label htmlFor="episodeSelect">Episode (dari cinemacity)</Label>
+                    <select
+                      id="episodeSelect"
+                      value={episode}
+                      onChange={(e) => setEpisode(e.target.value)}
+                      disabled={!season}
+                      className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm disabled:opacity-50"
+                    >
+                      <option value="">Pilih Episode...</option>
+                      {currentSeasonEpisodes.map((ep, idx) => (
+                        <option key={idx} value={ep.episode || String(idx + 1)}>
+                          E{ep.episode || idx + 1} — {ep.title}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              )}
+
+              {/* Manual season/episode input (fallback kalau search gak dipakai) */}
+              {seasons.length === 0 && (
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                  <div>
+                    <Label htmlFor="season">Season</Label>
+                    <Input
+                      id="season"
+                      value={season}
+                      onChange={(e) => setSeason(e.target.value)}
+                      placeholder="1"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="episode">Episode</Label>
+                    <Input
+                      id="episode"
+                      value={episode}
+                      onChange={(e) => setEpisode(e.target.value)}
+                      placeholder="1"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="quality">Quality</Label>
+                    <Input
+                      id="quality"
+                      value={quality}
+                      onChange={(e) => setQuality(e.target.value)}
+                      placeholder="WEB-DL"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="releaseName">Release Name</Label>
+                    <Input
+                      id="releaseName"
+                      value={releaseName}
+                      onChange={(e) => setReleaseName(e.target.value)}
+                      placeholder="Obsession.2025.WEB-DL"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* Quality & Release (kalau pakai search) */}
+              {seasons.length > 0 && (
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label htmlFor="quality">Quality</Label>
+                    <Input
+                      id="quality"
+                      value={quality}
+                      onChange={(e) => setQuality(e.target.value)}
+                      placeholder="WEB-DL"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="releaseName">Release Name</Label>
+                    <Input
+                      id="releaseName"
+                      value={releaseName}
+                      onChange={(e) => setReleaseName(e.target.value)}
+                      placeholder="Obsession.2025.WEB-DL"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* File Upload */}
+              <div>
+                <Label htmlFor="file">Upload .srt File</Label>
+                <Input
+                  id="file"
+                  type="file"
+                  accept="*/*"
+                  onChange={handleFileUpload}
+                  className="cursor-pointer"
+                />
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Atau paste SRT text langsung di bawah. Pilih "All Files" di file picker kalau perlu.
+                </p>
+              </div>
+
+              {/* Subtitle Text */}
+              <div>
+                <Label htmlFor="subtitleText">Subtitle Text *</Label>
+                <textarea
+                  id="subtitleText"
+                  value={subtitleText}
+                  onChange={(e) => setSubtitleText(e.target.value)}
+                  placeholder="1&#10;00:00:01,000 --> 00:00:04,000&#10;Subtitle text here..."
+                  className="min-h-[200px] w-full rounded-md border border-input bg-background px-3 py-2 font-mono text-xs"
                   required
                 />
               </div>
-              <div>
-                <Label htmlFor="type">Type</Label>
-                <select
-                  id="type"
-                  value={type}
-                  onChange={(e) => setType(e.target.value as "movie" | "tv")}
-                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                >
-                  <option value="movie">Movie</option>
-                  <option value="tv">TV Series</option>
-                </select>
-              </div>
-            </div>
 
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-              <div>
-                <Label htmlFor="season">Season</Label>
-                <Input
-                  id="season"
-                  value={season}
-                  onChange={(e) => setSeason(e.target.value)}
-                  placeholder="1"
-                />
-              </div>
-              <div>
-                <Label htmlFor="episode">Episode</Label>
-                <Input
-                  id="episode"
-                  value={episode}
-                  onChange={(e) => setEpisode(e.target.value)}
-                  placeholder="1"
-                />
-              </div>
-              <div>
-                <Label htmlFor="quality">Quality</Label>
-                <Input
-                  id="quality"
-                  value={quality}
-                  onChange={(e) => setQuality(e.target.value)}
-                  placeholder="WEB-DL"
-                />
-              </div>
-              <div>
-                <Label htmlFor="releaseName">Release Name</Label>
-                <Input
-                  id="releaseName"
-                  value={releaseName}
-                  onChange={(e) => setReleaseName(e.target.value)}
-                  placeholder="Obsession.2025.WEB-DL"
-                />
-              </div>
-            </div>
+              {error && <p className="text-sm text-destructive">{error}</p>}
+              {success && <p className="text-sm text-green-600">{success}</p>}
 
-            <div>
-              <Label htmlFor="file">Upload .srt File</Label>
-              <Input
-                id="file"
-                type="file"
-                accept="*/*"
-                onChange={handleFileUpload}
-                className="cursor-pointer"
-              />
-              <p className="mt-1 text-xs text-muted-foreground">
-                Atau paste SRT text langsung di bawah. Pilih "All Files" di file picker kalau perlu.
-              </p>
-            </div>
+              <Button type="submit" disabled={submitting} className="w-full">
+                {submitting ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <Upload className="mr-2 h-4 w-4" />
+                )}
+                {submitting ? "Saving..." : "Save Subtitle"}
+              </Button>
+            </form>
 
-            <div>
-              <Label htmlFor="subtitleText">Subtitle Text *</Label>
-              <textarea
-                id="subtitleText"
-                value={subtitleText}
-                onChange={(e) => setSubtitleText(e.target.value)}
-                placeholder="1&#10;00:00:01,000 --> 00:00:04,000&#10;Subtitle text here..."
-                className="min-h-[200px] w-full rounded-md border border-input bg-background px-3 py-2 font-mono text-xs"
-                required
-              />
-            </div>
+            {/* List Existing Subtitles */}
+            <div className="space-y-3">
+              <h2 className="text-lg font-semibold">
+                Existing Subtitles ({entries.length})
+              </h2>
 
-            {error && (
-              <p className="text-sm text-destructive">{error}</p>
-            )}
-            {success && (
-              <p className="text-sm text-green-600">{success}</p>
-            )}
-
-            <Button type="submit" disabled={submitting} className="w-full">
-              {submitting ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              {loading ? (
+                <div className="flex justify-center py-8">
+                  <Loader2 className="h-6 w-6 animate-spin" />
+                </div>
+              ) : entries.length === 0 ? (
+                <p className="py-8 text-center text-sm text-muted-foreground">
+                  No subtitles yet. Upload one above.
+                </p>
               ) : (
-                <Upload className="mr-2 h-4 w-4" />
-              )}
-              {submitting ? "Saving..." : "Save Subtitle"}
-            </Button>
-          </form>
-        )}
-
-        {/* List Existing Subtitles */}
-        {apiKey && (
-          <div className="space-y-3">
-            <h2 className="text-lg font-semibold">
-              Existing Subtitles ({entries.length})
-            </h2>
-
-            {loading ? (
-              <div className="flex justify-center py-8">
-                <Loader2 className="h-6 w-6 animate-spin" />
-              </div>
-            ) : entries.length === 0 ? (
-              <p className="py-8 text-center text-sm text-muted-foreground">
-                No subtitles yet. Upload one above.
-              </p>
-            ) : (
-              <div className="space-y-2">
-                {entries.map((entry) => (
-                  <div
-                    key={entry.id}
-                    className="flex items-center gap-3 rounded-lg border bg-card p-3"
-                  >
-                    <FileText className="h-5 w-5 shrink-0 text-primary" />
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate font-medium">{entry.title}</p>
-                      <div className="flex flex-wrap items-center gap-1 mt-1">
-                        <Badge variant="secondary" className="text-[10px]">
-                          {entry.type}
-                        </Badge>
-                        {entry.season && (
-                          <Badge variant="outline" className="text-[10px]">
-                            S{entry.season}
-                          </Badge>
-                        )}
-                        {entry.episode && (
-                          <Badge variant="outline" className="text-[10px]">
-                            E{entry.episode}
-                          </Badge>
-                        )}
-                        {entry.quality && (
-                          <Badge variant="outline" className="text-[10px]">
-                            {entry.quality}
-                          </Badge>
-                        )}
-                      </div>
-                    </div>
-                    <button
-                      onClick={() => handleDelete(entry.id)}
-                      className="shrink-0 rounded-md p-2 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                <div className="space-y-2">
+                  {entries.map((entry) => (
+                    <div
+                      key={entry.id}
+                      className="flex items-center gap-3 rounded-lg border bg-card p-3"
                     >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
+                      <FileText className="h-5 w-5 shrink-0 text-primary" />
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate font-medium">{entry.title}</p>
+                        <div className="mt-1 flex flex-wrap items-center gap-1">
+                          <Badge variant="secondary" className="text-[10px]">
+                            {entry.type}
+                          </Badge>
+                          {entry.season && (
+                            <Badge variant="outline" className="text-[10px]">S{entry.season}</Badge>
+                          )}
+                          {entry.episode && (
+                            <Badge variant="outline" className="text-[10px]">E{entry.episode}</Badge>
+                          )}
+                          {entry.quality && (
+                            <Badge variant="outline" className="text-[10px]">{entry.quality}</Badge>
+                          )}
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => handleDelete(entry.id)}
+                        className="shrink-0 rounded-md p-2 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </>
         )}
       </div>
     </div>
