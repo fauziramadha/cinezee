@@ -249,12 +249,12 @@ export default function AdminSubtitlePage() {
               <Input
                 id="file"
                 type="file"
-                accept=".srt,.vtt,.txt"
+                accept="*/*"
                 onChange={handleFileUpload}
                 className="cursor-pointer"
               />
               <p className="mt-1 text-xs text-muted-foreground">
-                Atau paste SRT text langsung di bawah
+                Atau paste SRT text langsung di bawah. Pilih "All Files" di file picker kalau perlu.
               </p>
             </div>
 
