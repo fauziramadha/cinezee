@@ -137,7 +137,9 @@ export function DetailModal() {
           // Saat user klik play nanti, subtitle udah ke-cache di D1 → instant
           // ============================================================
           if (!cinemacitySubtitlesHasIndo(adapted)) {
-            const filmQuality = servers?.[0]?.title;
+            // Ambil quality dari server pertama (kalau ada multiple servers)
+            const allServers = (cd as any).servers as any[] | undefined;
+            const filmQuality = allServers?.[0]?.title;
             const prefetchParams = new URLSearchParams({
               title: cd.title,
               type: cd.type,
