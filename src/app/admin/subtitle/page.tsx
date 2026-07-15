@@ -136,13 +136,30 @@ export default function AdminSubtitlePage() {
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+
     const reader = new FileReader();
     reader.onload = (event) => {
       const text = event.target?.result as string;
+
+      // Validasi: pastikan ini text file (bukan PDF/binary)
+      if (text.includes("%PDF") || text.includes("\u0000")) {
+        setError("File bukan subtitle text. Upload file .srt atau .vtt yang valid.");
+        e.target.value = ""; // reset input
+        return;
+      }
+
+      // Cek minimal SRT format (ada timestamp 00:00:00,000 --> )
+      if (!text.match(/\d{2}:\d{2}:\d{2}/)) {
+        setError("File gak terlihat sebagai SRT/VTT valid. Tetap bisa save kalau kamu yakin.");
+      } else {
+        setError(null);
+      }
+
       setSubtitleText(text);
-      // Auto-fill release_name from filename
+
+      // Auto-fill release_name dari filename
       if (!releaseName) {
-        setReleaseName(file.name.replace(/\.(srt|vtt)$/i, ""));
+        setReleaseName(file.name.replace(/\.(srt|vtt|txt)$/i, ""));
       }
     };
     reader.readAsText(file);
