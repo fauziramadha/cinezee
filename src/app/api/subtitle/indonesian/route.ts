@@ -20,6 +20,7 @@ export async function GET(request: NextRequest) {
   const type = (url.searchParams.get("type") || "movie") as "movie" | "tv";
   const season = url.searchParams.get("season") || undefined;
   const episode = url.searchParams.get("episode") || undefined;
+  const filmQuality = url.searchParams.get("quality") || undefined;  // NEW
   const format = (url.searchParams.get("format") || "srt") as "srt" | "vtt";
 
   if (!title) {
@@ -57,12 +58,13 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    console.log("[Subtitle Route] Fetching subtitle for:", title, type, season, episode);
+    console.log("[Subtitle Route] Fetching subtitle for:", title, type, season, episode, "quality:", filmQuality);
     const result = await getIndonesianSubtitle({
       title,
       type,
       season,
       episode,
+      filmQuality,  // NEW
       apiKey,
     });
 
