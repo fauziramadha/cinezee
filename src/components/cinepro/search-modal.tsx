@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import Image from "next/image";
 import { useRouter, usePathname } from "next/navigation";
 import { wrapCinemacityImage } from "@/lib/cinemacity-api";
-import { Search, X, Film, Tv, Loader2, ArrowRight, Clapperboard, Radio } from "lucide-react";
+import { Search, X, Film, Tv, Loader2, ArrowRight, Clapperboard } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -21,9 +21,8 @@ import { ComicCard } from "@/components/comic/comic-card";
 import { DrakorCard } from "@/components/drakor/drakor-card";
 import { DrakorKategoriList } from "@/components/drakor/drakor-kategori-list";
 
-interface Genre { id: number; name: string; }
-interface Network { id: number; name: string; logo_path: string | null; }
-type TabView = "results" | "genres" | "networks" | "kategori";
+interface CinemacityGenre { slug: string; name: string; }
+type TabView = "results" | "genres" | "kategori";
 
 function unwrapDrakor(res: any): any {
   if (!res) return null;
@@ -57,13 +56,9 @@ export function SearchModal() {
   const [error, setError] = useState<string | null>(null);
 
   const [activeTab, setActiveTab] = useState<TabView>("results");
-  const [type, setType] = useState<"movie" | "tv">("movie");
-  const [selectedGenre, setSelectedGenre] = useState<Genre | null>(null);
+  const [selectedGenre, setSelectedGenre] = useState<CinemacityGenre | null>(null);
 
-  const [movieGenres, setMovieGenres] = useState<Genre[]>([]);
-  const [tvGenres, setTvGenres] = useState<Genre[]>([]);
-  const [networks, setNetworks] = useState<Network[]>([]);
-  const [networksLoading, setNetworksLoading] = useState(false);
+  const [cinemacityGenres, setCinemacityGenres] = useState<CinemacityGenre[]>([]);
 
   const context = pathname.startsWith("/anime") ? "anime"
                 : pathname.startsWith("/donghua") ? "donghua"
@@ -71,25 +66,15 @@ export function SearchModal() {
                 : pathname.startsWith("/drakor") ? "drakor"
                 : "movie";
 
+  // Fetch Cinemacity Genres
   useEffect(() => {
     if (context !== "movie") return;
-    fetch("/api/genres")
+    fetch("/api/cinemacity/genres")
       .then((res) => res.json())
       .then((data) => {
-        if (data.movie) setMovieGenres(data.movie);
-        if (data.tv) setTvGenres(data.tv);
+        if (data.genres) setCinemacityGenres(data.genres);
       })
       .catch(() => {});
-  }, [context]);
-
-  useEffect(() => {
-    if (context !== "movie") return;
-    setNetworksLoading(true);
-    fetch("/api/networks")
-      .then((res) => res.json())
-      .then((data) => setNetworks(data.networks || []))
-      .catch(() => {})
-      .finally(() => setNetworksLoading(false));
   }, [context]);
 
   useEffect(() => {
@@ -112,16 +97,11 @@ export function SearchModal() {
       try {
         let data: any;
 
-        // ============================================================
-        // CINEMACITY SEARCH (menggantikan TMDB search untuk context movie)
-        // ============================================================
         if (context === "movie") {
           const res = await fetch("/api/cinemacity/search?q=" + encodeURIComponent(query));
           if (!res.ok) throw new Error("Fetch failed");
           data = await res.json();
 
-          // Convert cinemacity movies → TMDB Movie shape
-          // cinemacity returns: { movies: [{ id, slug, type, title, url, poster, year }] }
           const list: Movie[] = (data.movies || []).map((cm: any) => ({
             id: Number(cm.id),
             title: cm.title,
@@ -135,7 +115,6 @@ export function SearchModal() {
             first_air_date: cm.year ? `${cm.year}-01-01` : undefined,
             media_type: cm.type,
             popularity: 0,
-            // Cinemacity extras
             ...({ slug: cm.slug, source: "cinemacity" } as any),
           }));
           setResults(list);
@@ -211,7 +190,6 @@ export function SearchModal() {
       setResults([]);
       setActiveTab("results");
       setSelectedGenre(null);
-      setType("movie");
     }
   }, [searchOpen, context]);
 
@@ -224,9 +202,6 @@ export function SearchModal() {
     }
   };
 
-  // ============================================================
-  // UPDATE: handleSelectMovie sekarang kirim slug & source
-  // ============================================================
   const handleSelectMovie = (movie: Movie) => {
     const mediaType: "movie" | "tv" = movie.media_type || (movie.title ? "movie" : "tv");
     setSelectedMedia({
@@ -235,7 +210,6 @@ export function SearchModal() {
       title: movie.title || movie.name || "Untitled",
       posterPath: movie.poster_path,
       backdropPath: movie.backdrop_path,
-      // Cinemacity fields (kalau ada)
       slug: (movie as any).slug,
       source: (movie as any).source,
     } as SelectedMedia);
@@ -244,16 +218,10 @@ export function SearchModal() {
 
   const handleBrowseGenre = () => {
     if (!selectedGenre) return;
-    router.push("/search?type=" + type + "&genre=" + selectedGenre.id);
+    // Route ke halaman genre cinemacity (akan kita bikin halamannya nanti)
+    router.push(`/genre/${selectedGenre.slug}`);
     setSearchOpen(false);
   };
-
-  const handleNetworkSelect = (networkId: number) => {
-    router.push("/search?type=tv&network=" + networkId);
-    setSearchOpen(false);
-  };
-
-  const availableGenres = type === "tv" ? tvGenres : movieGenres;
 
   return (
     <Dialog open={searchOpen} onOpenChange={setSearchOpen}>
@@ -296,16 +264,6 @@ export function SearchModal() {
               </span>
             </div>
           )}
-
-          {/* Cinemacity source badge untuk context movie */}
-          {context === "movie" && (
-            <div className="flex items-center gap-2 px-4 pb-2">
-              <span className="text-xs text-muted-foreground">Sumber:</span>
-              <span className="rounded-full bg-emerald-500/90 px-3 py-1 text-xs font-semibold text-white">
-                cinemacity.cc
-              </span>
-            </div>
-          )}
         </div>
 
         {/* Tabs Filter — Movie & Drakor */}
@@ -322,32 +280,15 @@ export function SearchModal() {
             </button>
 
             {context === "movie" && (
-              <>
-                <button
-                  onClick={() => setActiveTab("genres")}
-                  className={cn(
-                    "flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium transition-colors",
-                    activeTab === "genres" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted"
-                  )}
-                >
-                  <Clapperboard className="h-3.5 w-3.5" /> Genres
-                </button>
-                <button
-                  onClick={() => setActiveTab("networks")}
-                  className={cn(
-                    "flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium transition-colors",
-                    activeTab === "networks" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted"
-                  )}
-                >
-                  <Radio className="h-3.5 w-3.5" /> Networks
-                </button>
-                {activeTab === "genres" && (
-                  <div className="ml-auto flex shrink-0 items-center gap-1 rounded-full bg-muted p-0.5">
-                    <button onClick={() => { setType("movie"); setSelectedGenre(null); }} className={cn("rounded-full px-2 py-0.5 text-[10px] font-semibold", type === "movie" ? "bg-background text-foreground" : "text-muted-foreground")}>Movies</button>
-                    <button onClick={() => { setType("tv"); setSelectedGenre(null); }} className={cn("rounded-full px-2 py-0.5 text-[10px] font-semibold", type === "tv" ? "bg-background text-foreground" : "text-muted-foreground")}>TV</button>
-                  </div>
+              <button
+                onClick={() => setActiveTab("genres")}
+                className={cn(
+                  "flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium transition-colors",
+                  activeTab === "genres" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted"
                 )}
-              </>
+              >
+                <Clapperboard className="h-3.5 w-3.5" /> Genres
+              </button>
             )}
 
             {context === "drakor" && (
@@ -501,13 +442,13 @@ export function SearchModal() {
           {context === "movie" && activeTab === "genres" && (
             <div className="min-w-0 p-4 pb-20">
               <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3">
-                {availableGenres.map((g) => (
+                {cinemacityGenres.map((g) => (
                   <button
-                    key={g.id}
+                    key={g.slug}
                     onClick={() => setSelectedGenre(g)}
                     className={cn(
                       "flex min-w-0 items-center gap-2 rounded-lg border p-2.5 text-left text-xs font-medium transition-all",
-                      selectedGenre?.id === g.id
+                      selectedGenre?.slug === g.slug
                         ? "border-primary bg-primary/10 text-primary"
                         : "border-border bg-card text-foreground hover:bg-muted"
                     )}
@@ -519,40 +460,12 @@ export function SearchModal() {
               </div>
             </div>
           )}
-
-          {context === "movie" && activeTab === "networks" && (
-            <div className="min-w-0 p-4 pb-20">
-              <p className="mb-3 text-xs text-muted-foreground">Browse TV shows by network:</p>
-              {networksLoading ? (
-                <div className="flex h-32 items-center justify-center">
-                  <Loader2 className="h-6 w-6 animate-spin text-primary" />
-                </div>
-              ) : (
-                <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                  {networks.map((n) => (
-                    <button key={n.id} onClick={() => handleNetworkSelect(n.id)} className="flex flex-col items-center justify-center gap-2 rounded-lg border border-border bg-card p-4 transition-all hover:border-primary hover:bg-muted">
-                      {n.logo_path ? (
-                        <div className="relative h-8 w-full">
-                          <Image src={getImageUrl(n.logo_path, "w154")} alt={n.name} fill className="object-contain" unoptimized sizes="100px" />
-                        </div>
-                      ) : (
-                        <div className="flex h-8 items-center justify-center">
-                          <Radio className="h-6 w-6 text-muted-foreground" />
-                        </div>
-                      )}
-                      <span className="text-[10px] font-medium text-muted-foreground">{n.name}</span>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
         </div>
 
         {context === "movie" && activeTab === "genres" && selectedGenre && (
           <div className="shrink-0 border-t border-border bg-background p-3">
             <button onClick={handleBrowseGenre} className="flex w-full items-center justify-center gap-2 rounded-lg bg-primary py-2.5 text-sm font-semibold text-primary-foreground hover:bg-primary/90">
-              Browse {selectedGenre.name} {type === "tv" ? "TV Shows" : "Movies"}
+              Browse {selectedGenre.name}
               <ArrowRight className="h-4 w-4" />
             </button>
           </div>
