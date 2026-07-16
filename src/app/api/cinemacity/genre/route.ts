@@ -9,12 +9,15 @@ import { NextRequest, NextResponse } from "next/server";
 import { dbCinemacity } from "@/lib/db-extended";
 
 const CINEMACITY_BASE = "https://cinemacity.cc";
-const DEFAULT_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
+const DEFAULT_UA =
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
 
 async function hashKey(input: string): Promise<string> {
   const enc = new TextEncoder().encode(input);
   const hash = await crypto.subtle.digest("SHA-256", enc);
-  return Array.from(new Uint8Array(hash)).map((b) => b.toString(16).padStart(2, "0")).join("");
+  return Array.from(new Uint8Array(hash))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
 }
 
 function cookiesToHeader(cookies: any[]): string {
@@ -68,7 +71,10 @@ export async function GET() {
 
   const cookieAccount = await dbCinemacity.getActiveCookies();
   if (!cookieAccount) {
-    return NextResponse.json({ error: "No active cinemacity cookie account" }, { status: 503 });
+    return NextResponse.json(
+      { error: "No active cinemacity cookie account" },
+      { status: 503 }
+    );
   }
 
   let response: Response;
@@ -99,11 +105,13 @@ export async function GET() {
     foundGenres.add(match[1]);
   }
 
-  const genres = Array.from(foundGenres).map((slug) => ({
-    slug,
-    name: GENRE_NAMES[slug] || slug.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
-    url: `${CINEMACITY_BASE}/genre/${slug}/`,
-  })).sort((a, b) => a.name.localeCompare(b.name));
+  const genres = Array.from(foundGenres)
+    .map((slug) => ({
+      slug,
+      name: GENRE_NAMES[slug] || slug.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
+      url: `${CINEMACITY_BASE}/genre/${slug}/`,
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name));
 
   const responseData = { genres, count: genres.length };
 
