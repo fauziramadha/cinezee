@@ -10,14 +10,14 @@ export interface SelectedMedia {
   title: string;
   posterPath: string | null;
   backdropPath: string | null;
-  // Cinemacity fields (optional — untuk backward compatibility dengan TMDB)
-  slug?: string;                              // cinemacity slug, e.g. "1873-obsession"
-  source?: "tmdb" | "cinemacity";            // sumber data
+  slug?: string;                              
+  source?: "tmdb" | "cinemacity";            
 }
 
 export interface WatchHistoryItem extends SelectedMedia {
   watchedAt: string;
-  progress?: number;
+  progress?: number;   // Detik terakhir ditonton
+  duration?: number;   // Total durasi video
   season?: number;
   episode?: number;
 }
@@ -52,9 +52,9 @@ interface AppState {
   removeFromHistory: (id: number) => void;
   clearHistory: () => void;
   loadHistory: () => void;
+  updateHistoryProgress: (id: number, progress: number, duration: number) => void;
 
-  // === TAMBAHAN: Anime & Donghua Server Selection ===
-  // Global state for SearchModal to know which server is active
+  // Anime & Donghua Server Selection
   animeServer: "otakudesu" | "animasu";
   setAnimeServer: (server: "otakudesu" | "animasu") => void;
   donghuaServer: "s1" | "s2";
@@ -62,23 +62,18 @@ interface AppState {
 }
 
 export const useAppStore = create<AppState>((set, get) => ({
-  // Auth modal
   authModalOpen: false,
   setAuthModalOpen: (open) => set({ authModalOpen: open }),
 
-  // Admin Dashboard
   adminDashboardOpen: false,
   setAdminDashboardOpen: (open) => set({ adminDashboardOpen: open }),
 
-  // Search
   searchOpen: false,
   setSearchOpen: (open) => set({ searchOpen: open }),
 
-  // Detail modal
   selectedMedia: null,
   setSelectedMedia: (media) => set({ selectedMedia: media }),
 
-  // Player modal
   playerMedia: null,
   openPlayer: (media, season, episode) =>
     set({
@@ -89,7 +84,6 @@ export const useAppStore = create<AppState>((set, get) => ({
   closePlayer: () =>
     set({ playerMedia: null, playerSeason: undefined, playerEpisode: undefined }),
 
-  // Watch history
   history: [],
   addToHistory: (item) => {
     const existing = get().history.filter((h) => h.id !== item.id);
@@ -123,10 +117,19 @@ export const useAppStore = create<AppState>((set, get) => ({
       // ignore parse errors
     }
   },
+  // NEW: Update progress tanpa mengubah urutan array
+  updateHistoryProgress: (id, progress, duration) => {
+    const history = get().history.map((h) =>
+      h.id === id ? { ...h, progress, duration, watchedAt: new Date().toISOString() } : h
+    );
+    set({ history });
+    if (typeof window !== "undefined") {
+      localStorage.setItem("cinestream_history", JSON.stringify(history));
+    }
+  },
 
-  // === IMPLEMENTASI: Anime & Donghua Server Selection ===
-  animeServer: "otakudesu", // Default Server 1
+  animeServer: "otakudesu",
   setAnimeServer: (server) => set({ animeServer: server }),
-  donghuaServer: "s1", // Default Server 1
+  donghuaServer: "s1",
   setDonghuaServer: (server) => set({ donghuaServer: server }),
 }));
