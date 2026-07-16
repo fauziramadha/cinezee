@@ -5,7 +5,7 @@ import { useParams } from "next/navigation";
 import { Header } from "@/components/cinepro/header";
 import { Footer } from "@/components/cinepro/footer";
 import { MovieCard } from "@/components/cinepro/movie-card";
-import { Loader2, Film, ChevronLeft, ChevronRight } from "lucide-react";
+import { Loader2, Film, ChevronLeft, ChevronRight, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { Movie } from "@/lib/tmdb";
 import { cinemacityToTMDB } from "@/lib/cinemacity-api";
@@ -29,11 +29,9 @@ export default function GenrePage() {
   const [error, setError] = useState<string | null>(null);
   const [genreName, setGenreName] = useState("");
   
-  // Pagination state
   const [page, setPage] = useState(1);
-  const [hasMore, setHasMore] = useState(true); // Cinemacity gak kasih info total page, jadi kita estimasi
+  const [hasMore, setHasMore] = useState(true);
 
-  // Capitalize genre name for display
   useEffect(() => {
     const name = slug
       .split("-")
@@ -56,15 +54,13 @@ export default function GenrePage() {
       
       setMovies(adapted);
       
-      // Cinemacity biasanya menampilkan 20-24 film per halaman
-      // Kalau hasil < 20, berarti ini halaman terakhir
       if (adapted.length < 20) {
         setHasMore(false);
       } else {
         setHasMore(true);
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load");
+      setError(err instanceof Error ? err.message : "Failed to load. Coba lagi.");
     } finally {
       setLoading(false);
     }
@@ -80,7 +76,6 @@ export default function GenrePage() {
     if (newPage < 1) return;
     setPage(newPage);
     fetchGenre(newPage);
-    // Scroll ke atas halaman
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
@@ -104,23 +99,21 @@ export default function GenrePage() {
           </div>
         </div>
 
-        {/* Loading */}
-        {loading && (
+        {/* Loading State */}
+        {loading && movies.length === 0 && (
           <div className="flex h-64 items-center justify-center">
             <Loader2 className="h-8 w-8 animate-spin text-primary" />
           </div>
         )}
 
-        {/* Error */}
-        {error && !loading && (
-          <div className="flex h-64 flex-col items-center justify-center gap-3 text-center">
+        {/* Error State (Tampilkan tanpa menghilangkan grid lama kalau ada) */}
+        {error && (
+          <div className="mb-4 flex flex-col items-center justify-center gap-3 rounded-lg border border-destructive/50 bg-destructive/10 p-6 text-center">
+            <AlertCircle className="h-8 w-8 text-destructive" />
             <p className="text-sm text-destructive">{error}</p>
-            <button
-              onClick={() => fetchGenre(page)}
-              className="text-xs text-primary hover:underline"
-            >
-              Try again
-            </button>
+            <Button size="sm" variant="outline" onClick={() => fetchGenre(page)}>
+              Coba Lagi
+            </Button>
           </div>
         )}
 
