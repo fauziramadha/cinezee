@@ -4,10 +4,8 @@
  * GET /api/cinemacity/genre/[genre]
  *   ?page=1   (optional, default 1)
  *
- * List film berdasarkan genre.
- * Genre tersedia: action, adventure, animation, anime, comedy, crime,
- * documentary, drama, fantasy, history, horror, music, mystery, romance,
- * sci-fi, thriller, war, western, dll.
+ * List film berdasarkan genre dari cinemacity.cc.
+ * Skip featured section (dle-fast_item) supaya cuma return film genre asli.
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -15,12 +13,15 @@ import { dbCinemacity } from "@/lib/db-extended";
 import { parseMovieList } from "@/lib/cinemacity-parser";
 
 const CINEMACITY_BASE = "https://cinemacity.cc";
-const DEFAULT_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
+const DEFAULT_UA =
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
 
 async function hashKey(input: string): Promise<string> {
   const enc = new TextEncoder().encode(input);
   const hash = await crypto.subtle.digest("SHA-256", enc);
-  return Array.from(new Uint8Array(hash)).map((b) => b.toString(16).padStart(2, "0")).join("");
+  return Array.from(new Uint8Array(hash))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
 }
 
 function cookiesToHeader(cookies: any[]): string {
@@ -43,6 +44,7 @@ export async function GET(
   let endpoint = `/genre/${genre.toLowerCase()}/`;
   if (page !== "1") endpoint += `page/${page}/`;
 
+  // Check cache (30 min)
   const cacheKey = await hashKey(`cinemacity:genre:${genre}:${page}`);
   const cached = await dbCinemacity.getCache(cacheKey);
   if (cached) {
@@ -53,7 +55,10 @@ export async function GET(
 
   const cookieAccount = await dbCinemacity.getActiveCookies();
   if (!cookieAccount) {
-    return NextResponse.json({ error: "No active cinemacity cookie account" }, { status: 503 });
+    return NextResponse.json(
+      { error: "No active cinemacity cookie account" },
+      { status: 503 }
+    );
   }
 
   let cinemacityResponse: Response;
@@ -69,27 +74,29 @@ export async function GET(
       redirect: "follow",
     });
   } catch (error) {
-    return NextResponse.json({ error: "Failed to fetch", detail: String(error) }, { status: 502 });
+    return NextResponse.json(
+      { error: "Failed to fetch", detail: String(error) },
+      { status: 502 }
+    );
   }
 
   await dbCinemacity.touchLastUsed(cookieAccount.id);
 
   if (!cinemacityResponse.ok) {
-    return NextResponse.json({
-      error: `cinemacity return ${cinemacityResponse.status}`,
-      status: cinemacityResponse.status,
-    }, { status: 502 });
+    return NextResponse.json(
+      { error: `cinemacity return ${cinemacityResponse.status}` },
+      { status: 502 }
+    );
   }
 
-    const html = await cinemacityResponse.text();
+  const html = await cinemacityResponse.text();
 
-    // === SKIP featured section (dle-fast_item) ===
-    // Genre pages menampilkan 3 film "popular now" di atas (Obsession, Backrooms, dll)
-    // yang BUKAN film genre-specific. Skip sampai section dar-short_item.
-    const genreStart = html.indexOf('dar-short_item');
-    const genreHtml = genreStart !== -1 ? html.slice(genreStart) : html;
+  // === SKIP featured section (dle-fast_item) ===
+  // Genre pages menampilkan 3 film "popular now" di atas yang BUKAN genre-specific
+  const genreStart = html.indexOf("dar-short_item");
+  const genreHtml = genreStart !== -1 ? html.slice(genreStart) : html;
 
-    const movies = parseMovieList(genreHtml, CINEMACITY_BASE);
+  const movies = parseMovieList(genreHtml, CINEMACITY_BASE);
 
   const responseData = {
     genre,
@@ -99,6 +106,7 @@ export async function GET(
     source: "cinemacity.cc",
   };
 
+  // Cache 30 min
   try {
     await dbCinemacity.setCache({
       cache_key: cacheKey,
