@@ -199,7 +199,7 @@ function makeCustomLoader(Hls: any) {
 }
 
 export function PlayerModal() {
-  const { playerMedia, closePlayer, addToHistory } = useAppStore();
+  const { playerMedia, closePlayer, addToHistory, updateHistoryProgress, history } = useAppStore();
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -447,10 +447,14 @@ export function PlayerModal() {
           setServers([]);
         }
 
-        addToHistory({
-          ...playerMedia,
-          watchedAt: new Date().toISOString(),
-        });
+        // === NEW: Add to history (kalau belum ada, jangan overwrite progress) ===
+        const existing = history.find(h => h.id === playerMedia.id);
+        if (!existing) {
+          addToHistory({
+            ...playerMedia,
+            watchedAt: new Date().toISOString(),
+          });
+        }
       } catch (err) {
         if (cancelled) return;
         setError(err instanceof Error ? err.message : "Failed to load stream");
@@ -478,12 +482,10 @@ export function PlayerModal() {
   // ============================================================
   // FETCH SUBDL INDONESIAN (kalau cinemacity gak punya Indonesian)
   // ============================================================
-    useEffect(() => {
-    // ============================================================
+  useEffect(() => {
     // FIX: Jangan return early kalau subtitles.length === 0
     // Film dengan multiple servers (Supergirl) punya 0 cinemacity
     // subtitles di top level, tapi tetap perlu fetch manual subtitle!
-    // ============================================================
     if (!playerMedia) {
       setSubdlSubtitle(null);
       return;
@@ -572,6 +574,62 @@ export function PlayerModal() {
       }
     };
   }, [streamUrl, initHlsPlayer, playerMedia]);
+
+  // === NEW: TRACK PROGRESS ===
+  // Simpan detik terakhir ke localStorage tiap 5 detik + saat pause/close
+  useEffect(() => {
+    if (!playerMedia || !streamUrl) return;
+    const video = videoRef.current;
+    if (!video) return;
+
+    let lastSaved = 0;
+
+    const handleTimeUpdate = () => {
+      // Simpan setiap 5 detik
+      if (video.currentTime - lastSaved > 5) {
+        lastSaved = video.currentTime;
+        updateHistoryProgress(playerMedia.id, video.currentTime, video.duration || 0);
+      }
+    };
+
+    const handlePause = () => {
+      updateHistoryProgress(playerMedia.id, video.currentTime, video.duration || 0);
+    };
+
+    video.addEventListener("timeupdate", handleTimeUpdate);
+    video.addEventListener("pause", handlePause);
+
+    return () => {
+      video.removeEventListener("timeupdate", handleTimeUpdate);
+      video.removeEventListener("pause", handlePause);
+      // Simpan terakhir kali saat player ditutup
+      if (video.currentTime > 0) {
+        updateHistoryProgress(playerMedia.id, video.currentTime, video.duration || 0);
+      }
+    };
+  }, [playerMedia, streamUrl, updateHistoryProgress]);
+
+  // === NEW: SEEK TO PROGRESS ===
+  // Lanjut dari detik terakhir saat video metadata loaded
+  useEffect(() => {
+    if (!playerMedia || !streamUrl) return;
+    const video = videoRef.current;
+    if (!video) return;
+
+    const onLoadedMetadata = () => {
+      const histItem = history.find(h => h.id === playerMedia.id);
+      if (histItem?.progress && histItem.progress > 10 && histItem.duration) {
+        // Kalau progress > 90% durasi, mulai dari awal
+        if (histItem.progress / histItem.duration < 0.9) {
+          video.currentTime = histItem.progress;
+          console.log(`[Player] Resuming at ${Math.floor(histItem.progress)}s`);
+        }
+      }
+    };
+
+    video.addEventListener("loadedmetadata", onLoadedMetadata);
+    return () => video.removeEventListener("loadedmetadata", onLoadedMetadata);
+  }, [playerMedia, streamUrl, history]);
 
   // ============================================================
   // EPISODE / SEASON CHANGE
