@@ -685,33 +685,11 @@ function CommentNode({ comment, currentUserId, onReply, replyTo, replyText, setR
   const isOwner = currentUserId === comment.userId;
   const badge = comment.userBadge;
 
-  // === Ambil foto profil dari session atau localStorage ===
-  const { data: session } = useSafeSession();
-  const [userImage, setUserImage] = useState<string | null>(null);
-
-  useEffect(() => {
-    let img = comment.userImage; // Dari database
-    
-    // Kalau foto dari database kosong, dan ini komentar milik user yang login
-    if (!img && comment.userId === currentUserId) {
-      // Cek localStorage (foto yang diupload)
-      const storedAvatar = localStorage.getItem("cinestream_avatar");
-      if (storedAvatar) {
-        img = storedAvatar;
-      } else if (session?.user?.image) {
-        // Fallback ke foto Google dari session
-        img = session.user.image;
-      }
-    }
-    
-    setUserImage(img || null);
-  }, [comment, currentUserId, session]);
-
   return (
     <div className={level > 0 ? "ml-6 border-l border-border pl-3" : ""}>
       <div className="flex gap-2">
         <Avatar className={cn("h-8 w-8 shrink-0", getAvatarRingClass(badge?.slug))}>
-          <AvatarImage src={userImage || undefined} />
+          <AvatarImage src={comment.userImage || undefined} />
           <AvatarFallback className="bg-primary/20 text-xs text-primary">{initial}</AvatarFallback>
         </Avatar>
         <div className="min-w-0 flex-1">
@@ -719,9 +697,7 @@ function CommentNode({ comment, currentUserId, onReply, replyTo, replyText, setR
             <div className="flex items-center justify-between gap-2">
               <div className="flex items-center gap-1.5">
                 <span className="text-xs font-semibold">{comment.userName || "Anonymous"}</span>
-                {badge && (
-                  <BadgeLabel slug={badge.slug} name={badge.name} size={10} />
-                )}
+                {badge && <BadgeLabel slug={badge.slug} name={badge.name} size={10} />}
               </div>
               <span className="text-[10px] text-muted-foreground">{timeAgo}</span>
             </div>
