@@ -53,6 +53,7 @@ export function ProfileContent() {
   const [profileAvatar, setProfileAvatar] = useState<string | null>(null);
   const [profileBio, setProfileBio] = useState<string>("");
   const [loadingProfile, setLoadingProfile] = useState(true);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
 
   // Badge state
   const [userBadges, setUserBadges] = useState<UserBadge[]>([]);
@@ -120,47 +121,91 @@ export function ProfileContent() {
       return;
     }
 
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error("Ukuran gambar maksimal 5MB");
+      return;
+    }
+
+    setUploadingAvatar(true);
+    toast.info("Memproses gambar...");
+
     const reader = new FileReader();
+    reader.onerror = () => {
+      toast.error("Gagal membaca file");
+      setUploadingAvatar(false);
+    };
     reader.onload = (event) => {
       const img = new Image();
+      img.onerror = () => {
+        toast.error("Gagal memproses gambar");
+        setUploadingAvatar(false);
+      };
       img.onload = () => {
-        // Resize image to 128x128
-        const canvas = document.createElement("canvas");
-        const ctx = canvas.getContext("2d");
-        
-        const size = 128;
-        canvas.width = size;
-        canvas.height = size;
-        
-        // Crop to square (center)
-        const minDim = Math.min(img.width, img.height);
-        const sx = (img.width - minDim) / 2;
-        const sy = (img.height - minDim) / 2;
-        
-        ctx?.drawImage(img, sx, sy, minDim, minDim, 0, 0, size, size);
-        
-        // Convert to base64 JPEG (0.8 quality)
-        const resizedBase64 = canvas.toDataURL("image/jpeg", 0.8);
-
-        // Save to D1
-        fetch("/api/user/profile", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ avatar: resizedBase64, bio: profileBio }),
-        })
-        .then(res => res.json())
-        .then(data => {
-          if (data.success) {
-            setProfileAvatar(resizedBase64);
-            toast.success("Foto profil diperbarui");
-          } else {
-            toast.error("Gagal menyimpan foto profil");
+        try {
+          // Resize image to 128x128
+          const canvas = document.createElement("canvas");
+          const ctx = canvas.getContext("2d");
+          
+          if (!ctx) {
+            toast.error("Gagal memproses gambar (canvas)");
+            setUploadingAvatar(false);
+            return;
           }
-        });
+          
+          const size = 128;
+          canvas.width = size;
+          canvas.height = size;
+          
+          // Crop to square (center)
+          const minDim = Math.min(img.width, img.height);
+          const sx = (img.width - minDim) / 2;
+          const sy = (img.height - minDim) / 2;
+          
+          ctx.drawImage(img, sx, sy, minDim, minDim, 0, 0, size, size);
+          
+          // Convert to base64 JPEG (0.8 quality)
+          const resizedBase64 = canvas.toDataURL("image/jpeg", 0.8);
+
+          console.log("[Profile] Avatar size:", resizedBase64.length, "chars");
+
+          // Save to D1
+          fetch("/api/user/profile", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ avatar: resizedBase64, bio: profileBio }),
+          })
+          .then(res => {
+            console.log("[Profile] Upload response status:", res.status);
+            return res.json();
+          })
+          .then(data => {
+            if (data.success) {
+              setProfileAvatar(resizedBase64);
+              toast.success("Foto profil diperbarui");
+            } else {
+              console.error("[Profile] Upload failed:", data);
+              toast.error(data.error || "Gagal menyimpan foto profil");
+            }
+          })
+          .catch(err => {
+            console.error("[Profile] Upload error:", err);
+            toast.error("Gagal terhubung ke server");
+          })
+          .finally(() => {
+            setUploadingAvatar(false);
+          });
+        } catch (err) {
+          console.error("[Profile] Canvas error:", err);
+          toast.error("Gagal memproses gambar");
+          setUploadingAvatar(false);
+        }
       };
       img.src = event.target?.result as string;
     };
     reader.readAsDataURL(file);
+    
+    // Reset input supaya bisa upload file yang sama lagi
+    e.target.value = "";
   };
 
   const handleSaveBio = () => {
@@ -234,6 +279,7 @@ export function ProfileContent() {
                 )}
               >
                 {profileAvatar ? (
+                  // eslint-disable-next-line @next/next/no-img-element
                   <img src={profileAvatar} alt={userName} className="h-full w-full object-cover" />
                 ) : (
                   <div className="flex h-full w-full items-center justify-center bg-primary/20">
@@ -243,9 +289,10 @@ export function ProfileContent() {
               </div>
               <button
                 onClick={() => fileInputRef.current?.click()}
-                className="absolute bottom-0 right-0 flex h-8 w-8 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg hover:bg-primary/90"
+                disabled={uploadingAvatar}
+                className="absolute bottom-0 right-0 flex h-8 w-8 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg hover:bg-primary/90 disabled:opacity-50"
               >
-                <Camera className="h-4 w-4" />
+                {uploadingAvatar ? <Loader2 className="h-4 w-4 animate-spin" /> : <Camera className="h-4 w-4" />}
               </button>
               <input ref={fileInputRef} type="file" accept="image/*" onChange={handleAvatarUpload} className="hidden" />
             </div>
