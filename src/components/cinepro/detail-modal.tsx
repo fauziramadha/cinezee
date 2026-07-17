@@ -685,11 +685,30 @@ function CommentNode({ comment, currentUserId, onReply, replyTo, replyText, setR
   const isOwner = currentUserId === comment.userId;
   const badge = comment.userBadge;
 
+  // === Ambil foto profil dari localStorage (karena disimpan di browser) ===
+  const [userImage, setUserImage] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (comment.userId) {
+      try {
+        // Cek apakah ada avatar di localStorage
+        const storedAvatar = localStorage.getItem("cinestream_avatar");
+        // Hanya pakai avatar lokal jika comment ini milik user yang sedang login
+        if (storedAvatar && comment.userId === currentUserId) {
+          setUserImage(storedAvatar);
+        } else if (comment.userImage) {
+          // Fallback ke image dari database (misal Google OAuth)
+          setUserImage(comment.userImage);
+        }
+      } catch {}
+    }
+  }, [comment.userId, comment.userImage, currentUserId]);
+
   return (
     <div className={level > 0 ? "ml-6 border-l border-border pl-3" : ""}>
       <div className="flex gap-2">
         <Avatar className={cn("h-8 w-8 shrink-0", getAvatarRingClass(badge?.slug))}>
-          <AvatarImage src={comment.userImage || undefined} />
+          <AvatarImage src={userImage || undefined} />
           <AvatarFallback className="bg-primary/20 text-xs text-primary">{initial}</AvatarFallback>
         </Avatar>
         <div className="min-w-0 flex-1">
