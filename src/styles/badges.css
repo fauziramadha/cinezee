@@ -1,0 +1,108 @@
+/* ============================================================
+   CineStream Badge System — Pure CSS
+   Super ringan, no images, no SVG
+   ============================================================ */
+
+/* Base badge shape */
+.cs-badge {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  position: relative;
+  flex-shrink: 0;
+}
+
+/* === MODERATOR (Shield) === */
+.cs-badge-moderator {
+  width: 14px;
+  height: 16px;
+  background: linear-gradient(135deg, #60A5FA, #2563EB);
+  clip-path: polygon(50% 0%, 100% 20%, 100% 70%, 50% 100%, 0% 70%, 0% 20%);
+  box-shadow: 0 1px 3px rgba(37, 99, 235, 0.4);
+}
+
+/* === VIP (Crown) === */
+.cs-badge-vip {
+  width: 16px;
+  height: 12px;
+  background: linear-gradient(135deg, #FCD34D, #F59E0B);
+  clip-path: polygon(0% 100%, 15% 30%, 35% 60%, 50% 10%, 65% 60%, 85% 30%, 100% 100%);
+  box-shadow: 0 1px 3px rgba(245, 158, 11, 0.4);
+}
+
+/* === ADMIN (Gear) === */
+.cs-badge-admin {
+  width: 16px;
+  height: 16px;
+  background: linear-gradient(135deg, #F87171, #DC2626);
+  border-radius: 50%;
+  position: relative;
+}
+.cs-badge-admin::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 5px;
+  height: 5px;
+  background: #fff;
+  border-radius: 50%;
+}
+
+/* === PREMIUM (Diamond) === */
+.cs-badge-premium {
+  width: 14px;
+  height: 14px;
+  background: linear-gradient(135deg, #FCD34D, #B45309);
+  transform: rotate(45deg);
+  box-shadow: 0 1px 3px rgba(180, 83, 9, 0.4);
+}
+
+/* === CONTRIBUTOR (Star) === */
+.cs-badge-contributor {
+  width: 16px;
+  height: 16px;
+  background: linear-gradient(135deg, #34D399, #059669);
+  clip-path: polygon(50% 0%, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%);
+  box-shadow: 0 1px 3px rgba(5, 150, 105, 0.4);
+}
+
+/* === EARLY USER (Lightning) === */
+.cs-badge-early_user {
+  width: 12px;
+  height: 16px;
+  background: linear-gradient(135deg, #C4B5FD, #7C3AED);
+  clip-path: polygon(55% 0%, 10% 60%, 45% 60%, 35% 100%, 90% 30%, 50% 30%);
+  box-shadow: 0 1px 3px rgba(124, 58, 237, 0.4);
+}
+
+/* === Badge Label (untuk comments) === */
+.cs-badge-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 9px;
+  font-weight: 700;
+  color: #fff;
+  line-height: 1;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.cs-badge-label-moderator { background: linear-gradient(135deg, #3B82F6, #1D4ED8); }
+.cs-badge-label-vip { background: linear-gradient(135deg, #F59E0B, #D97706); }
+.cs-badge-label-admin { background: linear-gradient(135deg, #EF4444, #B91C1C); }
+.cs-badge-label-premium { background: linear-gradient(135deg, #F59E0B, #92400E); }
+.cs-badge-label-contributor { background: linear-gradient(135deg, #10B981, #047857); }
+.cs-badge-label-early_user { background: linear-gradient(135deg, #8B5CF6, #6D28D9); }
+
+/* === Avatar Ring (border warna badge) === */
+.cs-badge-ring-moderator { box-shadow: 0 0 0 2px #3B82F6; }
+.cs-badge-ring-vip { box-shadow: 0 0 0 2px #F59E0B; }
+.cs-badge-ring-admin { box-shadow: 0 0 0 2px #EF4444; }
+.cs-badge-ring-premium { box-shadow: 0 0 0 2px #F59E0B; }
+.cs-badge-ring-contributor { box-shadow: 0 0 0 2px #10B981; }
+.cs-badge-ring-early_user { box-shadow: 0 0 0 2px #8B5CF6; }
