@@ -685,24 +685,27 @@ function CommentNode({ comment, currentUserId, onReply, replyTo, replyText, setR
   const isOwner = currentUserId === comment.userId;
   const badge = comment.userBadge;
 
-  // === Ambil foto profil dari localStorage (karena disimpan di browser) ===
+  // === Ambil foto profil dari session atau localStorage ===
+  const { data: session } = useSafeSession();
   const [userImage, setUserImage] = useState<string | null>(null);
 
   useEffect(() => {
-    if (comment.userId) {
-      try {
-        // Cek apakah ada avatar di localStorage
-        const storedAvatar = localStorage.getItem("cinestream_avatar");
-        // Hanya pakai avatar lokal jika comment ini milik user yang sedang login
-        if (storedAvatar && comment.userId === currentUserId) {
-          setUserImage(storedAvatar);
-        } else if (comment.userImage) {
-          // Fallback ke image dari database (misal Google OAuth)
-          setUserImage(comment.userImage);
-        }
-      } catch {}
+    let img = comment.userImage; // Dari database
+    
+    // Kalau foto dari database kosong, dan ini komentar milik user yang login
+    if (!img && comment.userId === currentUserId) {
+      // Cek localStorage (foto yang diupload)
+      const storedAvatar = localStorage.getItem("cinestream_avatar");
+      if (storedAvatar) {
+        img = storedAvatar;
+      } else if (session?.user?.image) {
+        // Fallback ke foto Google dari session
+        img = session.user.image;
+      }
     }
-  }, [comment.userId, comment.userImage, currentUserId]);
+    
+    setUserImage(img || null);
+  }, [comment, currentUserId, session]);
 
   return (
     <div className={level > 0 ? "ml-6 border-l border-border pl-3" : ""}>
