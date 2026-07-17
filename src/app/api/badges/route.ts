@@ -1,7 +1,5 @@
 /**
- * GET /api/badges - List all available badges
- * POST /api/badges - Assign badge to user (Admin only)
- * DELETE /api/badges - Revoke badge from user (Admin only)
+ * src/app/api/badges/route.ts
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -39,12 +37,12 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const { userId, badgeId } = await request.json();
+    const { userId, badgeId, expiresAt } = await request.json();
     if (!userId || !badgeId) {
       return NextResponse.json({ error: "userId and badgeId are required" }, { status: 400 });
     }
 
-    await assignBadgeToUser(userId, badgeId);
+    await assignBadgeToUser(userId, badgeId, expiresAt);
     return NextResponse.json({ success: true, message: "Badge assigned" });
   } catch (error) {
     console.error("[ASSIGN BADGE ERROR]", error);
