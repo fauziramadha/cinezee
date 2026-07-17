@@ -7,12 +7,14 @@ import { Label } from "@/components/ui/label";
 import { Badge as UIBadge } from "@/components/ui/badge";
 import { Loader2, Shield, X, Search, Calendar } from "lucide-react";
 import { toast } from "sonner";
+import { BadgeIcon } from "@/components/badge/badge-icon";
 
 interface Badge {
   id: number;
+  slug: string;
   name: string;
   color: string;
-  icon: string;
+  icon: string | null;
 }
 
 interface UserBadge extends Badge {
@@ -179,7 +181,7 @@ export default function AdminBadgesPage() {
                     <div className="flex flex-wrap gap-2">
                       {userBadges.map((badge) => (
                         <div key={badge.id} className="flex items-center gap-2 rounded-md border p-2">
-                          <span style={{ color: badge.color }}>{badge.icon}</span>
+                          <BadgeIcon slug={badge.slug} size={16} />
                           <span className="text-sm font-medium">{badge.name}</span>
                           {badge.equipped && <UIBadge className="text-[10px]">Equipped</UIBadge>}
                           {badge.expires_at && (
@@ -221,7 +223,7 @@ export default function AdminBadgesPage() {
                   {badges.map((badge) => (
                     <div key={badge.id} className="flex items-center justify-between rounded-md border p-3">
                       <div className="flex items-center gap-2">
-                        <span className="text-xl" style={{ color: badge.color }}>{badge.icon}</span>
+                        <BadgeIcon slug={badge.slug} size={20} />
                         <div>
                           <p className="text-sm font-medium">{badge.name}</p>
                         </div>
