@@ -21,6 +21,7 @@ import { useAppStore } from "@/lib/store";
 import { getImageUrl, type MovieDetail } from "@/lib/tmdb";
 import { MovieCard } from "./movie-card";
 import { toast } from "sonner";
+import { cn } from "@/lib/utils";
 
 interface UserRating { id: string; rating: number; review: string | null; }
 interface RatingItem { id: string; rating: number; review: string | null; createdAt: string; userId: string; name: string | null; image: string | null; }
