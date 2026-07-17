@@ -73,7 +73,8 @@ export async function getUserInfoAndBadges(userId: string): Promise<{ user: User
   return { user: userResult, badges: badgesResult.results || [] };
 }
 
-// === ADMIN: Assign badge to user ===export async function assignBadgeToUser(userId: string, badgeId: number, expiresAt?: string): Promise<void> {
+// === ADMIN: Assign badge to user ===
+export async function assignBadgeToUser(userId: string, badgeId: number, expiresAt?: string): Promise<void> {
   const d1 = await getD1();
   await d1
     .prepare(
