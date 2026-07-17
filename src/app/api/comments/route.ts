@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { getCloudflareContext } from "@opennextjs/cloudflare";
+import { getEquippedBadge } from "@/lib/badge";
 
 /**
  * Comments API (with nested replies)
@@ -31,16 +32,21 @@ interface RawComment {
 
 interface CommentTree extends RawComment {
   replies: CommentTree[];
+  userBadge: any | null; // Tambahkan field untuk badge
 }
 
 // Build nested tree from flat comment list
-function buildCommentTree(comments: RawComment[]): CommentTree[] {
+function buildCommentTree(comments: RawComment[], badgesMap: Map<string, any>): CommentTree[] {
   const map = new Map<string, CommentTree>();
   const roots: CommentTree[] = [];
 
   // First pass: create nodes
   for (const comment of comments) {
-    map.set(comment.id, { ...comment, replies: [] });
+    map.set(comment.id, { 
+      ...comment, 
+      replies: [],
+      userBadge: badgesMap.get(comment.userId) || null // Sisipkan badge di sini
+    });
   }
 
   // Second pass: build tree
@@ -88,9 +94,23 @@ export async function GET(request: NextRequest) {
       .bind(parseInt(mediaId), mediaType)
       .all();
 
-    // Build nested tree
-    const comments = (result.results || []) as unknown as RawComment[];
-    const commentTree = buildCommentTree(comments);
+    const rawComments = (result.results || []) as unknown as RawComment[];
+
+    // === Ambil badge untuk setiap user yang berkomentar ===
+    const uniqueUserIds = Array.from(new Set(rawComments.map(c => c.userId)));
+    const badgesMap = new Map<string, any>();
+
+    await Promise.all(
+      uniqueUserIds.map(async (userId) => {
+        const badge = await getEquippedBadge(userId);
+        if (badge) {
+          badgesMap.set(userId, badge);
+        }
+      })
+    );
+
+    // Build nested tree dengan badge
+    const commentTree = buildCommentTree(rawComments, badgesMap);
 
     // Sort top-level by newest first, but replies oldest first (conversation order)
     commentTree.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
@@ -98,7 +118,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       success: true,
       comments: commentTree,
-      totalCount: comments.length,
+      totalCount: rawComments.length,
     });
   } catch (error: any) {
     console.error("[COMMENTS GET ERROR]", error);
