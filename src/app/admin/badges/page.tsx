@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge as UIBadge } from "@/components/ui/badge";
-import { Loader2, Shield, Check, X, Search } from "lucide-react";
+import { Loader2, Shield, X, Search, Calendar } from "lucide-react";
 import { toast } from "sonner";
 
 interface Badge {
@@ -17,6 +17,14 @@ interface Badge {
 
 interface UserBadge extends Badge {
   equipped: boolean;
+  expires_at: string | null;
+}
+
+interface UserInfo {
+  id: string;
+  name: string | null;
+  email: string | null;
+  image: string | null;
 }
 
 export default function AdminBadgesPage() {
@@ -25,8 +33,11 @@ export default function AdminBadgesPage() {
   const [apiKey, setApiKey] = useState("");
   
   const [searchUserId, setSearchUserId] = useState("");
+  const [userInfo, setUserInfo] = useState<UserInfo | null>(null);
   const [userBadges, setUserBadges] = useState<UserBadge[]>([]);
   const [searching, setSearching] = useState(false);
+
+  const [expiryDate, setExpiryDate] = useState("");
 
   useEffect(() => {
     const saved = localStorage.getItem("admin_api_key");
@@ -55,16 +66,18 @@ export default function AdminBadgesPage() {
   const handleSearchUser = async () => {
     if (!searchUserId.trim()) return;
     setSearching(true);
+    setUserInfo(null);
+    setUserBadges([]);
     try {
       const res = await fetch(`/api/user/${searchUserId}/badges`, {
         headers: { "X-Admin-API-Key": apiKey },
       });
       if (res.ok) {
         const data = await res.json();
+        setUserInfo(data.user);
         setUserBadges(data.badges || []);
       } else {
         toast.error("User tidak ditemukan");
-        setUserBadges([]);
       }
     } catch {
       toast.error("Gagal mencari user");
@@ -80,7 +93,11 @@ export default function AdminBadgesPage() {
           "Content-Type": "application/json",
           "X-Admin-API-Key": apiKey,
         },
-        body: JSON.stringify({ userId: searchUserId, badgeId }),
+        body: JSON.stringify({ 
+          userId: searchUserId, 
+          badgeId,
+          expiresAt: expiryDate ? new Date(expiryDate).toISOString() : null
+        }),
       });
       if (res.ok) {
         toast.success("Badge berhasil diberikan");
@@ -132,7 +149,7 @@ export default function AdminBadgesPage() {
               <h2 className="text-lg font-semibold">Cari User</h2>
               <div className="flex gap-2">
                 <Input
-                  placeholder="Masukkan User ID (dari D1 database)"
+                  placeholder="Masukkan User ID"
                   value={searchUserId}
                   onChange={(e) => setSearchUserId(e.target.value)}
                 />
@@ -142,31 +159,64 @@ export default function AdminBadgesPage() {
               </div>
             </div>
 
-            {/* User Badges */}
-            {searchUserId && userBadges.length > 0 && (
-              <div className="space-y-3 rounded-lg border bg-card p-4">
-                <h2 className="text-lg font-semibold">Badge User: {searchUserId}</h2>
-                <div className="flex flex-wrap gap-2">
-                  {userBadges.map((badge) => (
-                    <div key={badge.id} className="flex items-center gap-2 rounded-md border p-2">
-                      <span style={{ color: badge.color }}>{badge.icon}</span>
-                      <span className="text-sm font-medium">{badge.name}</span>
-                      {badge.equipped && <UIBadge className="text-[10px]">Equipped</UIBadge>}
-                      <Button size="sm" variant="ghost" onClick={() => handleRevoke(badge.id)}>
-                        <X className="h-3 w-3" />
-                      </Button>
-                    </div>
-                  ))}
+            {/* User Info & Badges */}
+            {userInfo && (
+              <div className="space-y-4 rounded-lg border bg-card p-4">
+                <div className="flex items-center gap-4">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/20 text-primary font-bold">
+                    {userInfo.name?.[0]?.toUpperCase() || "U"}
+                  </div>
+                  <div>
+                    <h3 className="font-semibold">{userInfo.name || "No Name"}</h3>
+                    <p className="text-sm text-muted-foreground">{userInfo.email}</p>
+                  </div>
                 </div>
+
+                {/* User's Current Badges */}
+                {userBadges.length > 0 && (
+                  <div className="border-t pt-3">
+                    <p className="mb-2 text-xs font-semibold uppercase text-muted-foreground">Badge Aktif</p>
+                    <div className="flex flex-wrap gap-2">
+                      {userBadges.map((badge) => (
+                        <div key={badge.id} className="flex items-center gap-2 rounded-md border p-2">
+                          <span style={{ color: badge.color }}>{badge.icon}</span>
+                          <span className="text-sm font-medium">{badge.name}</span>
+                          {badge.equipped && <UIBadge className="text-[10px]">Equipped</UIBadge>}
+                          {badge.expires_at && (
+                            <span className="text-[10px] text-muted-foreground">
+                              until {new Date(badge.expires_at).toLocaleDateString()}
+                            </span>
+                          )}
+                          <Button size="sm" variant="ghost" onClick={() => handleRevoke(badge.id)}>
+                            <X className="h-3 w-3" />
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
-            {/* Available Badges */}
-            <div className="space-y-3 rounded-lg border bg-card p-4">
-              <h2 className="text-lg font-semibold">Badge Tersedia</h2>
-              {loading ? (
-                <Loader2 className="h-6 w-6 animate-spin" />
-              ) : (
+            {/* Assign New Badge */}
+            {userInfo && (
+              <div className="space-y-4 rounded-lg border bg-card p-4">
+                <h2 className="text-lg font-semibold">Beri Badge Baru</h2>
+                
+                <div>
+                  <Label htmlFor="expiry" className="text-xs flex items-center gap-1">
+                    <Calendar className="h-3 w-3" /> Masa Aktif (Opsional)
+                  </Label>
+                  <Input
+                    id="expiry"
+                    type="date"
+                    value={expiryDate}
+                    onChange={(e) => setExpiryDate(e.target.value)}
+                    className="mt-1 w-full sm:w-auto"
+                  />
+                  <p className="mt-1 text-xs text-muted-foreground">Kosongkan jika badge permanen.</p>
+                </div>
+
                 <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                   {badges.map((badge) => (
                     <div key={badge.id} className="flex items-center justify-between rounded-md border p-3">
@@ -174,21 +224,16 @@ export default function AdminBadgesPage() {
                         <span className="text-xl" style={{ color: badge.color }}>{badge.icon}</span>
                         <div>
                           <p className="text-sm font-medium">{badge.name}</p>
-                          <p className="text-xs text-muted-foreground">{badge.color}</p>
                         </div>
                       </div>
-                      <Button 
-                        size="sm" 
-                        onClick={() => handleAssign(badge.id)}
-                        disabled={!searchUserId}
-                      >
+                      <Button size="sm" onClick={() => handleAssign(badge.id)}>
                         <Shield className="h-3 w-3 mr-1" /> Assign
                       </Button>
                     </div>
                   ))}
                 </div>
-              )}
-            </div>
+              </div>
+            )}
           </>
         )}
       </div>
