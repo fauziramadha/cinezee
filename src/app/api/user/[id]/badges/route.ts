@@ -1,11 +1,9 @@
 /**
  * src/app/api/user/[id]/badges/route.ts
- *
- * GET /api/user/[id]/badges - Ambil semua badge milik user
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { getUserBadges } from "@/lib/badge";
+import { getUserInfoAndBadges } from "@/lib/badge";
 
 export async function GET(
   request: NextRequest,
@@ -18,8 +16,13 @@ export async function GET(
   }
 
   try {
-    const badges = await getUserBadges(userId);
-    return NextResponse.json({ badges });
+    const { user, badges } = await getUserInfoAndBadges(userId);
+    
+    if (!user) {
+      return NextResponse.json({ error: "User not found" }, { status: 404 });
+    }
+
+    return NextResponse.json({ user, badges });
   } catch (error) {
     console.error("[GET USER BADGES ERROR]", error);
     return NextResponse.json({ error: "Failed to fetch user badges" }, { status: 500 });
