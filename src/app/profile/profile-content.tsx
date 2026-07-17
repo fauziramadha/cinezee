@@ -159,6 +159,10 @@ export function ProfileContent() {
               
               <div className="mt-4 flex flex-wrap justify-center gap-6 sm:justify-start">
                 <div>
+                  <p className="text-xs uppercase tracking-wide text-muted-foreground">User ID</p>
+                  <p className="font-mono text-xs text-muted-foreground">{session.user.id || "N/A"}</p>
+                </div>
+                <div>
                   <p className="text-xs uppercase tracking-wide text-muted-foreground">Role</p>
                   <p className="font-semibold capitalize">{session.user.role || "user"}</p>
                 </div>
