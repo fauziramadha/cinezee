@@ -68,12 +68,6 @@ interface AppState {
   loadHistory: () => void;
   updateHistoryProgress: (id: number, progress: number, duration: number) => void;
 
-  // Profile data (localStorage)
-  profileAvatar: string | null;
-  profileBio: string;
-  setProfileAvatar: (avatar: string | null) => void;
-  setProfileBio: (bio: string) => void;
-
   // Favorites (localStorage, max 50)
   favorites: FavoriteItem[];
   toggleFavorite: (item: SelectedMedia) => void;
@@ -168,30 +162,15 @@ export const useAppStore = create<AppState>((set, get) => ({
     saveToStorage("cinestream_history", history);
   },
 
-  // Profile
-  profileAvatar: null,
-  profileBio: "",
-  setProfileAvatar: (avatar) => {
-    set({ profileAvatar: avatar });
-    saveToStorage("cinestream_avatar", avatar);
-  },
-  setProfileBio: (bio) => {
-    set({ profileBio: bio });
-    saveToStorage("cinestream_bio", bio);
-  },
-
   // Favorites
   favorites: [],
   toggleFavorite: (item) => {
     const existing = get().favorites.find(f => f.id === item.id);
     let favorites: FavoriteItem[];
     if (existing) {
-      // Remove
       favorites = get().favorites.filter(f => f.id !== item.id);
     } else {
-      // Add (max 50)
       favorites = [{ ...item, addedAt: new Date().toISOString() }, ...get().favorites].slice(0, MAX_FAVORITES);
-      // Add to activity
       get().addActivity({
         id: `fav-${item.id}-${Date.now()}`,
         type: "favorite",
@@ -206,8 +185,6 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
   loadFavorites: () => {
     set({ favorites: loadFromStorage("cinestream_favorites", []) });
-    set({ profileAvatar: loadFromStorage("cinestream_avatar", null) });
-    set({ profileBio: loadFromStorage("cinestream_bio", "") });
   },
 
   // Activity log
