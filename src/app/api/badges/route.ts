@@ -1,10 +1,11 @@
 /**
  * GET /api/badges - List all available badges
  * POST /api/badges - Assign badge to user (Admin only)
+ * DELETE /api/badges - Revoke badge from user (Admin only)
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { getAllBadges, assignBadgeToUser } from "@/lib/badge";
+import { getAllBadges, assignBadgeToUser, revokeBadgeFromUser } from "@/lib/badge";
 
 async function requireAdmin(request: NextRequest): Promise<boolean> {
   const apiKey = request.headers.get("x-admin-api-key");
@@ -27,6 +28,7 @@ export async function GET() {
     const badges = await getAllBadges();
     return NextResponse.json({ badges });
   } catch (error) {
+    console.error("[GET BADGES ERROR]", error);
     return NextResponse.json({ error: "Failed to fetch badges" }, { status: 500 });
   }
 }
@@ -45,6 +47,7 @@ export async function POST(request: NextRequest) {
     await assignBadgeToUser(userId, badgeId);
     return NextResponse.json({ success: true, message: "Badge assigned" });
   } catch (error) {
+    console.error("[ASSIGN BADGE ERROR]", error);
     return NextResponse.json({ error: "Failed to assign badge" }, { status: 500 });
   }
 }
@@ -63,9 +66,7 @@ export async function DELETE(request: NextRequest) {
     await revokeBadgeFromUser(userId, badgeId);
     return NextResponse.json({ success: true, message: "Badge revoked" });
   } catch (error) {
+    console.error("[REVOKE BADGE ERROR]", error);
     return NextResponse.json({ error: "Failed to revoke badge" }, { status: 500 });
   }
 }
-
-// Need to import revokeBadgeFromUser
-import { revokeBadgeFromUser } from "@/lib/badge";
