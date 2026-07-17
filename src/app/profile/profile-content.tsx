@@ -38,8 +38,8 @@ export function ProfileContent() {
   const router = useRouter();
 
   const {
-    history, favorites, activityLog, profileAvatar, profileBio,
-    setProfileAvatar, setProfileBio, loadFavorites, loadActivity, loadHistory,
+    history, favorites, activityLog,
+    loadFavorites, loadActivity, loadHistory,
     removeFromHistory, openPlayer,
   } = useAppStore();
 
@@ -48,6 +48,11 @@ export function ProfileContent() {
   const [bioText, setBioText] = useState("");
   const [mounted, setMounted] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Profile state from D1
+  const [profileAvatar, setProfileAvatar] = useState<string | null>(null);
+  const [profileBio, setProfileBio] = useState<string>("");
+  const [loadingProfile, setLoadingProfile] = useState(true);
 
   // Badge state
   const [userBadges, setUserBadges] = useState<UserBadge[]>([]);
@@ -66,9 +71,19 @@ export function ProfileContent() {
     setMounted(true);
   }, [loadFavorites, loadActivity, loadHistory]);
 
-  // Fetch User Badges
+  // Fetch Profile & Badges from D1
   useEffect(() => {
     if (session?.user?.id) {
+      setLoadingProfile(true);
+      fetch("/api/user/profile")
+        .then(res => res.json())
+        .then(data => {
+          setProfileAvatar(data.user?.image || null);
+          setProfileBio(data.user?.bio || "");
+        })
+        .catch(() => {})
+        .finally(() => setLoadingProfile(false));
+
       setLoadingBadges(true);
       fetch(`/api/user/${session.user.id}/badges`)
         .then(res => res.json())
@@ -80,7 +95,6 @@ export function ProfileContent() {
     }
   }, [session]);
 
-  // Mock data for reviews & comments (sementara dari localStorage)
   const [reviews, setReviews] = useState<any[]>([]);
   const [comments, setComments] = useState<any[]>([]);
 
@@ -106,24 +120,68 @@ export function ProfileContent() {
       return;
     }
 
-    if (file.size > 2 * 1024 * 1024) {
-      toast.error("Ukuran gambar maksimal 2MB");
-      return;
-    }
-
     const reader = new FileReader();
     reader.onload = (event) => {
-      const result = event.target?.result as string;
-      setProfileAvatar(result);
-      toast.success("Foto profil diperbarui");
+      const img = new Image();
+      img.onload = () => {
+        // Resize image to 128x128
+        const canvas = document.createElement("canvas");
+        const ctx = canvas.getContext("2d");
+        
+        const size = 128;
+        canvas.width = size;
+        canvas.height = size;
+        
+        // Crop to square (center)
+        const minDim = Math.min(img.width, img.height);
+        const sx = (img.width - minDim) / 2;
+        const sy = (img.height - minDim) / 2;
+        
+        ctx?.drawImage(img, sx, sy, minDim, minDim, 0, 0, size, size);
+        
+        // Convert to base64 JPEG (0.8 quality)
+        const resizedBase64 = canvas.toDataURL("image/jpeg", 0.8);
+
+        // Save to D1
+        fetch("/api/user/profile", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ avatar: resizedBase64, bio: profileBio }),
+        })
+        .then(res => res.json())
+        .then(data => {
+          if (data.success) {
+            setProfileAvatar(resizedBase64);
+            toast.success("Foto profil diperbarui");
+          } else {
+            toast.error("Gagal menyimpan foto profil");
+          }
+        });
+      };
+      img.src = event.target?.result as string;
     };
     reader.readAsDataURL(file);
   };
 
   const handleSaveBio = () => {
-    setProfileBio(bioText.trim());
+    const newBio = bioText.trim();
+    setProfileBio(newBio);
     setEditingBio(false);
-    toast.success("Bio diperbarui");
+    
+    // Save to D1
+    fetch("/api/user/profile", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ avatar: profileAvatar, bio: newBio }),
+    })
+    .then(res => res.json())
+    .then(data => {
+      if (data.success) {
+        toast.success("Bio diperbarui");
+      } else {
+        toast.error("Gagal menyimpan bio");
+      }
+    });
   };
 
   const handleEquipBadge = async (badgeId: number) => {
@@ -136,13 +194,12 @@ export function ProfileContent() {
       });
       if (res.ok) {
         toast.success("Badge dipasang!");
-        // Update state locally
         setUserBadges(prev => prev.map(b => ({ ...b, equipped: b.id === badgeId })));
       }
     } catch {}
   };
 
-  if (status === "loading" || !mounted) {
+  if (status === "loading" || !mounted || loadingProfile) {
     return (
       <main className="flex min-h-screen items-center justify-center bg-background">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -177,42 +234,27 @@ export function ProfileContent() {
                 )}
               >
                 {profileAvatar ? (
-                  // eslint-disable-next-line @next/next/no-img-element
                   <img src={profileAvatar} alt={userName} className="h-full w-full object-cover" />
-                ) : session.user.image ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={session.user.image} alt={userName} className="h-full w-full object-cover" />
                 ) : (
                   <div className="flex h-full w-full items-center justify-center bg-primary/20">
-                    <span className="text-3xl font-bold text-primary">
-                      {userName[0]?.toUpperCase() || "U"}
-                    </span>
+                    <span className="text-3xl font-bold text-primary">{userName[0]?.toUpperCase() || "U"}</span>
                   </div>
                 )}
               </div>
               <button
                 onClick={() => fileInputRef.current?.click()}
                 className="absolute bottom-0 right-0 flex h-8 w-8 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg hover:bg-primary/90"
-                aria-label="Change avatar"
               >
                 <Camera className="h-4 w-4" />
               </button>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/*"
-                onChange={handleAvatarUpload}
-                className="hidden"
-              />
+              <input ref={fileInputRef} type="file" accept="image/*" onChange={handleAvatarUpload} className="hidden" />
             </div>
 
             {/* User Info & Bio */}
             <div className="flex-1 text-center sm:text-left">
               <div className="flex items-center justify-center gap-2 sm:justify-start">
                 <h2 className="text-xl font-bold sm:text-2xl">{userName}</h2>
-                {equippedBadge && (
-                  <BadgeLabel slug={equippedBadge.slug} name={equippedBadge.name} />
-                )}
+                {equippedBadge && <BadgeLabel slug={equippedBadge.slug} name={equippedBadge.name} />}
               </div>
               <p className="text-sm text-muted-foreground">{userEmail}</p>
               
@@ -224,10 +266,6 @@ export function ProfileContent() {
                 <div>
                   <p className="text-xs uppercase tracking-wide text-muted-foreground">Role</p>
                   <p className="font-semibold capitalize">{session.user.role || "user"}</p>
-                </div>
-                <div>
-                  <p className="text-xs uppercase tracking-wide text-muted-foreground">Language</p>
-                  <p className="font-semibold uppercase">{session.user.language || "en"}</p>
                 </div>
               </div>
 
@@ -245,12 +283,8 @@ export function ProfileContent() {
                       autoFocus
                     />
                     <div className="flex gap-1">
-                      <Button size="sm" onClick={handleSaveBio}>
-                        <Save className="h-3 w-3" />
-                      </Button>
-                      <Button size="sm" variant="ghost" onClick={() => setEditingBio(false)}>
-                        <X className="h-3 w-3" />
-                      </Button>
+                      <Button size="sm" onClick={handleSaveBio}><Save className="h-3 w-3" /></Button>
+                      <Button size="sm" variant="ghost" onClick={() => setEditingBio(false)}><X className="h-3 w-3" /></Button>
                     </div>
                   </div>
                 ) : (
@@ -258,28 +292,16 @@ export function ProfileContent() {
                     onClick={() => { setBioText(profileBio); setEditingBio(true); }}
                     className="cursor-pointer group flex items-start gap-2"
                   >
-                    <p className="flex-1 text-sm text-muted-foreground">
-                      {profileBio || "Klik untuk menambahkan bio..."}
-                    </p>
+                    <p className="flex-1 text-sm text-muted-foreground">{profileBio || "Klik untuk menambahkan bio..."}</p>
                     <Edit3 className="h-3 w-3 text-muted-foreground opacity-0 group-hover:opacity-100" />
                   </div>
                 )}
               </div>
 
-              {/* Stats */}
               <div className="mt-4 flex flex-wrap gap-4 text-sm">
-                <span className="flex items-center gap-1">
-                  <Heart className="h-4 w-4 text-primary" />
-                  <strong>{favorites.length}</strong> Favorites
-                </span>
-                <span className="flex items-center gap-1">
-                  <Play className="h-4 w-4 text-primary" />
-                  <strong>{history.length}</strong> Watched
-                </span>
-                <span className="flex items-center gap-1">
-                  <Star className="h-4 w-4 text-primary" />
-                  <strong>{reviews.length}</strong> Reviews
-                </span>
+                <span className="flex items-center gap-1"><Heart className="h-4 w-4 text-primary" /><strong>{favorites.length}</strong> Favorites</span>
+                <span className="flex items-center gap-1"><Play className="h-4 w-4 text-primary" /><strong>{history.length}</strong> Watched</span>
+                <span className="flex items-center gap-1"><Star className="h-4 w-4 text-primary" /><strong>{reviews.length}</strong> Reviews</span>
               </div>
             </div>
           </div>
@@ -300,9 +322,7 @@ export function ProfileContent() {
               onClick={() => setActiveTab(tab.id)}
               className={cn(
                 "flex shrink-0 items-center gap-2 border-b-2 px-4 py-3 text-sm font-medium transition-colors",
-                activeTab === tab.id
-                  ? "border-primary text-primary"
-                  : "border-transparent text-muted-foreground hover:text-foreground"
+                activeTab === tab.id ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"
               )}
             >
               <tab.icon className="h-4 w-4" />
@@ -323,31 +343,15 @@ export function ProfileContent() {
               ) : (
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   {userBadges.map((badge) => (
-                    <div 
-                      key={badge.id} 
-                      className={cn(
-                        "flex items-center justify-between rounded-lg border p-4 transition-all",
-                        badge.equipped ? "border-2" : "bg-card"
-                      )}
-                      style={badge.equipped ? { borderColor: badge.color, backgroundColor: `${badge.color}10` } : {}}
-                    >
+                    <div key={badge.id} className={cn("flex items-center justify-between rounded-lg border p-4", badge.equipped ? "border-2" : "bg-card")} style={badge.equipped ? { borderColor: badge.color, backgroundColor: `${badge.color}10` } : {}}>
                       <div className="flex items-center gap-3">
                         <BadgeIcon slug={badge.slug} size={24} />
                         <div>
                           <p className="font-bold" style={{ color: badge.color }}>{badge.name}</p>
-                          {badge.expires_at && (
-                            <p className="text-xs text-muted-foreground">
-                              Berlaku sampai {new Date(badge.expires_at).toLocaleDateString("id-ID")}
-                            </p>
-                          )}
+                          {badge.expires_at && <p className="text-xs text-muted-foreground">Berlaku sampai {new Date(badge.expires_at).toLocaleDateString("id-ID")}</p>}
                         </div>
                       </div>
-                      <Button 
-                        size="sm" 
-                        variant={badge.equipped ? "secondary" : "default"}
-                        onClick={() => !badge.equipped && handleEquipBadge(badge.id)}
-                        disabled={badge.equipped}
-                      >
+                      <Button size="sm" variant={badge.equipped ? "secondary" : "default"} onClick={() => !badge.equipped && handleEquipBadge(badge.id)} disabled={badge.equipped}>
                         {badge.equipped ? "Dipasang" : "Pasang"}
                       </Button>
                     </div>
@@ -360,13 +364,9 @@ export function ProfileContent() {
           {/* Favorites */}
           {activeTab === "favorites" && (
             <div>
-              {favorites.length === 0 ? (
-                <EmptyState icon={Heart} text="Belum ada film favorit" />
-              ) : (
+              {favorites.length === 0 ? <EmptyState icon={Heart} text="Belum ada film favorit" /> : (
                 <div className="grid grid-cols-3 gap-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6">
-                  {favorites.map((item) => (
-                    <MovieCard key={item.id} movie={item as any} />
-                  ))}
+                  {favorites.map((item) => <MovieCard key={item.id} movie={item as any} />)}
                 </div>
               )}
             </div>
@@ -375,21 +375,16 @@ export function ProfileContent() {
           {/* Reviews */}
           {activeTab === "reviews" && (
             <div>
-              {reviews.length === 0 ? (
-                <EmptyState icon={Star} text="Belum ada review" />
-              ) : (
+              {reviews.length === 0 ? <EmptyState icon={Star} text="Belum ada review" /> : (
                 <div className="space-y-3">
                   {reviews.map((review, idx) => (
                     <div key={idx} className="rounded-lg border bg-card p-4">
                       <div className="flex items-center gap-2">
                         <Star className="h-4 w-4 fill-yellow-400 text-yellow-400" />
                         <span className="font-semibold">{review.rating}/10</span>
-                        <span className="text-xs text-muted-foreground ml-auto">
-                          {new Date(review.createdAt).toLocaleDateString("id-ID")}
-                        </span>
+                        <span className="text-xs text-muted-foreground ml-auto">{new Date(review.createdAt).toLocaleDateString("id-ID")}</span>
                       </div>
                       <p className="mt-2 text-sm">{review.mediaTitle}</p>
-                      {review.review && <p className="mt-1 text-sm text-muted-foreground">{review.review}</p>}
                     </div>
                   ))}
                 </div>
@@ -400,16 +395,12 @@ export function ProfileContent() {
           {/* Comments */}
           {activeTab === "comments" && (
             <div>
-              {comments.length === 0 ? (
-                <EmptyState icon={MessageSquare} text="Belum ada komentar" />
-              ) : (
+              {comments.length === 0 ? <EmptyState icon={MessageSquare} text="Belum ada komentar" /> : (
                 <div className="space-y-3">
                   {comments.map((comment, idx) => (
                     <div key={idx} className="rounded-lg border bg-card p-4">
                       <p className="text-sm">{comment.content}</p>
-                      <p className="mt-2 text-xs text-muted-foreground">
-                        on {comment.mediaTitle} • {new Date(comment.createdAt).toLocaleDateString("id-ID")}
-                      </p>
+                      <p className="mt-2 text-xs text-muted-foreground">on {comment.mediaTitle}</p>
                     </div>
                   ))}
                 </div>
@@ -417,46 +408,27 @@ export function ProfileContent() {
             </div>
           )}
 
-          {/* Watchlist (History) */}
+          {/* Watchlist */}
           {activeTab === "watchlist" && (
             <div>
-              {history.length === 0 ? (
-                <EmptyState icon={Play} text="Belum ada riwayat tontonan" />
-              ) : (
+              {history.length === 0 ? <EmptyState icon={Play} text="Belum ada riwayat tontonan" /> : (
                 <div className="space-y-3">
                   {history.map((item) => {
-                    const progressPercent = item.progress && item.duration
-                      ? (item.progress / item.duration) * 100 : 0;
+                    const progressPercent = item.progress && item.duration ? (item.progress / item.duration) * 100 : 0;
                     return (
                       <div key={item.id} className="flex items-center gap-3 rounded-lg border bg-card p-3">
                         <div className="relative h-16 w-28 shrink-0 overflow-hidden rounded bg-muted">
-                          {item.backdropPath && (
-                            <Image
-                              src={getImageUrl(item.backdropPath, "w300")}
-                              alt={item.title}
-                              fill
-                              className="object-cover"
-                              unoptimized
-                            />
-                          )}
+                          {item.backdropPath && <Image src={getImageUrl(item.backdropPath, "w300")} alt={item.title} fill className="object-cover" unoptimized />}
                         </div>
                         <div className="min-w-0 flex-1">
                           <h3 className="truncate text-sm font-medium">{item.title}</h3>
-                          <p className="text-xs text-muted-foreground">
-                            {new Date(item.watchedAt).toLocaleDateString("id-ID")}
-                          </p>
                           {progressPercent > 0 && (
                             <div className="mt-2 h-1 w-full overflow-hidden rounded-full bg-muted">
                               <div className="h-full rounded-full bg-primary" style={{ width: `${progressPercent}%` }} />
                             </div>
                           )}
                         </div>
-                        <Button size="sm" variant="ghost" onClick={() => openPlayer(item)}>
-                          <Play className="h-4 w-4" />
-                        </Button>
-                        <Button size="sm" variant="ghost" onClick={() => removeFromHistory(item.id)}>
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
+                        <Button size="sm" variant="ghost" onClick={() => openPlayer(item)}><Play className="h-4 w-4" /></Button>
                       </div>
                     );
                   })}
@@ -468,30 +440,16 @@ export function ProfileContent() {
           {/* Activity */}
           {activeTab === "activity" && (
             <div>
-              {activityLog.length === 0 ? (
-                <EmptyState icon={Clock} text="Belum ada aktivitas" />
-              ) : (
+              {activityLog.length === 0 ? <EmptyState icon={Clock} text="Belum ada aktivitas" /> : (
                 <div className="space-y-2">
                   {activityLog.map((activity) => (
                     <div key={activity.id} className="flex items-center gap-3 rounded-lg border bg-card p-3">
                       <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10">
                         {activity.type === "watch" && <Play className="h-4 w-4 text-primary" />}
                         {activity.type === "favorite" && <Heart className="h-4 w-4 text-primary" />}
-                        {activity.type === "rating" && <Star className="h-4 w-4 text-primary" />}
-                        {activity.type === "comment" && <MessageSquare className="h-4 w-4 text-primary" />}
                       </div>
                       <div className="min-w-0 flex-1">
-                        <p className="text-sm">
-                          <span className="font-medium capitalize">
-                            {activity.type === "watch" ? "Watched" : activity.type === "favorite" ? "Added to favorites" : activity.type}
-                          </span>
-                          {" "}<span className="text-muted-foreground">{activity.mediaTitle}</span>
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          {new Date(activity.timestamp).toLocaleString("id-ID", {
-                            day: "numeric", month: "short", hour: "2-digit", minute: "2-digit"
-                          })}
-                        </p>
+                        <p className="text-sm"><span className="font-medium capitalize">{activity.type}</span> <span className="text-muted-foreground">{activity.mediaTitle}</span></p>
                       </div>
                     </div>
                   ))}
