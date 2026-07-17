@@ -13,11 +13,25 @@ import { getImageUrl } from "@/lib/tmdb";
 import { toast } from "sonner";
 import {
   Loader2, Camera, Edit3, Save, X, Star, Heart, MessageSquare,
-  Play, Clock, Trash2, Film
+  Play, Clock, Trash2, Film, ShieldCheck
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-type Tab = "favorites" | "reviews" | "comments" | "watchlist" | "activity";
+// Badge Components
+import { BadgeIcon } from "@/components/badge/badge-icon";
+import { BadgeLabel } from "@/components/badge/badge-label";
+import { getAvatarRingClass } from "@/components/badge/avatar-ring";
+
+type Tab = "favorites" | "badges" | "reviews" | "comments" | "watchlist" | "activity";
+
+interface UserBadge {
+  id: number;
+  slug: string;
+  name: string;
+  color: string;
+  equipped: boolean;
+  expires_at: string | null;
+}
 
 export function ProfileContent() {
   const { data: session, status } = useSafeSession();
@@ -35,6 +49,10 @@ export function ProfileContent() {
   const [mounted, setMounted] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Badge state
+  const [userBadges, setUserBadges] = useState<UserBadge[]>([]);
+  const [loadingBadges, setLoadingBadges] = useState(false);
+
   useEffect(() => {
     if (status === "unauthenticated") {
       router.push("/");
@@ -47,6 +65,20 @@ export function ProfileContent() {
     loadHistory();
     setMounted(true);
   }, [loadFavorites, loadActivity, loadHistory]);
+
+  // Fetch User Badges
+  useEffect(() => {
+    if (session?.user?.id) {
+      setLoadingBadges(true);
+      fetch(`/api/user/${session.user.id}/badges`)
+        .then(res => res.json())
+        .then(data => {
+          setUserBadges(data.badges || []);
+        })
+        .catch(() => {})
+        .finally(() => setLoadingBadges(false));
+    }
+  }, [session]);
 
   // Mock data for reviews & comments (sementara dari localStorage)
   const [reviews, setReviews] = useState<any[]>([]);
@@ -94,6 +126,22 @@ export function ProfileContent() {
     toast.success("Bio diperbarui");
   };
 
+  const handleEquipBadge = async (badgeId: number) => {
+    if (!session?.user?.id) return;
+    try {
+      const res = await fetch(`/api/user/${session.user.id}/equip`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ badgeId }),
+      });
+      if (res.ok) {
+        toast.success("Badge dipasang!");
+        // Update state locally
+        setUserBadges(prev => prev.map(b => ({ ...b, equipped: b.id === badgeId })));
+      }
+    } catch {}
+  };
+
   if (status === "loading" || !mounted) {
     return (
       <main className="flex min-h-screen items-center justify-center bg-background">
@@ -106,6 +154,7 @@ export function ProfileContent() {
 
   const userName = session.user.name || "Guest User";
   const userEmail = session.user.email || "Not logged in";
+  const equippedBadge = userBadges.find(b => b.equipped);
 
   return (
     <main className="min-h-screen bg-background">
@@ -121,7 +170,12 @@ export function ProfileContent() {
           <div className="relative flex flex-col items-center gap-6 sm:flex-row sm:items-start">
             {/* Avatar with Upload Button */}
             <div className="relative shrink-0">
-              <div className="h-24 w-24 overflow-hidden rounded-full bg-muted sm:h-32 sm:w-32 ring-2 ring-primary ring-offset-2 ring-offset-card">
+              <div 
+                className={cn(
+                  "h-24 w-24 overflow-hidden rounded-full bg-muted sm:h-32 sm:w-32 ring-2 ring-offset-2 ring-offset-card",
+                  getAvatarRingClass(equippedBadge?.slug)
+                )}
+              >
                 {profileAvatar ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img src={profileAvatar} alt={userName} className="h-full w-full object-cover" />
@@ -154,7 +208,12 @@ export function ProfileContent() {
 
             {/* User Info & Bio */}
             <div className="flex-1 text-center sm:text-left">
-              <h2 className="text-xl font-bold sm:text-2xl">{userName}</h2>
+              <div className="flex items-center justify-center gap-2 sm:justify-start">
+                <h2 className="text-xl font-bold sm:text-2xl">{userName}</h2>
+                {equippedBadge && (
+                  <BadgeLabel slug={equippedBadge.slug} name={equippedBadge.name} />
+                )}
+              </div>
               <p className="text-sm text-muted-foreground">{userEmail}</p>
               
               <div className="mt-4 flex flex-wrap justify-center gap-6 sm:justify-start">
@@ -230,6 +289,7 @@ export function ProfileContent() {
         <div className="mt-6 flex gap-2 overflow-x-auto border-b">
           {[
             { id: "favorites" as Tab, label: "Favorites", icon: Heart },
+            { id: "badges" as Tab, label: "Badges", icon: ShieldCheck },
             { id: "reviews" as Tab, label: "Reviews", icon: Star },
             { id: "comments" as Tab, label: "Comments", icon: MessageSquare },
             { id: "watchlist" as Tab, label: "Watchlist", icon: Film },
@@ -253,6 +313,50 @@ export function ProfileContent() {
 
         {/* Tab Content */}
         <div className="mt-6 min-h-[300px]">
+          {/* Badges Tab */}
+          {activeTab === "badges" && (
+            <div>
+              {loadingBadges ? (
+                <div className="flex justify-center py-8"><Loader2 className="h-6 w-6 animate-spin" /></div>
+              ) : userBadges.length === 0 ? (
+                <EmptyState icon={ShieldCheck} text="Belum punya badge. Teruslah aktif untuk mendapatkan badge!" />
+              ) : (
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  {userBadges.map((badge) => (
+                    <div 
+                      key={badge.id} 
+                      className={cn(
+                        "flex items-center justify-between rounded-lg border p-4 transition-all",
+                        badge.equipped ? "border-2" : "bg-card"
+                      )}
+                      style={badge.equipped ? { borderColor: badge.color, backgroundColor: `${badge.color}10` } : {}}
+                    >
+                      <div className="flex items-center gap-3">
+                        <BadgeIcon slug={badge.slug} size={24} />
+                        <div>
+                          <p className="font-bold" style={{ color: badge.color }}>{badge.name}</p>
+                          {badge.expires_at && (
+                            <p className="text-xs text-muted-foreground">
+                              Berlaku sampai {new Date(badge.expires_at).toLocaleDateString("id-ID")}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                      <Button 
+                        size="sm" 
+                        variant={badge.equipped ? "secondary" : "default"}
+                        onClick={() => !badge.equipped && handleEquipBadge(badge.id)}
+                        disabled={badge.equipped}
+                      >
+                        {badge.equipped ? "Dipasang" : "Pasang"}
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Favorites */}
           {activeTab === "favorites" && (
             <div>
