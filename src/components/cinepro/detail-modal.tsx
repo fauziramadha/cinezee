@@ -13,6 +13,8 @@ import {
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { BadgeLabel } from "@/components/badge/badge-label";
+import { getAvatarRingClass } from "@/components/badge/avatar-ring";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useAppStore } from "@/lib/store";
@@ -680,17 +682,24 @@ function CommentNode({ comment, currentUserId, onReply, replyTo, replyText, setR
   const initial = comment.userName?.[0]?.toUpperCase() || "U";
   const timeAgo = new Date(comment.createdAt).toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" });
   const isOwner = currentUserId === comment.userId;
+  const badge = comment.userBadge;
+
   return (
     <div className={level > 0 ? "ml-6 border-l border-border pl-3" : ""}>
       <div className="flex gap-2">
-        <Avatar className="h-8 w-8 shrink-0">
+        <Avatar className={cn("h-8 w-8 shrink-0", getAvatarRingClass(badge?.slug))}>
           <AvatarImage src={comment.userImage || undefined} />
           <AvatarFallback className="bg-primary/20 text-xs text-primary">{initial}</AvatarFallback>
         </Avatar>
         <div className="min-w-0 flex-1">
           <div className="rounded-lg bg-muted/40 px-3 py-2">
             <div className="flex items-center justify-between gap-2">
-              <span className="text-xs font-semibold">{comment.userName || "Anonymous"}</span>
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs font-semibold">{comment.userName || "Anonymous"}</span>
+                {badge && (
+                  <BadgeLabel slug={badge.slug} name={badge.name} size={10} />
+                )}
+              </div>
               <span className="text-[10px] text-muted-foreground">{timeAgo}</span>
             </div>
             <p className="mt-1 break-words text-xs leading-relaxed sm:text-sm">{comment.content}</p>
