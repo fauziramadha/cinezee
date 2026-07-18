@@ -1,0 +1,28 @@
+name: Scrape Cinemacity Homepage
+on:
+  schedule:
+    - cron: '0 * * * *' # Run every hour
+  workflow_dispatch: # Bisa trigger manual
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies
+        run: |
+          pip install playwright requests
+          playwright install chromium --with-deps
+
+      - name: Run Scraper
+        env:
+          ADMIN_API_KEY: ${{ secrets.ADMIN_API_KEY }}
+          WORKER_URL: ${{ secrets.WORKER_URL }}
+        run: python scraper.py
