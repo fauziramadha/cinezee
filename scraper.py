@@ -25,17 +25,31 @@ def run_scraper():
         page = context.new_page()
         
         print("🌐 Fetching cinemacity.cc homepage...")
-        page.goto("https://cinemacity.cc/", wait_until="networkidle", timeout=60000)
+        try:
+            # UBAH KE domcontentloaded + timeout 90 detik
+            page.goto("https://cinemacity.cc/", wait_until="domcontentloaded", timeout=90000)
+        except Exception as e:
+            print(f"⚠️ Goto timeout/intercepted (normal for CF), continuing... {e}")
         
         # Tunggu Cloudflare challenge selesai
-        for i in range(20):
-            title = page.title()
-            if "Just a moment" not in title:
-                print(f"✅ Page loaded: {title}")
-                break
+        print("⏳ Waiting for Cloudflare challenge...")
+        for i in range(30):
+            try:
+                title = page.title()
+                if "Just a moment" not in title and "CinemaCity" in title:
+                    print(f"✅ Page loaded: {title}")
+                    break
+            except:
+                pass
             page.wait_for_timeout(2000)
+        else:
+            print("⚠️ Cloudflare challenge might not be passed, attempting to extract anyway...")
+
+        # Tunggu 3 detik biar DOM ke-render beneran
+        page.wait_for_timeout(3000)
         
         # Extract movies using JavaScript evaluation
+        print("🎬 Extracting movies from HTML...")
         movies = page.evaluate('''() => {
             const results = [];
             const links = document.querySelectorAll('a[href*="/movies/"], a[href*="/tv-series/"]');
@@ -56,24 +70,25 @@ def run_scraper():
                     // Bersihkan title
                     title = title.replace(/\(\d{4}\)/, '').trim();
                     
-                    if (title && !results.find(m => m.slug === slug)) {
+                    if (title && title.length > 1 && !results.find(m => m.slug === slug)) {
                         results.push({ id, slug, title, type, poster, year: null, stream_url: null });
                     }
                 }
             });
             
-            return results.slice(0, 30); // Ambil 30 film pertama
+            return results.slice(0, 30);
         }''')
         
-        print(f"🎬 Found {len(movies)} movies. Now fetching stream URLs...")
+        print(f"🎬 Found {len(movies)} movies.")
         
-        # Fetch stream URL untuk setiap film (limit 10 film pertama biar cepat)
-        for movie in movies[:10]:
+        # Fetch stream URL untuk 10 film pertama
+        print("🔗 Fetching stream URLs for top 10 movies...")
+        for i, movie in enumerate(movies[:10]):
             try:
-                print(f"  Fetching detail: {movie['title']}")
-                page.goto(f"https://cinemacity.cc/{'movies' if movie['type'] == 'movie' else 'tv-series'}/{movie['slug']}.html", wait_until="domcontentloaded", timeout=20000)
+                print(f"  [{i+1}/10] {movie['title']}")
+                page.goto(f"https://cinemacity.cc/{'movies' if movie['type'] == 'movie' else 'tv-series'}/{movie['slug']}.html", wait_until="domcontentloaded", timeout=30000)
+                page.wait_for_timeout(2000)
                 
-                # Cari stream URL di script atob
                 stream_url = page.evaluate('''() => {
                     const scripts = document.querySelectorAll('script');
                     for (let s of scripts) {
@@ -90,7 +105,7 @@ def run_scraper():
                 }''')
                 
                 movie['stream_url'] = stream_url
-                print(f"    ✅ Stream: {stream_url[:50]}..." if stream_url else "    ❌ No stream")
+                print(f"    ✅ Stream found" if stream_url else "    ❌ No stream")
             except Exception as e:
                 print(f"    ❌ Error: {e}")
         
@@ -100,18 +115,23 @@ def run_scraper():
 if __name__ == "__main__":
     movies = run_scraper()
     
-    print(f"\n☁️ Uploading {len(movies)} movies to D1...")
-    headers = {
-        "X-Admin-API-Key": ADMIN_API_KEY,
-        "Content-Type": "application/json"
-    }
-    
-    r = requests.post(
-        f"{WORKER_URL}/api/cinemacity/scrape",
-        json=movies,
-        headers=headers,
-        timeout=30
-    )
-    
-    print(f"Status: {r.status_code}")
-    print(f"Response: {r.text}")
+    if movies:
+        print(f"\n☁️ Uploading {len(movies)} movies to D1...")
+        headers = {
+            "X-Admin-API-Key": ADMIN_API_KEY,
+            "Content-Type": "application/json"
+        }
+        
+        try:
+            r = requests.post(
+                f"{WORKER_URL}/api/cinemacity/scrape",
+                json=movies,
+                headers=headers,
+                timeout=30
+            )
+            print(f"Status: {r.status_code}")
+            print(f"Response: {r.text}")
+        except Exception as e:
+            print(f"❌ Upload failed: {e}")
+    else:
+        print("❌ No movies found. Exiting.")
