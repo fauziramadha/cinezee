@@ -4,58 +4,155 @@ import { NextRequest, NextResponse } from "next/server";
 
 const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
 
-const ALLOWED_DOMAINS = [
+// Known vaplayer domains (untuk pattern matching)
+const KNOWN_VAPLAYER_DOMAINS = [
   "onlinevisibilitysystem.site",
   "quietmidnightgardeningideas.site",
   "app.putgate.com",
   "vidapi.cloud",
   "nextgencloudfabric.com",
   "streamdata.vaplayer.ru",
+  "strategicgrowthpartners.site",
 ];
+
+// Pattern URL vaplayer (path mengandung /pl/H4sIAAA = base64 gzip token)
+function isVaplayerUrl(url: URL): boolean {
+  // Cek domain known
+  if (KNOWN_VAPLAYER_DOMAINS.some(d => url.hostname.includes(d))) return true;
+  
+  // Cek pattern path vaplayer: /<random>/<random>/pl/<base64token>/master.m3u8
+  const pathPattern = /\/[a-zA-Z0-9_-]+\/[a-zA-Z0-9_-]+\/pl\/H4sIAAA/;
+  if (pathPattern.test(url.pathname)) return true;
+  
+  // Cek pattern segment vaplayer: /<random>/content/<hex>/<hex>/page-<n>.html
+  const segmentPattern = /\/[a-zA-Z0-9_-]+\/content\/[a-f0-9]+\/[a-f0-9]+\/page-\d+\.html/;
+  if (segmentPattern.test(url.pathname)) return true;
+  
+  // Cek pattern vaplayer CDN: /cdnstr/H4sIAAA
+  if (url.pathname.includes("/cdnstr/H4sIAAA")) return true;
+  
+  // Cek pattern vidapi.cloud static
+  if (url.hostname.includes("vidapi.cloud")) return true;
+  
+  return false;
+}
 
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
-    const targetUrl = searchParams.get("u");
+    let targetUrl = searchParams.get("u");
 
     if (!targetUrl) {
       return NextResponse.json({ error: "Parameter 'u' wajib diisi" }, { status: 400 });
     }
+
+    // Decode URL (kalau masih encoded)
+    try {
+      // Coba decode dulu, kalau masih ada %, decode lagi
+      const decoded = decodeURIComponent(targetUrl);
+      targetUrl = decoded;
+    } catch {}
 
     // Validasi URL
     let parsedUrl: URL;
     try {
       parsedUrl = new URL(targetUrl);
     } catch {
-      return NextResponse.json({ error: "URL tidak valid", received: targetUrl.slice(0, 100) }, { status: 400 });
+      return NextResponse.json({ 
+        error: "URL tidak valid", 
+        received: targetUrl.slice(0, 200),
+      }, { status: 400 });
     }
 
-    // Cek domain whitelist
-    const isAllowed = ALLOWED_DOMAINS.some(d => parsedUrl.hostname.includes(d));
-    if (!isAllowed) {
+    // Hanya allow HTTPS
+    if (parsedUrl.protocol !== "https:") {
       return NextResponse.json(
-        { error: `Domain tidak diizinkan: ${parsedUrl.hostname}` },
+        { error: "Hanya HTTPS yang diizinkan" },
         { status: 403 }
       );
     }
 
-    console.log("[Vaplayer Proxy] Fetching:", parsedUrl.pathname.slice(0, 80));
+    // Cek apakah URL pattern vaplayer
+    const isVaplayer = isVaplayerUrl(parsedUrl);
+    if (!isVaplayer) {
+      // Untuk safety, allow saja tapi log warning
+      console.warn("[Vaplayer Proxy] Unknown domain, but allowing:", parsedUrl.hostname);
+      // Atau bisa juga reject:
+      // return NextResponse.json(
+      //   { error: `Domain tidak diizinkan: ${parsedUrl.hostname}` },
+      //   { status: 403 }
+      // );
+    }
 
-    // Fetch dengan Referer bypass
-    const resp = await fetch(targetUrl, {
-      headers: {
-        "User-Agent": UA,
-        "Referer": "https://nextgencloudfabric.com/",
-        "Origin": "https://nextgencloudfabric.com",
-        "Accept": "*/*",
-        "Accept-Language": "en-US,en;q=0.9",
-      },
-    });
+    console.log("[Vaplayer Proxy] Fetching:", parsedUrl.hostname, parsedUrl.pathname.slice(0, 60));
+
+    // === Coba fetch dengan beberapa Referer headers ===
+    const referers = [
+      "https://nextgencloudfabric.com/",
+      "https://vaplayer.ru/",
+      "https://vidapi.ru/",
+    ];
+
+    let resp: Response | null = null;
+    let lastError: any = null;
+
+    for (const referer of referers) {
+      try {
+        resp = await fetch(targetUrl, {
+          headers: {
+            "User-Agent": UA,
+            "Referer": referer,
+            "Origin": new URL(referer).origin,
+            "Accept": "*/*",
+            "Accept-Language": "en-US,en;q=0.9",
+          },
+        });
+
+        if (resp.ok) {
+          console.log("[Vaplayer Proxy] Success with Referer:", referer);
+          break;
+        }
+
+        // Kalau 403/401, coba Referer lain
+        if (resp.status === 403 || resp.status === 401) {
+          console.log(`[Vaplayer Proxy] ${resp.status} with Referer ${referer}, trying next...`);
+          continue;
+        }
+
+        // Kalau 404, langsung break (URL memang tidak ada)
+        if (resp.status === 404) {
+          console.log("[Vaplayer Proxy] 404 - URL might be expired");
+          break;
+        }
+
+        // Untuk error lain, coba Referer berikutnya
+        continue;
+      } catch (e) {
+        lastError = e;
+        console.warn(`[Vaplayer Proxy] Fetch error with ${referer}:`, e);
+        continue;
+      }
+    }
+
+    if (!resp) {
+      return NextResponse.json(
+        { error: "Fetch failed", message: lastError?.message || "Unknown error" },
+        { status: 500 }
+      );
+    }
 
     if (!resp.ok) {
-      console.error("[Vaplayer Proxy] Upstream error:", resp.status);
+      const errText = await resp.text().catch(() => "");
+      console.error("[Vaplayer Proxy] Upstream error:", resp.status, errText.slice(0, 200));
       return NextResponse.json(
-        { error: `Upstream ${resp.status}` },
+        {
+          error: `Upstream ${resp.status}`,
+          status: resp.status,
+          body: errText.slice(0, 300),
+          hint: resp.status === 404 
+            ? "URL mungkin sudah expired. Coba fetch ulang dari /api/vaplayer/stream" 
+            : undefined,
+        },
         { status: resp.status }
       );
     }
@@ -72,25 +169,20 @@ export async function GET(request: NextRequest) {
     if (isM3u8) {
       let text = new TextDecoder().decode(body);
 
-      // Rewrite URL absolut (https://...) ke proxy
-      ALLOWED_DOMAINS.forEach(domain => {
-        const regex = new RegExp(`https?://[^/]*${domain.replace(/\./g, "\\.")}[^\\s"']*`, "g");
-        text = text.replace(regex, (match) => {
-          return `/api/vaplayer/proxy?u=${encodeURIComponent(match)}`;
-        });
+      console.log("[Vaplayer Proxy] m3u8 content (first 300 chars):", text.slice(0, 300));
+
+      // Rewrite SEMUA URL absolut (https://...) ke proxy
+      // Pattern: https://apapun.com/...
+      text = text.replace(/https?:\/\/[^\s"']+/g, (match) => {
+        return `/api/vaplayer/proxy?u=${encodeURIComponent(match)}`;
       });
 
       // Rewrite URL relatif (mulai dengan /)
       const origin = parsedUrl.origin;
       const lines = text.split(/\r?\n/);
       const rewritten = lines.map(line => {
-        // Skip empty, comment, atau sudah proxy
-        if (!line || line.startsWith("#") || line.startsWith("/api/")) return line;
-        // Skip full URL yang bukan vaplayer domain
-        if (line.startsWith("http") && !ALLOWED_DOMAINS.some(d => line.includes(d))) {
-          return line;
-        }
-        // Rewrite relative URL
+        if (!line || line.startsWith("#")) return line;
+        if (line.startsWith("/api/")) return line;
         if (line.startsWith("/")) {
           const fullUrl = `${origin}${line}`;
           return `/api/vaplayer/proxy?u=${encodeURIComponent(fullUrl)}`;
