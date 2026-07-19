@@ -176,7 +176,7 @@ function buildEpisodesFromSeasons(seasons: PlayerMediaSeason[]): StreamEpisode[]
 }
 
 // ============================================================
-// HLS.js Loader (sama persis dengan vaplayer.ru)
+// HLS.js Loader (sama persis panggilanya dengan vaplayer.ru)
 // ============================================================
 let hlsPromise: Promise<any> | null = null;
 async function loadHls(): Promise<any> {
