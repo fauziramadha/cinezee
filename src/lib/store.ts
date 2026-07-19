@@ -4,14 +4,33 @@ import { create } from "zustand";
 
 export type MediaType = "movie" | "tv";
 
+export interface PlayerSeason {
+  seasonNumber: number;
+  episodeCount: number;
+  name?: string;
+}
+
 export interface SelectedMedia {
-  id: number;
+  id: number | string;
   type: MediaType;
   title: string;
-  posterPath: string | null;
-  backdropPath: string | null;
+  // Legacy fields (untuk backward-compat dengan file lama)
+  posterPath?: string | null;
+  backdropPath?: string | null;
   slug?: string;
-  source?: "tmdb" | "cinemacity";
+  source?: "tmdb" | "cinemacity" | "vaplayer";
+  // === Field baru untuk vaplayer + TMDB ===
+  imdbId?: string;
+  tmdbId?: number;
+  poster?: string;
+  backdrop?: string;
+  overview?: string;
+  year?: string;
+  rating?: number;
+  seasons?: PlayerSeason[];
+  // Pre-fill current episode (untuk TV dari vidapi episode list)
+  _currentSeason?: string;
+  _currentEpisode?: string;
 }
 
 export interface WatchHistoryItem extends SelectedMedia {
@@ -30,7 +49,7 @@ export interface ActivityItem {
   id: string;
   type: "watch" | "favorite" | "rating" | "comment";
   mediaTitle: string;
-  mediaId: number;
+  mediaId: number | string;
   mediaType: string;
   detail?: string;
   timestamp: string;
@@ -52,21 +71,23 @@ interface AppState {
   // Detail modal
   selectedMedia: SelectedMedia | null;
   setSelectedMedia: (media: SelectedMedia | null) => void;
+  setDetailMedia: (media: SelectedMedia | null) => void;  // Alias untuk page.tsx
 
   // Player modal
   playerMedia: SelectedMedia | null;
   playerSeason?: number;
   playerEpisode?: number;
   openPlayer: (media: SelectedMedia, season?: number, episode?: number) => void;
+  setPlayerMedia: (media: SelectedMedia | null) => void;  // Alias untuk page.tsx
   closePlayer: () => void;
 
   // Watch history
   history: WatchHistoryItem[];
   addToHistory: (item: WatchHistoryItem) => void;
-  removeFromHistory: (id: number) => void;
+  removeFromHistory: (id: number | string) => void;
   clearHistory: () => void;
   loadHistory: () => void;
-  updateHistoryProgress: (id: number, progress: number, duration: number) => void;
+  updateHistoryProgress: (id: number | string, progress: number, duration: number) => void;
 
   // Favorites (localStorage, max 50)
   favorites: FavoriteItem[];
@@ -114,15 +135,22 @@ export const useAppStore = create<AppState>((set, get) => ({
   searchOpen: false,
   setSearchOpen: (open) => set({ searchOpen: open }),
 
+  // === Detail modal ===
   selectedMedia: null,
   setSelectedMedia: (media) => set({ selectedMedia: media }),
+  // Alias: setDetailMedia = setSelectedMedia (untuk dipanggil dari page.tsx)
+  setDetailMedia: (media) => set({ selectedMedia: media }),
 
+  // === Player modal ===
   playerMedia: null,
   openPlayer: (media, season, episode) =>
     set({ playerMedia: media, playerSeason: season, playerEpisode: episode }),
+  // Alias: setPlayerMedia = openPlayer tanpa season/episode (untuk dipanggil dari page.tsx)
+  setPlayerMedia: (media) => set({ playerMedia: media }),
   closePlayer: () =>
     set({ playerMedia: null, playerSeason: undefined, playerEpisode: undefined }),
 
+  // === Watch history ===
   history: [],
   addToHistory: (item) => {
     const existing = get().history.filter((h) => h.id !== item.id);
@@ -130,7 +158,6 @@ export const useAppStore = create<AppState>((set, get) => ({
     set({ history });
     saveToStorage("cinestream_history", history);
 
-    // Add to activity log
     get().addActivity({
       id: `watch-${item.id}-${Date.now()}`,
       type: "watch",
@@ -162,7 +189,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     saveToStorage("cinestream_history", history);
   },
 
-  // Favorites
+  // === Favorites ===
   favorites: [],
   toggleFavorite: (item) => {
     const existing = get().favorites.find(f => f.id === item.id);
@@ -187,7 +214,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     set({ favorites: loadFromStorage("cinestream_favorites", []) });
   },
 
-  // Activity log
+  // === Activity log ===
   activityLog: [],
   addActivity: (item) => {
     const log = [item, ...get().activityLog].slice(0, MAX_ACTIVITY);
@@ -198,6 +225,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     set({ activityLog: loadFromStorage("cinestream_activity", []) });
   },
 
+  // === Anime & Donghua Server ===
   animeServer: "otakudesu",
   setAnimeServer: (server) => set({ animeServer: server }),
   donghuaServer: "s1",
