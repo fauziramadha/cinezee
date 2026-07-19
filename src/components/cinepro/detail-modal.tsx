@@ -2,7 +2,6 @@
 
 import { useEffect, useState, useCallback } from "react";
 import Image from "next/image";
-import { wrapCinemacityImage } from "@/lib/cinemacity-api";
 import { useRouter } from "next/navigation";
 import { useSafeSession } from "@/lib/use-safe-session";
 import {
@@ -18,7 +17,7 @@ import { getAvatarRingClass } from "@/components/badge/avatar-ring";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useAppStore } from "@/lib/store";
-import { getImageUrl, type MovieDetail } from "@/lib/tmdb";
+import { getImageUrl, fetchDetail, fetchImdbId, type MovieDetail } from "@/lib/tmdb";
 import { MovieCard } from "./movie-card";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -33,14 +32,6 @@ export function DetailModal() {
   const { data: session, status } = useSafeSession();
   const router = useRouter();
 
-  const handlePersonClick = (personId: number) => {
-    if (selectedMedia) {
-      router.push(`/person/${personId}?return=${selectedMedia.type}=${selectedMedia.id}`);
-    } else {
-      router.push(`/person/${personId}`);
-    }
-    setSelectedMedia(null);
-  };
   const [detail, setDetail] = useState<MovieDetail | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -60,7 +51,17 @@ export function DetailModal() {
   const [episodes, setEpisodes] = useState<Episode[]>([]);
   const [episodesLoading, setEpisodesLoading] = useState(false);
 
-  const isCinemacity = selectedMedia?.source === "cinemacity" && !!selectedMedia?.slug;
+  // Cached imdbId (di-fetch saat detail load, dipakai saat play)
+  const [cachedImdbId, setCachedImdbId] = useState<string | null>(null);
+
+  const handlePersonClick = (personId: number) => {
+    if (selectedMedia) {
+      router.push(`/person/${personId}?return=${selectedMedia.type}=${selectedMedia.id}`);
+    } else {
+      router.push(`/person/${personId}`);
+    }
+    setSelectedMedia(null);
+  };
 
   useEffect(() => {
     if (!selectedMedia) {
@@ -69,6 +70,7 @@ export function DetailModal() {
         setRatings([]); setUserRating(null); setComments([]);
         setReplyTo(null); setReplyText(""); setCommentText("");
         setSeason(1); setEpisode(1); setEpisodes([]);
+        setCachedImdbId(null);
       });
       return;
     }
@@ -78,74 +80,47 @@ export function DetailModal() {
       if (cancelled) return;
       setLoading(true); setError(null);
       try {
-        // ============================================================
-        // CINEMACITY SOURCE
-        // ============================================================
-        if (selectedMedia.source === "cinemacity" && selectedMedia.slug) {
-          const res = await fetch(`/api/cinemacity/movie/${selectedMedia.slug}`);
-          if (!res.ok) throw new Error("Failed to load cinemacity detail");
-          const data = await res.json();
-          const cd = data.movie;
-          if (cancelled) return;
-
-          // Extract YouTube trailer ID dari cinemacity detail
-          // Cinemacity embed: data-vbg="https://www.youtube.com/watch?v=XXXXX"
-          const youtubeId = (cd as any).youtubeId || undefined;
-
-          const adapted: MovieDetail = {
-            id: Number(cd.id),
-            title: cd.title,
-            name: cd.type === "tv" ? cd.title : undefined,
-            overview: cd.description || "No description available.",
-            poster_path: wrapCinemacityImage(cd.poster),
-            backdrop_path: wrapCinemacityImage(cd.backdrop || cd.poster),
-            vote_average: 0,
-            vote_count: 0,
-            release_date: cd.year ? `${cd.year}-01-01` : undefined,
-            first_air_date: cd.year ? `${cd.year}-01-01` : undefined,
-            media_type: cd.type,
-            genres: (cd.genres || []).map((g: string, i: number) => ({ id: i, name: g })),
-            runtime: undefined,
-            status: "Released",
-            tagline: "",
-            credits: { cast: [], crew: [] },
-            // ============================================================
-            // TRAILER: inject YouTube key supaya tombol Trailer muncul
-            // ============================================================
-            videos: youtubeId
-              ? { results: [{ id: "1", key: youtubeId, name: "Trailer", site: "YouTube", type: "Trailer", official: true }] }
-              : { results: [] },
-            similar: { results: [] },
-            recommendations: { results: [] },
-            ...({
-              streamUrl: cd.streamUrl,
-              qualities: cd.qualities,
-              subtitles: cd.subtitles,
-              episodes: cd.episodes,
-              source: "cinemacity",
-              slug: cd.slug,
-            } as any),
-          };
-          setDetail(adapted);
-
-          // ============================================================
-          // PRELOAD stream URL (fire-and-forget)
-          // Saat user klik play nanti, /api/cinemacity/play udah cached
-          // ============================================================
-          if (cd.slug) {
-            fetch(`/api/cinemacity/play/${cd.slug}`).catch(() => {});
+        // === Coba fetch dari /api/detail/[id] dulu ===
+        let data: MovieDetail | null = null;
+        try {
+          const res = await fetch(`/api/detail/${selectedMedia.id}?type=${selectedMedia.type}`);
+          if (res.ok) {
+            data = await res.json();
           }
-          return;
+        } catch (e) {
+          console.warn("[Detail] /api/detail failed, fallback to tmdb.ts:", e);
         }
 
-        // ============================================================
-        // TMDB SOURCE
-        // ============================================================
-        const res = await fetch(`/api/detail/${selectedMedia.id}?type=${selectedMedia.type}`);
-        if (!res.ok) throw new Error("Failed to load");
-        const data: MovieDetail = await res.json();
+        // === Fallback: pakai tmdb.ts langsung (lewati proxy lama) ===
+        if (!data) {
+          console.log("[Detail] Using tmdb.ts fetchDetail fallback");
+          const tmdbId = typeof selectedMedia.id === "string" && selectedMedia.id.startsWith("tt")
+            ? 0  // IMDB ID, tidak bisa pakai fetchDetail (butuh TMDB id)
+            : Number(selectedMedia.id);
+          if (tmdbId > 0) {
+            data = await fetchDetail(tmdbId, selectedMedia.type as "movie" | "tv");
+          }
+        }
+
         if (cancelled) return;
+        if (!data) throw new Error("Failed to load detail from both proxy and TMDB");
+
         setDetail(data);
+
+        // === Cache imdbId untuk player ===
+        const imdbId = (data as any).imdb_id ||
+                       (data as any).external_ids?.imdb_id ||
+                       (selectedMedia as any).imdbId ||
+                       (typeof selectedMedia.id === "string" && selectedMedia.id.startsWith("tt") ? selectedMedia.id : null);
+        if (imdbId) {
+          setCachedImdbId(imdbId);
+        } else {
+          // Coba fetch imdbId terpisah kalau belum ada
+          try {
+            const fetched = await fetchImdbId(Number(selectedMedia.id), selectedMedia.type as "movie" | "tv");
+            if (fetched) setCachedImdbId(fetched);
+          } catch {}
+        }
       } catch (err) {
         if (cancelled) return;
         setError(err instanceof Error ? err.message : "Unknown error");
@@ -176,9 +151,8 @@ export function DetailModal() {
     return () => { cancelled = true; };
   }, [selectedMedia, session, status]);
 
-  // Episodes: skip untuk cinemacity
+  // Episodes
   useEffect(() => {
-    if (isCinemacity) return;
     if (!selectedMedia || selectedMedia.type !== "tv" || !detail) return;
     let cancelled = false;
     setEpisodesLoading(true);
@@ -188,14 +162,72 @@ export function DetailModal() {
         setEpisodes(data.episodes || []);
       }).catch(() => {}).finally(() => { if (!cancelled) setEpisodesLoading(false); });
     return () => { cancelled = true; };
-  }, [selectedMedia, detail, season, isCinemacity]);
+  }, [selectedMedia, detail, season]);
 
-  const handlePlay = (epNum?: number) => {
+  // ============================================================
+  // FIX: handlePlay sekarang enrich selectedMedia dengan imdbId + seasons
+  // Supaya player-modal.tsx baru bisa langsung fetch stream dari vaplayer
+  // ============================================================
+  const handlePlay = async (epNum?: number) => {
     if (!selectedMedia) return;
     const ep = epNum || episode;
     if (epNum) setEpisode(epNum);
-    addToHistory({ ...selectedMedia, watchedAt: new Date().toISOString() });
-    openPlayer(selectedMedia, season, ep);
+
+    // === Build enriched media untuk player ===
+    const imdbId = cachedImdbId ||
+                   (selectedMedia as any).imdbId ||
+                   (typeof selectedMedia.id === "string" && selectedMedia.id.startsWith("tt") ? selectedMedia.id : null);
+
+    // Kalau masih belum ada imdbId, coba fetch on-demand
+    let finalImdbId = imdbId;
+    if (!finalImdbId) {
+      try {
+        const fetched = await fetchImdbId(Number(selectedMedia.id), selectedMedia.type as "movie" | "tv");
+        if (fetched) {
+          finalImdbId = fetched;
+          setCachedImdbId(fetched);
+        }
+      } catch (e) {
+        console.warn("[Detail] Failed to fetch imdbId on-demand:", e);
+      }
+    }
+
+    // === Build seasons metadata dari TMDB detail ===
+    let seasonsMeta: any[] | undefined;
+    if (selectedMedia.type === "tv" && (detail as any)?.seasons) {
+      seasonsMeta = (detail as any).seasons
+        .filter((s: any) => s.season_number > 0)
+        .map((s: any) => ({
+          seasonNumber: s.season_number,
+          episodeCount: s.episode_count,
+          name: s.name,
+        }));
+    }
+
+    // === Enriched media untuk player-modal baru ===
+    const enrichedMedia = {
+      ...selectedMedia,
+      // ID: pakai imdbId kalau ada, fallback ke selectedMedia.id
+      id: finalImdbId || selectedMedia.id,
+      imdbId: finalImdbId,
+      tmdbId: typeof selectedMedia.id === "number" ? selectedMedia.id : undefined,
+      title: detail?.title || detail?.name || selectedMedia.title,
+      type: selectedMedia.type,
+      poster: detail?.poster_path ? getImageUrl(detail.poster_path, "w342") : (selectedMedia as any).poster,
+      backdrop: detail?.backdrop_path ? getImageUrl(detail.backdrop_path, "w1280") : (selectedMedia as any).backdrop,
+      overview: detail?.overview || (selectedMedia as any).overview || "",
+      year: (detail?.release_date || detail?.first_air_date || "").slice(0, 4),
+      rating: detail?.vote_average || 0,
+      seasons: seasonsMeta,
+      // Pre-fill current season/episode (untuk TV)
+      ...(selectedMedia.type === "tv" ? {
+        _currentSeason: String(season),
+        _currentEpisode: String(ep),
+      } : {}),
+    };
+
+    addToHistory({ ...enrichedMedia, watchedAt: new Date().toISOString() });
+    openPlayer(enrichedMedia, season, ep);
   };
 
   const handleToggleWatchlist = async () => {
@@ -208,7 +240,17 @@ export function DetailModal() {
         const item = listData.watchlist?.find((i: any) => i.mediaId === selectedMedia.id && i.mediaType === selectedMedia.type);
         if (item) { await fetch(`/api/watchlist?id=${item.id}`, { method: "DELETE" }); setInWatchlist(false); toast.success("Dihapus dari watchlist"); }
       } else {
-        const res = await fetch("/api/watchlist", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mediaId: selectedMedia.id, mediaType: selectedMedia.type, title: detail.title || detail.name || selectedMedia.title, posterPath: detail.poster_path, backdropPath: detail.backdrop_path }) });
+        const res = await fetch("/api/watchlist", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            mediaId: selectedMedia.id,
+            mediaType: selectedMedia.type,
+            title: detail.title || detail.name || selectedMedia.title,
+            posterPath: detail.poster_path,
+            backdropPath: detail.backdrop_path
+          })
+        });
         if (res.ok) { setInWatchlist(true); toast.success("Ditambahkan ke watchlist"); }
       }
     } catch { toast.error("Terjadi kesalahan"); } finally { setWatchlistLoading(false); }
@@ -219,8 +261,17 @@ export function DetailModal() {
     if (status !== "authenticated") { setAuthModalOpen(true); toast.info("Silakan login dulu"); return; }
     setRatingLoading(true);
     try {
-      const res = await fetch("/api/ratings", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mediaId: selectedMedia.id, mediaType: selectedMedia.type, rating: value }) });
-      if (res.ok) { toast.success(value === 0 ? "Rating dihapus" : "Rating disimpan!"); const refresh = await fetch(`/api/ratings?mediaId=${selectedMedia.id}&mediaType=${selectedMedia.type}`); const data = await refresh.json(); setRatings(data.ratings || []); setUserRating(data.userRating || null); }
+      const res = await fetch("/api/ratings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mediaId: selectedMedia.id, mediaType: selectedMedia.type, rating: value })
+      });
+      if (res.ok) {
+        toast.success(value === 0 ? "Rating dihapus" : "Rating disimpan!");
+        const refresh = await fetch(`/api/ratings?mediaId=${selectedMedia.id}&mediaType=${selectedMedia.type}`);
+        const data = await refresh.json();
+        setRatings(data.ratings || []); setUserRating(data.userRating || null);
+      }
     } catch { toast.error("Gagal menyimpan rating"); } finally { setRatingLoading(false); }
   };
 
@@ -229,8 +280,18 @@ export function DetailModal() {
     if (status !== "authenticated") { setAuthModalOpen(true); return; }
     setCommentLoading(true);
     try {
-      const res = await fetch("/api/comments", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mediaId: selectedMedia.id, mediaType: selectedMedia.type, content: commentText }) });
-      if (res.ok) { setCommentText(""); toast.success("Komentar ditambahkan"); const refresh = await fetch(`/api/comments?mediaId=${selectedMedia.id}&mediaType=${selectedMedia.type}`); const data = await refresh.json(); setComments(data.comments || []); }
+      const res = await fetch("/api/comments", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mediaId: selectedMedia.id, mediaType: selectedMedia.type, content: commentText })
+      });
+      if (res.ok) {
+        setCommentText("");
+        toast.success("Komentar ditambahkan");
+        const refresh = await fetch(`/api/comments?mediaId=${selectedMedia.id}&mediaType=${selectedMedia.type}`);
+        const data = await refresh.json();
+        setComments(data.comments || []);
+      }
     } catch { toast.error("Gagal menambahkan komentar"); } finally { setCommentLoading(false); }
   };
 
@@ -238,13 +299,29 @@ export function DetailModal() {
     if (!selectedMedia || !replyText.trim()) return;
     setCommentLoading(true);
     try {
-      const res = await fetch("/api/comments", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mediaId: selectedMedia.id, mediaType: selectedMedia.type, content: replyText, parentId }) });
-      if (res.ok) { setReplyText(""); setReplyTo(null); toast.success("Reply ditambahkan"); const refresh = await fetch(`/api/comments?mediaId=${selectedMedia.id}&mediaType=${selectedMedia.type}`); const data = await refresh.json(); setComments(data.comments || []); }
+      const res = await fetch("/api/comments", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mediaId: selectedMedia.id, mediaType: selectedMedia.type, content: replyText, parentId })
+      });
+      if (res.ok) {
+        setReplyText(""); setReplyTo(null);
+        toast.success("Reply ditambahkan");
+        const refresh = await fetch(`/api/comments?mediaId=${selectedMedia.id}&mediaType=${selectedMedia.type}`);
+        const data = await refresh.json();
+        setComments(data.comments || []);
+      }
     } catch { toast.error("Gagal menambahkan reply"); } finally { setCommentLoading(false); }
   };
 
   const handleDeleteComment = async (id: string) => {
-    try { const res = await fetch(`/api/comments?id=${id}`, { method: "DELETE" }); if (res.ok) { toast.success("Komentar dihapus"); setComments((prev) => prev.filter((c) => c.id !== id)); } } catch { toast.error("Gagal menghapus"); }
+    try {
+      const res = await fetch(`/api/comments?id=${id}`, { method: "DELETE" });
+      if (res.ok) {
+        toast.success("Komentar dihapus");
+        setComments((prev) => prev.filter((c) => c.id !== id));
+      }
+    } catch { toast.error("Gagal menghapus"); }
   };
 
   const handleShare = () => {
@@ -268,23 +345,15 @@ export function DetailModal() {
   const director = detail?.credits?.crew?.find((c) => c.job === "Director")?.name;
   const creator = detail?.created_by?.[0]?.name;
   const cast = detail?.credits?.cast?.slice(0, 12) || [];
-  // ============================================================
-  // TRAILER: support TMDB + Cinemacity (youtubeId di-inject ke videos)
-  // ============================================================
   const trailer = detail?.videos?.results?.find((v) => v.site === "YouTube" && v.type === "Trailer");
   const similar = detail?.recommendations?.results?.slice(0, 12) || [];
   const avgUserRating = ratings.length > 0 ? (ratings.reduce((sum, r) => sum + r.rating, 0) / ratings.length).toFixed(1) : null;
   const isTV = selectedMedia.type === "tv";
 
-  const logo = !isCinemacity
-    ? ((detail as any)?.images?.logos?.find((l: any) => l.iso_639_1 === "en")
-      || (detail as any)?.images?.logos?.[0]
-      || null)
-    : null;
-
-  const cinemacityEpisodes = isCinemacity ? (detail as any)?.episodes : null;
-
-  return (
+  const logo = (detail as any)?.images?.logos?.find((l: any) => l.iso_639_1 === "en")
+    || (detail as any)?.images?.logos?.[0]
+    || null;
+    return (
     <Dialog open={!!selectedMedia} onOpenChange={(open) => { if (!open) setSelectedMedia(null); }}>
       <DialogContent
         className="flex flex-col gap-0 overflow-hidden p-0 max-w-[95vw] sm:max-w-2xl md:max-w-4xl lg:max-w-6xl"
@@ -310,7 +379,10 @@ export function DetailModal() {
           {loading ? (
             <div className="flex h-96 items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
           ) : error ? (
-            <div className="flex h-96 flex-col items-center justify-center gap-3 p-6 text-center"><p className="text-sm text-destructive">{error}</p><Button variant="secondary" size="sm" onClick={() => setSelectedMedia(null)}>Go back</Button></div>
+            <div className="flex h-96 flex-col items-center justify-center gap-3 p-6 text-center">
+              <p className="text-sm text-destructive">{error}</p>
+              <Button variant="secondary" size="sm" onClick={() => setSelectedMedia(null)}>Go back</Button>
+            </div>
           ) : detail ? (
             <div className="fade-in pb-16">
               {/* === Hero Section === */}
@@ -359,9 +431,6 @@ export function DetailModal() {
                 <Button size="sm" onClick={() => handlePlay()} className="gap-2 bg-primary text-primary-foreground hover:bg-primary/90 sm:size-lg">
                   <Play className="h-4 w-4 fill-current" /><span className="text-xs sm:text-sm">Play</span>
                 </Button>
-                {/* ============================================================ */}
-                {/* TRAILER: muncul untuk TMDB + Cinemacity                     */}
-                {/* ============================================================ */}
                 {trailer && (
                   <a href={`https://www.youtube.com/watch?v=${trailer.key}`} target="_blank" rel="noopener noreferrer">
                     <Button size="sm" variant="secondary" className="gap-2 sm:size-lg">
@@ -377,8 +446,8 @@ export function DetailModal() {
                 </Button>
               </div>
 
-              {/* === Season/Episode selector + Episode thumbnails === */}
-              {isTV && !isCinemacity && detail?.seasons && (
+              {/* === Season/Episode selector + Episode thumbnails (TV only) === */}
+              {isTV && detail?.seasons && (
                 <div className="border-b border-border bg-card/30 px-4 py-3 sm:px-6 md:px-8">
                   <div className="mb-3 flex items-center gap-2">
                     <Select value={String(season)} onValueChange={(v) => { setSeason(parseInt(v, 10)); setEpisode(1); }}>
@@ -431,47 +500,16 @@ export function DetailModal() {
                 </div>
               )}
 
-              {/* === Cinemacity TV Episodes === */}
-              {isTV && isCinemacity && cinemacityEpisodes && cinemacityEpisodes.length > 0 && (
-                <div className="border-b border-border bg-card/30 px-4 py-3 sm:px-6 md:px-8">
-                  <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground sm:text-sm">
-                    Episodes ({cinemacityEpisodes.length})
-                  </h3>
-                  <div className="overflow-x-auto pb-1" style={{ scrollbarWidth: "none", WebkitOverflowScrolling: "touch" }}>
-                    <div className="flex gap-2">
-                      {cinemacityEpisodes.map((ep: any, idx: number) => (
-                        <button
-                          key={ep.id || idx}
-                          onClick={() => handlePlay(ep.episode || idx + 1)}
-                          className="relative aspect-video w-28 shrink-0 overflow-hidden rounded-lg border-2 border-transparent transition-all hover:border-primary sm:w-36"
-                        >
-                          <div className="flex h-full items-center justify-center bg-muted">
-                            <span className="text-[10px] text-muted-foreground">EP {ep.episode || idx + 1}</span>
-                          </div>
-                          <div className="absolute inset-0 flex items-center justify-center bg-black/30 opacity-0 transition-opacity hover:opacity-100">
-                            <div className="flex h-7 w-7 items-center justify-center rounded-full bg-primary">
-                              <Play className="h-3 w-3 fill-white text-white" />
-                            </div>
-                          </div>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              )}
-
               {/* === Content grid === */}
               <div className="grid gap-4 p-4 sm:gap-6 sm:p-6 md:grid-cols-3 md:p-8">
                 <div className="min-w-0 md:col-span-2">
-                  {/* Meta info — HAPUS cinemacity.cc badge */}
+                  {/* Meta info */}
                   <div className="mb-3 flex flex-wrap items-center gap-2 text-xs sm:mb-4 sm:gap-3 sm:text-sm">
-                    {!isCinemacity && (
-                      <span className="flex items-center gap-1">
-                        <Star className="h-3.5 w-3.5 fill-yellow-400 text-yellow-400 sm:h-4 sm:w-4" />
-                        <span className="font-semibold">{tmdbRating}</span>
-                        <span className="text-muted-foreground">TMDB</span>
-                      </span>
-                    )}
+                    <span className="flex items-center gap-1">
+                      <Star className="h-3.5 w-3.5 fill-yellow-400 text-yellow-400 sm:h-4 sm:w-4" />
+                      <span className="font-semibold">{tmdbRating}</span>
+                      <span className="text-muted-foreground">TMDB</span>
+                    </span>
                     {avgUserRating && (
                       <span className="flex items-center gap-1 text-primary">
                         <Star className="h-3.5 w-3.5 fill-primary text-primary sm:h-4 sm:w-4" />
@@ -505,7 +543,7 @@ export function DetailModal() {
                     {detail.overview || "No overview available."}
                   </p>
 
-                  {/* Top Cast (TMDB only) */}
+                  {/* Top Cast */}
                   {cast.length > 0 && (
                     <div className="mt-4 sm:mt-6">
                       <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground sm:mb-3 sm:text-sm">
@@ -583,7 +621,7 @@ export function DetailModal() {
                       <p className="mt-0.5 break-words text-xs sm:text-sm">{director || creator}</p>
                     </div>
                   )}
-                  {isTV && !isCinemacity && detail.number_of_seasons && (
+                  {isTV && detail.number_of_seasons && (
                     <div className="flex gap-4">
                       <div>
                         <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Seasons</h4>
@@ -610,7 +648,7 @@ export function DetailModal() {
                 </div>
               </div>
 
-              {/* More Like This (TMDB only) */}
+              {/* More Like This */}
               {similar.length > 0 && (
                 <div className="border-t border-border py-4 sm:py-6">
                   <h3 className="mb-3 px-4 text-sm font-bold sm:mb-4 sm:px-6 sm:text-base md:px-8">More Like This</h3>
