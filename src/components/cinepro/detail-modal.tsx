@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useSafeSession } from "@/lib/use-safe-session";
 import {
@@ -27,6 +26,28 @@ interface RatingItem { id: string; rating: number; review: string | null; create
 interface CommentItem { id: string; userId: string; mediaId: number; mediaType: string; content: string; parentId: string | null; createdAt: string; updatedAt: string; userName: string | null; userImage: string | null; replies: CommentItem[]; }
 interface Episode { episodeNumber: number; name: string; overview: string; stillPath: string | null; airDate: string; runtime: number | null; }
 
+// Helper: extract TMDB ID dari selectedMedia
+function extractTmdbId(media: any): number {
+  if (media?.tmdbId) return Number(media.tmdbId);
+  if (typeof media?.id === "number") return media.id;
+  if (typeof media?.id === "string") {
+    if (media.id.startsWith("tmdb-")) return parseInt(media.id.replace("tmdb-", ""), 10);
+    if (/^\d+$/.test(media.id)) return parseInt(media.id, 10);
+  }
+  return 0;
+}
+
+// Helper: dapatkan URL image backdrop dengan fallback
+function getHeroImageUrl(detail: any, selectedMedia: any): string | null {
+  if (detail?.backdrop_path) return getImageUrl(detail.backdrop_path, "original");
+  if (selectedMedia?.backdrop) return selectedMedia.backdrop;
+  if (selectedMedia?.backdropPath) return selectedMedia.backdropPath;
+  if (detail?.poster_path) return getImageUrl(detail.poster_path, "original");
+  if (selectedMedia?.poster) return selectedMedia.poster;
+  if (selectedMedia?.posterPath) return selectedMedia.posterPath;
+  return null;
+}
+
 export function DetailModal() {
   const { selectedMedia, setSelectedMedia, openPlayer, addToHistory, setAuthModalOpen } = useAppStore();
   const { data: session, status } = useSafeSession();
@@ -51,7 +72,6 @@ export function DetailModal() {
   const [episodes, setEpisodes] = useState<Episode[]>([]);
   const [episodesLoading, setEpisodesLoading] = useState(false);
 
-  // Cached imdbId (di-fetch saat detail load, dipakai saat play)
   const [cachedImdbId, setCachedImdbId] = useState<string | null>(null);
 
   const handlePersonClick = (personId: number) => {
@@ -75,102 +95,105 @@ export function DetailModal() {
       return;
     }
     let cancelled = false;
+
     const loadDetail = async () => {
       await Promise.resolve();
       if (cancelled) return;
       setLoading(true); setError(null);
+
       try {
-        // === Extract TMDB ID dari berbagai format ===
-        let tmdbId: number = 0;
-        if ((selectedMedia as any).tmdbId) {
-          tmdbId = (selectedMedia as any).tmdbId;
-        } else if (typeof selectedMedia.id === "number") {
-          tmdbId = selectedMedia.id;
-        } else if (typeof selectedMedia.id === "string") {
-          if (selectedMedia.id.startsWith("tmdb-")) {
-            tmdbId = parseInt(selectedMedia.id.replace("tmdb-", ""), 10);
-          } else if (/^\d+$/.test(selectedMedia.id)) {
-            tmdbId = parseInt(selectedMedia.id, 10);
-          }
-          // Kalau format "tt1375666" (IMDB ID), tmdbId tetap 0
-        }
+        const tmdbId = extractTmdbId(selectedMedia);
+        console.log("[Detail] Loading detail for:", { id: selectedMedia.id, tmdbId, type: selectedMedia.type });
 
-        let data: MovieDetail | null = null;
+        const fallbackDetail: any = {
+          id: tmdbId || 0,
+          title: selectedMedia.title,
+          name: selectedMedia.type === "tv" ? selectedMedia.title : undefined,
+          overview: (selectedMedia as any).overview || "No overview available.",
+          poster_path: (selectedMedia as any).poster || (selectedMedia as any).posterPath || null,
+          backdrop_path: (selectedMedia as any).backdrop || (selectedMedia as any).backdropPath || null,
+          vote_average: (selectedMedia as any).rating || 0,
+          vote_count: 0,
+          release_date: (selectedMedia as any).year ? `${(selectedMedia as any).year}-01-01` : undefined,
+          first_air_date: (selectedMedia as any).year ? `${(selectedMedia as any).year}-01-01` : undefined,
+          media_type: selectedMedia.type,
+          genres: [],
+          runtime: undefined,
+          status: "Released",
+          tagline: "",
+          credits: { cast: [], crew: [] },
+          videos: { results: [] },
+          similar: { results: [] },
+          recommendations: { results: [] },
+        };
 
-        // === Method 1: Coba /api/detail/[numeric-id] ===
+        // Method 1: /api/detail/[id]
         if (tmdbId > 0) {
           try {
             const res = await fetch(`/api/detail/${tmdbId}?type=${selectedMedia.type}`);
             if (res.ok) {
-              data = await res.json();
+              const data = await res.json();
+              if (data && (data.title || data.name)) {
+                if (!cancelled) setDetail(data as MovieDetail);
+                const imdbId = (data as any).imdb_id || (data as any).external_ids?.imdb_id || (selectedMedia as any).imdbId || null;
+                if (imdbId) setCachedImdbId(imdbId);
+                return;
+              }
             }
-          } catch (e) {
-            console.warn("[Detail] /api/detail failed, fallback to tmdb.ts:", e);
-          }
+          } catch (e) { console.warn("[Detail] /api/detail failed:", e); }
         }
 
-        // === Method 2: Fallback pakai tmdb.ts fetchDetail (via proxy) ===
-        if (!data && tmdbId > 0) {
-          console.log("[Detail] Using tmdb.ts fetchDetail fallback");
-          data = await fetchDetail(tmdbId, selectedMedia.type as "movie" | "tv");
-        }
-
-        // === Method 3: Kalau selectedMedia.id adalah IMDB ID (tt-xxx), 
-        // pakai selectedMedia apa adanya sebagai "detail" ===
-        if (!data && typeof selectedMedia.id === "string" && selectedMedia.id.startsWith("tt")) {
-          console.log("[Detail] Using selectedMedia as detail (IMDB ID mode)");
-          data = {
-            id: 0,
-            title: selectedMedia.title,
-            name: selectedMedia.type === "tv" ? selectedMedia.title : undefined,
-            overview: (selectedMedia as any).overview || "No overview available.",
-            poster_path: (selectedMedia as any).poster || null,
-            backdrop_path: (selectedMedia as any).backdrop || null,
-            vote_average: (selectedMedia as any).rating || 0,
-            vote_count: 0,
-            release_date: (selectedMedia as any).year ? `${(selectedMedia as any).year}-01-01` : undefined,
-            first_air_date: (selectedMedia as any).year ? `${(selectedMedia as any).year}-01-01` : undefined,
-            media_type: selectedMedia.type,
-            genres: [],
-            runtime: undefined,
-            status: "Released",
-            tagline: "",
-            credits: { cast: [], crew: [] },
-            videos: { results: [] },
-            similar: { results: [] },
-            recommendations: { results: [] },
-          } as MovieDetail;
-        }
-
-        if (cancelled) return;
-        if (!data) throw new Error("Failed to load detail. TMDB ID tidak ditemukan.");
-
-        setDetail(data);
-
-        // === Cache imdbId untuk player ===
-        const imdbId = (data as any).imdb_id ||
-                       (data as any).external_ids?.imdb_id ||
-                       (selectedMedia as any).imdbId ||
-                       (typeof selectedMedia.id === "string" && selectedMedia.id.startsWith("tt") ? selectedMedia.id : null);
-        if (imdbId) {
-          setCachedImdbId(imdbId);
-        } else if (tmdbId > 0) {
-          // Coba fetch imdbId terpisah
+        // Method 2: proxy /api/tmdb/*
+        if (tmdbId > 0) {
           try {
-            const fetched = await fetchImdbId(tmdbId, selectedMedia.type as "movie" | "tv");
-            if (fetched) setCachedImdbId(fetched);
-          } catch {}
+            const proxyUrl = `/api/tmdb/${selectedMedia.type}/${tmdbId}?append_to_response=external_ids,credits,videos,similar,recommendations,images`;
+            console.log("[Detail] Trying proxy:", proxyUrl);
+            const res = await fetch(proxyUrl);
+            if (res.ok) {
+              const data = await res.json();
+              if (data && (data.title || data.name)) {
+                console.log("[Detail] Got data from proxy");
+                if (!cancelled) setDetail(data as MovieDetail);
+                const imdbId = data.external_ids?.imdb_id || data.imdb_id || (selectedMedia as any).imdbId || null;
+                if (imdbId) setCachedImdbId(imdbId);
+                return;
+              }
+            }
+          } catch (e) { console.warn("[Detail] Proxy failed:", e); }
         }
+
+        // Method 3: tmdb.ts fetchDetail
+        if (tmdbId > 0) {
+          try {
+            console.log("[Detail] Trying tmdb.ts fetchDetail");
+            const data = await fetchDetail(tmdbId, selectedMedia.type as "movie" | "tv");
+            if (data) {
+              if (!cancelled) setDetail(data);
+              const imdbId = (data as any).imdb_id || (data as any).external_ids?.imdb_id || (selectedMedia as any).imdbId || null;
+              if (imdbId) setCachedImdbId(imdbId);
+              return;
+            }
+          } catch (e) { console.warn("[Detail] fetchDetail failed:", e); }
+        }
+
+        // Method 4: Fallback ke selectedMedia data
+        console.log("[Detail] Using fallback (selectedMedia data only)");
+        if (!cancelled) setDetail(fallbackDetail as MovieDetail);
+
+        const imdbId = (selectedMedia as any).imdbId ||
+                       (typeof selectedMedia.id === "string" && selectedMedia.id.startsWith("tt") ? selectedMedia.id : null);
+        if (imdbId) setCachedImdbId(imdbId);
       } catch (err) {
         if (cancelled) return;
+        console.error("[Detail] Fatal error:", err);
         setError(err instanceof Error ? err.message : "Unknown error");
       } finally {
         if (!cancelled) setLoading(false);
       }
     };
+
     loadDetail();
 
-    // Watchlist check
     if (status === "authenticated" && session?.user) {
       fetch("/api/watchlist").then((res) => res.json()).then((data) => {
         if (cancelled) return;
@@ -179,7 +202,6 @@ export function DetailModal() {
       }).catch(() => {});
     }
 
-    // Ratings & Comments
     fetch(`/api/ratings?mediaId=${selectedMedia.id}&mediaType=${selectedMedia.type}`).then((res) => res.json()).then((data) => {
       if (cancelled) return;
       setRatings(data.ratings || []); setUserRating(data.userRating || null);
@@ -188,51 +210,63 @@ export function DetailModal() {
       if (cancelled) return;
       setComments(data.comments || []);
     }).catch(() => {});
+
     return () => { cancelled = true; };
   }, [selectedMedia, session, status]);
 
-  // Episodes
+  // Episodes: fetch saat season berubah (TV only)
   useEffect(() => {
     if (!selectedMedia || selectedMedia.type !== "tv" || !detail) return;
     let cancelled = false;
     setEpisodesLoading(true);
-    fetch(`/api/season?id=${selectedMedia.id}&season=${season}`)
-      .then((res) => res.json()).then((data) => {
-        if (cancelled) return;
-        setEpisodes(data.episodes || []);
-      }).catch(() => {}).finally(() => { if (!cancelled) setEpisodesLoading(false); });
+
+    const tmdbId = extractTmdbId(selectedMedia);
+    if (tmdbId > 0) {
+      fetch(`/api/tmdb/tv/${tmdbId}/season/${season}`)
+        .then((res) => res.json())
+        .then((data) => {
+          if (cancelled) return;
+          const normalizedEps: Episode[] = (data.episodes || []).map((ep: any) => ({
+            episodeNumber: ep.episode_number,
+            name: ep.name || `Episode ${ep.episode_number}`,
+            overview: ep.overview || "",
+            stillPath: ep.still_path,
+            airDate: ep.air_date || "",
+            runtime: ep.runtime,
+          }));
+          setEpisodes(normalizedEps);
+        })
+        .catch(() => {})
+        .finally(() => { if (!cancelled) setEpisodesLoading(false); });
+    } else {
+      setEpisodesLoading(false);
+    }
     return () => { cancelled = true; };
   }, [selectedMedia, detail, season]);
 
-  // ============================================================
-  // FIX: handlePlay sekarang enrich selectedMedia dengan imdbId + seasons
-  // Supaya player-modal.tsx baru bisa langsung fetch stream dari vaplayer
-  // ============================================================
+  // handlePlay - enrich dengan imdbId + seasons
   const handlePlay = async (epNum?: number) => {
     if (!selectedMedia) return;
     const ep = epNum || episode;
     if (epNum) setEpisode(epNum);
 
-    // === Build enriched media untuk player ===
-    const imdbId = cachedImdbId ||
-                   (selectedMedia as any).imdbId ||
-                   (typeof selectedMedia.id === "string" && selectedMedia.id.startsWith("tt") ? selectedMedia.id : null);
+    let finalImdbId = cachedImdbId ||
+                      (selectedMedia as any).imdbId ||
+                      (typeof selectedMedia.id === "string" && selectedMedia.id.startsWith("tt") ? selectedMedia.id : null);
 
-    // Kalau masih belum ada imdbId, coba fetch on-demand
-    let finalImdbId = imdbId;
     if (!finalImdbId) {
       try {
-        const fetched = await fetchImdbId(Number(selectedMedia.id), selectedMedia.type as "movie" | "tv");
-        if (fetched) {
-          finalImdbId = fetched;
-          setCachedImdbId(fetched);
+        const tmdbId = extractTmdbId(selectedMedia);
+        if (tmdbId > 0) {
+          const fetched = await fetchImdbId(tmdbId, selectedMedia.type as "movie" | "tv");
+          if (fetched) {
+            finalImdbId = fetched;
+            setCachedImdbId(fetched);
+          }
         }
-      } catch (e) {
-        console.warn("[Detail] Failed to fetch imdbId on-demand:", e);
-      }
+      } catch (e) { console.warn("[Detail] Failed to fetch imdbId on-demand:", e); }
     }
 
-    // === Build seasons metadata dari TMDB detail ===
     let seasonsMeta: any[] | undefined;
     if (selectedMedia.type === "tv" && (detail as any)?.seasons) {
       seasonsMeta = (detail as any).seasons
@@ -244,13 +278,11 @@ export function DetailModal() {
         }));
     }
 
-    // === Enriched media untuk player-modal baru ===
     const enrichedMedia = {
       ...selectedMedia,
-      // ID: pakai imdbId kalau ada, fallback ke selectedMedia.id
       id: finalImdbId || selectedMedia.id,
       imdbId: finalImdbId,
-      tmdbId: typeof selectedMedia.id === "number" ? selectedMedia.id : undefined,
+      tmdbId: extractTmdbId(selectedMedia) || undefined,
       title: detail?.title || detail?.name || selectedMedia.title,
       type: selectedMedia.type,
       poster: detail?.poster_path ? getImageUrl(detail.poster_path, "w342") : (selectedMedia as any).poster,
@@ -259,7 +291,6 @@ export function DetailModal() {
       year: (detail?.release_date || detail?.first_air_date || "").slice(0, 4),
       rating: detail?.vote_average || 0,
       seasons: seasonsMeta,
-      // Pre-fill current season/episode (untuk TV)
       ...(selectedMedia.type === "tv" ? {
         _currentSeason: String(season),
         _currentEpisode: String(ep),
@@ -326,8 +357,7 @@ export function DetailModal() {
         body: JSON.stringify({ mediaId: selectedMedia.id, mediaType: selectedMedia.type, content: commentText })
       });
       if (res.ok) {
-        setCommentText("");
-        toast.success("Komentar ditambahkan");
+        setCommentText(""); toast.success("Komentar ditambahkan");
         const refresh = await fetch(`/api/comments?mediaId=${selectedMedia.id}&mediaType=${selectedMedia.type}`);
         const data = await refresh.json();
         setComments(data.comments || []);
@@ -345,8 +375,7 @@ export function DetailModal() {
         body: JSON.stringify({ mediaId: selectedMedia.id, mediaType: selectedMedia.type, content: replyText, parentId })
       });
       if (res.ok) {
-        setReplyText(""); setReplyTo(null);
-        toast.success("Reply ditambahkan");
+        setReplyText(""); setReplyTo(null); toast.success("Reply ditambahkan");
         const refresh = await fetch(`/api/comments?mediaId=${selectedMedia.id}&mediaType=${selectedMedia.type}`);
         const data = await refresh.json();
         setComments(data.comments || []);
@@ -357,10 +386,7 @@ export function DetailModal() {
   const handleDeleteComment = async (id: string) => {
     try {
       const res = await fetch(`/api/comments?id=${id}`, { method: "DELETE" });
-      if (res.ok) {
-        toast.success("Komentar dihapus");
-        setComments((prev) => prev.filter((c) => c.id !== id));
-      }
+      if (res.ok) { toast.success("Komentar dihapus"); setComments((prev) => prev.filter((c) => c.id !== id)); }
     } catch { toast.error("Gagal menghapus"); }
   };
 
@@ -393,7 +419,9 @@ export function DetailModal() {
   const logo = (detail as any)?.images?.logos?.find((l: any) => l.iso_639_1 === "en")
     || (detail as any)?.images?.logos?.[0]
     || null;
-    return (
+
+  const heroImageUrl = getHeroImageUrl(detail, selectedMedia);
+  return (
     <Dialog open={!!selectedMedia} onOpenChange={(open) => { if (!open) setSelectedMedia(null); }}>
       <DialogContent
         className="flex flex-col gap-0 overflow-hidden p-0 max-w-[95vw] sm:max-w-2xl md:max-w-4xl lg:max-w-6xl"
@@ -425,18 +453,23 @@ export function DetailModal() {
             </div>
           ) : detail ? (
             <div className="fade-in pb-16">
-              {/* === Hero Section === */}
+              {/* === Hero Section (pakai <img> biasa, bukan next/image) === */}
               <div className="relative h-[22vh] min-h-[140px] w-full overflow-hidden bg-muted sm:h-[30vh] md:aspect-video md:h-auto">
-                {detail.backdrop_path && (
-                  <Image
-                    src={getImageUrl(detail.backdrop_path, "original")}
+                {heroImageUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={heroImageUrl}
                     alt={title}
-                    fill
-                    sizes="(max-width: 768px) 100vw, 1024px"
-                    className="object-cover"
-                    unoptimized
-                    priority
+                    className="h-full w-full object-cover"
+                    onError={(e) => {
+                      console.error("[Detail] Hero image failed:", heroImageUrl);
+                      (e.target as HTMLImageElement).style.display = "none";
+                    }}
                   />
+                ) : (
+                  <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-zinc-800 to-zinc-900">
+                    <Film className="h-12 w-12 text-white/30" />
+                  </div>
                 )}
                 <div className="absolute inset-0 bg-gradient-to-t from-card via-card/30 to-transparent" />
                 <div className="absolute inset-0 bg-gradient-to-r from-card/80 via-transparent to-transparent" />
@@ -444,13 +477,12 @@ export function DetailModal() {
                   <Badge className="mb-1 bg-primary text-primary-foreground sm:mb-2">{isTV ? "TV Series" : "Movie"}</Badge>
                   {logo ? (
                     <div className="relative h-10 w-auto max-w-[75%] sm:h-14 md:h-20 md:max-w-[60%]">
-                      <Image
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
                         src={getImageUrl(logo.file_path, "w500")}
                         alt={title}
-                        fill
-                        className="object-contain object-left-bottom drop-shadow-lg"
-                        unoptimized
-                        sizes="(max-width: 768px) 75vw, 500px"
+                        className="h-full w-full object-contain object-left-bottom drop-shadow-lg"
+                        onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
                       />
                     </div>
                   ) : (
@@ -520,7 +552,13 @@ export function DetailModal() {
                             className={`relative aspect-video w-28 shrink-0 overflow-hidden rounded-lg border-2 transition-all sm:w-36 ${episode === ep.episodeNumber ? "border-primary" : "border-transparent hover:border-border"}`}
                           >
                             {ep.stillPath ? (
-                              <Image src={getImageUrl(ep.stillPath, "w300")} alt={`Ep ${ep.episodeNumber}`} fill sizes="144px" className="object-cover" unoptimized />
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img
+                                src={getImageUrl(ep.stillPath, "w300")}
+                                alt={`Ep ${ep.episodeNumber}`}
+                                className="h-full w-full object-cover"
+                                loading="lazy"
+                              />
                             ) : (
                               <div className="flex h-full items-center justify-center bg-muted"><span className="text-[10px] text-muted-foreground">No Img</span></div>
                             )}
@@ -600,13 +638,12 @@ export function DetailModal() {
                             >
                               <div className="relative mx-auto mb-2 h-20 w-20 overflow-hidden rounded-full bg-muted sm:h-24 sm:w-24 ring-2 ring-transparent transition-all group-hover:ring-primary">
                                 {p.profile_path ? (
-                                  <Image
+                                  // eslint-disable-next-line @next/next/no-img-element
+                                  <img
                                     src={getImageUrl(p.profile_path, "w185")}
                                     alt={p.name}
-                                    fill
-                                    sizes="96px"
-                                    className="object-cover"
-                                    unoptimized
+                                    className="h-full w-full object-cover"
+                                    loading="lazy"
                                   />
                                 ) : (
                                   <div className="flex h-full items-center justify-center text-muted-foreground">
@@ -687,7 +724,6 @@ export function DetailModal() {
                   )}
                 </div>
               </div>
-
               {/* More Like This */}
               {similar.length > 0 && (
                 <div className="border-t border-border py-4 sm:py-6">
