@@ -48,39 +48,6 @@ interface PlayerMediaSeason {
 }
 
 // ============================================================
-// PROXY WRAPPER (untuk Safari/iPhone native HLS player)
-// Pakai URL-encoded (bukan base64) supaya konsisten dengan proxy route
-// ============================================================
-const VAPLAYER_DOMAINS = [
-  "onlinevisibilitysystem.site",
-  "quietmidnightgardeningideas.site",
-  "app.putgate.com",
-  "vidapi.cloud",
-];
-
-function wrapWithProxy(url: string): string {
-  if (!url) return url;
-  // Kalau URL mengandung domain vaplayer, rewrite ke proxy
-  const isVaplayer = VAPLAYER_DOMAINS.some(d => url.includes(d));
-  if (!isVaplayer) return url;
-  // URL-encode supaya aman di query string
-  return `/api/vaplayer/proxy?u=${encodeURIComponent(url)}`;
-}
-
-// Helper: extract URL asli dari proxy URL (untuk label hostname)
-function getOriginalUrl(url: string): string {
-  if (url.startsWith("/api/vaplayer/proxy?u=")) {
-    try {
-      const params = new URLSearchParams(url.split("?")[1]);
-      return params.get("u") || url;
-    } catch {
-      return url;
-    }
-  }
-  return url;
-}
-
-// ============================================================
 // SUBTITLE PREFERENCE
 // ============================================================
 const SUBTITLE_PREF_KEY = "cinestream_subtitle_pref";
@@ -179,12 +146,10 @@ function extractImdbId(media: any): string | null {
   return null;
 }
 
-// Update: labelFromStreamUrl pakai getOriginalUrl supaya hostname tetap kebaca
 function labelFromStreamUrl(url: string, idx: number): string {
-  const originalUrl = getOriginalUrl(url);
   let hostname = "unknown";
   try {
-    hostname = new URL(originalUrl).hostname;
+    hostname = new URL(url).hostname;
   } catch {}
   if (hostname.includes("putgate"))           return `Server ${idx + 1} (Mirror)`;
   if (hostname.includes("onlinevisibility"))  return `Server ${idx + 1} (HD)`;
@@ -211,7 +176,7 @@ function buildEpisodesFromSeasons(seasons: PlayerMediaSeason[]): StreamEpisode[]
 }
 
 // ============================================================
-// HLS.js Loader (dengan proxy rewriter - URL-encoded)
+// HLS.js Loader (sama persis dengan vaplayer.ru)
 // ============================================================
 let hlsPromise: Promise<any> | null = null;
 async function loadHls(): Promise<any> {
@@ -249,63 +214,11 @@ function makeCustomLoader(Hls: any) {
       .join(nl);
   }
 
-  // Rewrite URL ke proxy (URL-encoded)
-  function rewriteToProxy(url: string): string {
-    return wrapWithProxy(url);
-  }
-
-  // Rewrite m3u8 content (URL di dalam m3u8 jadi proxy URL juga)
-  function rewriteM3u8Content(m3u8: string, baseUrl: string): string {
-    let result = m3u8;
-
-    // Rewrite URL absolut (https://...)
-    VAPLAYER_DOMAINS.forEach(domain => {
-      const regex = new RegExp(`https?://[^/]*${domain.replace(/\./g, "\\.")}[^\\s"']*`, "g");
-      result = result.replace(regex, (match) => {
-        return `/api/vaplayer/proxy?u=${encodeURIComponent(match)}`;
-      });
-    });
-
-    // Rewrite URL relatif (mulai dengan /)
-    let origin: string;
-    try {
-      origin = new URL(baseUrl).origin;
-    } catch {
-      origin = "";
-    }
-
-    if (origin) {
-      const lines = result.split(/\r?\n/);
-      const rewritten = lines.map(line => {
-        if (!line || line.startsWith("#")) return line;
-        if (line.startsWith("/api/")) return line;
-        if (line.startsWith("http") && !VAPLAYER_DOMAINS.some(d => line.includes(d))) {
-          return line;
-        }
-        if (line.startsWith("/")) {
-          const fullUrl = `${origin}${line}`;
-          return `/api/vaplayer/proxy?u=${encodeURIComponent(fullUrl)}`;
-        }
-        return line;
-      });
-      result = rewritten.join("\n");
-    }
-
-    return result;
-  }
-
   return class CustomLoader extends Hls.DefaultConfig.loader {
     load(context: any, config: any, callbacks: any) {
-      const originalUrl = context.url || "";
-
-      // === Rewrite URL ke proxy ===
-      const newUrl = rewriteToProxy(originalUrl);
-      context.url = newUrl;
-
       const onSuccess = callbacks.onSuccess;
       callbacks.onSuccess = (response: any, stats: any, ctx: any, details: any) => {
         if (typeof response.data === "string" && response.data.includes("#EXTM3U")) {
-          response.data = rewriteM3u8Content(response.data, originalUrl);
           response.data = reorderAudioByLang(response.data);
         }
         if (onSuccess) onSuccess.call(this, response, stats, ctx, details);
@@ -330,8 +243,9 @@ export function PlayerModal() {
   const [currentEpisodeIdx, setCurrentEpisodeIdx] = useState<number>(0);
   const [retryCount, setRetryCount] = useState(0);
 
-  const [servers, setServers] = useState<ServerOption[]>([]);
-  const [currentServerIdx, setCurrentServerIdx] = useState<number>(0);
+  // === Auto-rotation ref (invisible, tanpa UI) ===
+  const serversRef = useRef<ServerOption[]>([]);
+  const currentServerIdxRef = useRef<number>(0);
 
   const [availableQualities, setAvailableQualities] = useState<Array<{ height: number; level: number }>>([]);
   const [currentQuality, setCurrentQuality] = useState<number>(-1);
@@ -350,6 +264,7 @@ export function PlayerModal() {
   const userInteractedRef = useRef(false);
   const prevBlobUrlRef = useRef<string | null>(null);
   const currentEpisodeRef = useRef<{ season?: string; episode?: string }>({});
+  const rotationInProgressRef = useRef<boolean>(false);
 
   useEffect(() => {
     playerMediaRef.current = playerMedia;
@@ -372,6 +287,63 @@ export function PlayerModal() {
     }
     return subtitles;
   }, [subtitles, manualSubtitle]);
+  // ============================================================
+  // AUTO-ROTATE: coba server berikutnya saat error (invisible)
+  // ============================================================
+  const tryNextServer = useCallback((): boolean => {
+    if (rotationInProgressRef.current) return false;
+    if (currentServerIdxRef.current < serversRef.current.length - 1) {
+      rotationInProgressRef.current = true;
+      currentServerIdxRef.current++;
+      const nextUrl = serversRef.current[currentServerIdxRef.current].streamUrl;
+      console.log(`[Auto-Rotate] Switching to server ${currentServerIdxRef.current + 1}/${serversRef.current.length}`);
+      currentStreamUrlRef.current = nextUrl;
+      setStreamUrl(nextUrl);
+      setAvailableQualities([]);
+      setAvailableAudioTracks([]);
+      setCurrentQuality(-1);
+      setCurrentAudioTrack(-1);
+      if (hlsRef.current) {
+        hlsRef.current.loadSource(nextUrl);
+      }
+      setTimeout(() => { rotationInProgressRef.current = false; }, 500);
+      return true;
+    }
+    return false;
+  }, []);
+
+  // Refresh semua server URLs saat semua gagal
+  const refreshAllServers = useCallback(async () => {
+    const imdb = extractImdbId(playerMediaRef.current);
+    if (!imdb) {
+      setError("Stream error. IMDB ID tidak ditemukan.");
+      return;
+    }
+    const type = playerMediaRef.current?.type === "tv" ? "tv" : "movie";
+    const ep = currentEpisodeRef.current;
+    try {
+      console.log("[Auto-Rotate] All servers failed, refreshing stream URL...");
+      const fresh = await fetchVaplayerStream(imdb, type, ep.season, ep.episode);
+      if (fresh.stream_urls.length > 0) {
+        const newServers: ServerOption[] = fresh.stream_urls.map((u, i) => ({
+          title: labelFromStreamUrl(u.url, i),
+          streamUrl: u.url,
+        }));
+        serversRef.current = newServers;
+        currentServerIdxRef.current = 0;
+        const firstUrl = newServers[0].streamUrl;
+        currentStreamUrlRef.current = firstUrl;
+        setStreamUrl(firstUrl);
+        if (hlsRef.current) {
+          hlsRef.current.loadSource(firstUrl);
+        }
+      } else {
+        setError("Stream tidak tersedia. Coba film lain.");
+      }
+    } catch (err) {
+      setError("Stream error. Please try again.");
+    }
+  }, []);
 
   const changeStreamSource = useCallback((newUrl: string) => {
     const video = videoRef.current;
@@ -389,11 +361,6 @@ export function PlayerModal() {
     }
     setManualSubtitle(null);
 
-    if (video.canPlayType("application/vnd.apple.mpegurl") && !hlsRef.current) {
-      video.src = newUrl;
-      video.play().catch(() => {});
-      return;
-    }
     if (hlsRef.current) {
       hlsRef.current.loadSource(newUrl);
     }
@@ -403,12 +370,8 @@ export function PlayerModal() {
     const video = videoRef.current;
     if (!video) return;
 
-    if (video.canPlayType("application/vnd.apple.mpegurl")) {
-      video.src = url;
-      video.play().catch(() => {});
-      return;
-    }
-
+    // === FORCE HLS.js di SEMUA browser (termasuk Safari/iPhone) ===
+    // Supaya fetchSetup dengan referrerPolicy: no-referrer bisa bypass anti-Cloudflare check
     if (hlsRef.current) {
       hlsRef.current.destroy();
       hlsRef.current = null;
@@ -429,6 +392,11 @@ export function PlayerModal() {
         maxBufferSize: 134217728,
         backBufferLength: 10,
         loader: makeCustomLoader(Hls),
+        // === KUNCI: referrerPolicy no-referrer untuk bypass Cloudflare block ===
+        fetchSetup: (context: any, initParams: any) => {
+          initParams.referrerPolicy = "no-referrer";
+          return new Request(context.url, initParams);
+        },
       });
       hlsRef.current = hls;
 
@@ -457,51 +425,28 @@ export function PlayerModal() {
 
       hls.on(Hls.Events.ERROR, async (_event: any, data: any) => {
         if (!data.fatal) return;
-        console.warn("[HLS FATAL ERROR]", data.type, data.details);
+        console.warn("[HLS ERROR]", data.type, data.details, "current server:", currentServerIdxRef.current + 1);
+
         switch (data.type) {
           case Hls.ErrorTypes.NETWORK_ERROR:
-            console.log("[HLS] Network error, retrying startLoad...");
-            hls.startLoad();
+            if (tryNextServer()) {
+              console.log("[HLS] Network error, auto-rotating to next server...");
+            } else {
+              console.log("[HLS] Network error, retrying startLoad...");
+              hls.startLoad();
+            }
             break;
           case Hls.ErrorTypes.MEDIA_ERROR:
             console.log("[HLS] Media error, recovering...");
             hls.recoverMediaError();
             break;
           default:
-            if (servers.length > 1 && currentServerIdx < servers.length - 1) {
-              console.log(`[HLS] Fatal error, switching to server ${currentServerIdx + 2}...`);
-              const nextIdx = currentServerIdx + 1;
-              setCurrentServerIdx(nextIdx);
-              changeStreamSource(servers[nextIdx].streamUrl);
+            if (tryNextServer()) {
+              console.log("[HLS] Fatal error, auto-rotating to next server...");
             } else if (retryCount < 3) {
-              console.log(`[HLS] Fatal error, refreshing stream URL (retry ${retryCount + 1}/3)...`);
+              console.log(`[HLS] All servers failed, refreshing stream URL (retry ${retryCount + 1}/3)...`);
               setRetryCount((c) => c + 1);
-              try {
-                const imdb = extractImdbId(playerMediaRef.current);
-                if (imdb) {
-                  const type = playerMediaRef.current?.type === "tv" ? "tv" : "movie";
-                  const ep = currentEpisodeRef.current;
-                  const fresh = await fetchVaplayerStream(
-                    imdb,
-                    type,
-                    ep.season,
-                    ep.episode,
-                  );
-                  if (fresh.stream_urls.length > 0) {
-                    // === WRAP dengan proxy supaya Safari/iPhone juga work ===
-                    const newServers: ServerOption[] = fresh.stream_urls.map((u, i) => ({
-                      title: labelFromStreamUrl(u.url, i),
-                      streamUrl: wrapWithProxy(u.url),
-                    }));
-                    setServers(newServers);
-                    setCurrentServerIdx(0);
-                    changeStreamSource(newServers[0].streamUrl);
-                  }
-                }
-              } catch {
-                setError("Stream error. Please try again.");
-                hls.destroy();
-              }
+              await refreshAllServers();
             } else {
               setError("Stream playback error. Please try again.");
               hls.destroy();
@@ -513,7 +458,8 @@ export function PlayerModal() {
       console.error("[HLS Init Error]", err);
       setError("Failed to load video player");
     }
-  }, [changeStreamSource, retryCount, servers, currentServerIdx]);
+  }, [tryNextServer, refreshAllServers, retryCount]);
+
   // ============================================================
   // FETCH STREAM URL when player opens
   // ============================================================
@@ -522,7 +468,8 @@ export function PlayerModal() {
       setStreamUrl("");
       setSubtitles([]);
       setEpisodes([]);
-      setServers([]);
+      serversRef.current = [];
+      currentServerIdxRef.current = 0;
       setManualSubtitle(null);
       setBackdropUrl("");
       setError(null);
@@ -595,13 +542,12 @@ export function PlayerModal() {
             throw new Error("Stream URL tidak tersedia untuk episode ini.");
           }
 
-          // === WRAP dengan proxy supaya Safari/iPhone juga work ===
           const newServers: ServerOption[] = data.stream_urls.map((u, i) => ({
             title: labelFromStreamUrl(u.url, i),
-            streamUrl: wrapWithProxy(u.url),
+            streamUrl: u.url,
           }));
-          setServers(newServers);
-          setCurrentServerIdx(0);
+          serversRef.current = newServers;
+          currentServerIdxRef.current = 0;
 
           const firstUrl = newServers[0].streamUrl;
           setStreamUrl(firstUrl);
@@ -625,13 +571,12 @@ export function PlayerModal() {
             throw new Error("Stream URL tidak tersedia untuk film ini.");
           }
 
-          // === WRAP dengan proxy supaya Safari/iPhone juga work ===
           const newServers: ServerOption[] = data.stream_urls.map((u, i) => ({
             title: labelFromStreamUrl(u.url, i),
-            streamUrl: wrapWithProxy(u.url),
+            streamUrl: u.url,
           }));
-          setServers(newServers);
-          setCurrentServerIdx(0);
+          serversRef.current = newServers;
+          currentServerIdxRef.current = 0;
 
           const firstUrl = newServers[0].streamUrl;
           setStreamUrl(firstUrl);
@@ -713,8 +658,8 @@ export function PlayerModal() {
       }
 
       let serverTitle: string | undefined;
-      if (servers.length > 0 && servers[currentServerIdx]) {
-        serverTitle = servers[currentServerIdx].title;
+      if (serversRef.current.length > 0 && serversRef.current[currentServerIdxRef.current]) {
+        serverTitle = serversRef.current[currentServerIdxRef.current].title;
       }
 
       if (!title) {
@@ -745,7 +690,7 @@ export function PlayerModal() {
     return () => {
       cancelled = true;
     };
-  }, [playerMedia, subtitles, currentSeason, currentEpisodeIdx, currentSeasonEpisodes, currentServerIdx, servers]);
+  }, [playerMedia, subtitles, currentSeason, currentEpisodeIdx, currentSeasonEpisodes]);
 
   // ============================================================
   // INIT PLAYER saat streamUrl pertama kali di-set
@@ -753,13 +698,7 @@ export function PlayerModal() {
   useEffect(() => {
     if (!streamUrl || !videoRef.current) return;
     if (!hlsRef.current) {
-      const video = videoRef.current;
-      if (video.canPlayType("application/vnd.apple.mpegurl")) {
-        video.src = streamUrl;
-        video.play().catch(() => {});
-      } else {
-        initHlsPlayer(streamUrl);
-      }
+      initHlsPlayer(streamUrl);
     }
     return () => {
       if (hlsRef.current && !playerMedia) {
@@ -825,7 +764,7 @@ export function PlayerModal() {
   }, [playerMedia, streamUrl, history]);
 
   // ============================================================
-  // EPISODE CHANGE (TV only) - fetch stream URL on-demand
+  // EPISODE CHANGE (TV only)
   // ============================================================
   const handleEpisodeChange = async (idx: number) => {
     const ep = currentSeasonEpisodes[idx];
@@ -857,13 +796,12 @@ export function PlayerModal() {
         throw new Error("Stream URL tidak tersedia untuk episode ini.");
       }
 
-      // === WRAP dengan proxy supaya Safari/iPhone juga work ===
       const newServers: ServerOption[] = data.stream_urls.map((u, i) => ({
         title: labelFromStreamUrl(u.url, i),
-        streamUrl: wrapWithProxy(u.url),
+        streamUrl: u.url,
       }));
-      setServers(newServers);
-      setCurrentServerIdx(0);
+      serversRef.current = newServers;
+      currentServerIdxRef.current = 0;
 
       const firstUrl = newServers[0].streamUrl;
       setSubtitles([]);
@@ -899,17 +837,6 @@ export function PlayerModal() {
   };
 
   // ============================================================
-  // SERVER CHANGE
-  // ============================================================
-  const handleServerChange = (idx: number) => {
-    const server = servers[idx];
-    if (!server) return;
-    setCurrentServerIdx(idx);
-    changeStreamSource(server.streamUrl);
-    console.log(`[Player] Switched to server: ${server.title}`);
-  };
-
-  // ============================================================
   // QUALITY & AUDIO CHANGE
   // ============================================================
   const handleQualityChange = (level: number) => {
@@ -925,7 +852,6 @@ export function PlayerModal() {
     hls.audioTrack = trackId;
     setCurrentAudioTrack(trackId);
   };
-
   // ============================================================
   // AUTO-LOAD SUBTITLE
   // ============================================================
@@ -1058,10 +984,10 @@ export function PlayerModal() {
   if (!playerMedia) return null;
 
   const isTV = playerMedia.type === "tv" && episodes.length > 0;
-  const hasMultipleServers = servers.length > 1;
   const hasMultipleQualities = availableQualities.length > 1;
   const hasMultipleAudio = availableAudioTracks.length > 1;
-  const showControlsBar = isTV || hasMultipleServers || hasMultipleQualities || hasMultipleAudio;
+  const showControlsBar = isTV || hasMultipleQualities || hasMultipleAudio;
+
   return (
     <Dialog open={!!playerMedia} onOpenChange={(open) => !open && closePlayer()}>
       <DialogContent className="max-w-[95vw] overflow-hidden rounded-xl border-0 bg-black p-0 md:max-w-5xl">
@@ -1103,6 +1029,7 @@ export function PlayerModal() {
               controlsList="nodownload"
               playsInline
               autoPlay
+              referrerPolicy="no-referrer"
             />
             {subdlLoading && (
               <div className="absolute bottom-2 right-2 flex items-center gap-1 rounded-md bg-black/70 px-2 py-1 backdrop-blur-sm">
@@ -1115,24 +1042,6 @@ export function PlayerModal() {
 
         {!loading && !error && streamUrl && showControlsBar && (
           <div className="flex flex-wrap items-center gap-2 border-t border-white/10 bg-zinc-950 p-3">
-            {hasMultipleServers && (
-              <>
-                <span className="text-[10px] font-semibold uppercase tracking-wide text-white/60">Server:</span>
-                <Select value={String(currentServerIdx)} onValueChange={(v) => handleServerChange(Number(v))}>
-                  <SelectTrigger className="h-8 w-40 shrink-0 border-white/20 bg-zinc-900 text-xs text-white sm:w-52">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {servers.map((server, idx) => (
-                      <SelectItem key={idx} value={String(idx)} className="text-xs">
-                        {server.title}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </>
-            )}
-
             {isTV && seasons.length > 1 && (
               <Select value={currentSeason} onValueChange={handleSeasonChange}>
                 <SelectTrigger className="h-8 w-24 shrink-0 border-white/20 bg-zinc-900 text-xs text-white">
