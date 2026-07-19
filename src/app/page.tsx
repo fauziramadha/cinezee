@@ -2,17 +2,18 @@
 
 import { useEffect, useState, useCallback, useRef } from "react";
 import {
-  Play, Star, TrendingUp, Film, Tv, Sparkles, Calendar,
-  ChevronLeft, ChevronRight, Flame, Award, Clock,
+  Play, Star, TrendingUp, Film, Tv, Sparkles,
+  ChevronLeft, ChevronRight, Flame, Award,
 } from "lucide-react";
 import { useAppStore } from "@/lib/store";
 import {
   fetchTrending, fetchNowPlaying, fetchPopularMovies, fetchTopRatedMovies,
-  fetchUpcomingMovies, fetchPopularTV, fetchTopRatedTV, fetchByGenre,
+  fetchPopularTV, fetchTopRatedTV, fetchByGenre,
   fetchDetail, MediaItem,
 } from "@/lib/tmdb";
+import { Header } from "@/components/cinepro/header";
+import { Footer } from "@/components/cinepro/footer";
 
-// Genre IDs TMDB
 const MOVIE_GENRES = [
   { id: 28, name: "Action" },
   { id: 35, name: "Comedy" },
@@ -25,13 +26,12 @@ const MOVIE_GENRES = [
 ];
 
 export default function HomePage() {
-  const { setPlayerMedia } = useAppStore();
+  const { setPlayerMedia, setDetailMedia } = useAppStore();
 
   const [trending, setTrending] = useState<MediaItem[]>([]);
   const [nowPlaying, setNowPlaying] = useState<MediaItem[]>([]);
   const [popularMovies, setPopularMovies] = useState<MediaItem[]>([]);
   const [topRated, setTopRated] = useState<MediaItem[]>([]);
-  const [upcoming, setUpcoming] = useState<MediaItem[]>([]);
   const [popularTV, setPopularTV] = useState<MediaItem[]>([]);
   const [topRatedTV, setTopRatedTV] = useState<MediaItem[]>([]);
   const [actionMovies, setActionMovies] = useState<MediaItem[]>([]);
@@ -44,27 +44,22 @@ export default function HomePage() {
     const load = async () => {
       try {
         setLoading(true);
-        const [
-          tr, np, pm, tr2, up, ptv, trt, act, com,
-        ] = await Promise.all([
+        const [tr, np, pm, tr2, ptv, trt, act, com] = await Promise.all([
           fetchTrending("week"),
           fetchNowPlaying(),
           fetchPopularMovies(),
           fetchTopRatedMovies(),
-          fetchUpcomingMovies(),
           fetchPopularTV(),
           fetchTopRatedTV(),
-          fetchByGenre(28, "movie"),    // Action
-          fetchByGenre(35, "movie"),    // Comedy
+          fetchByGenre(28, "movie"),
+          fetchByGenre(35, "movie"),
         ]);
 
-        // Filter hanya yang punya backdrop untuk hero
         const heroCandidates = tr.filter(m => m.backdrop && !m.backdrop.includes("placeholder"));
         setTrending(heroCandidates.length > 0 ? heroCandidates : tr);
         setNowPlaying(np);
         setPopularMovies(pm);
         setTopRated(tr2);
-        setUpcoming(up);
         setPopularTV(ptv);
         setTopRatedTV(trt);
         setActionMovies(act);
@@ -79,14 +74,31 @@ export default function HomePage() {
     load();
   }, []);
 
+  // === Klik poster → buka detail modal ===
+  const handlePosterClick = useCallback(async (item: MediaItem) => {
+    // Set detail media (untuk DetailModal)
+    setDetailMedia({
+      id: item.id,
+      tmdbId: item.tmdbId,
+      imdbId: item.imdbId,
+      title: item.title,
+      type: item.type,
+      poster: item.poster,
+      backdrop: item.backdrop,
+      overview: item.overview,
+      year: item.year,
+      rating: item.rating,
+      seasons: (item as any).seasons,
+    });
+  }, [setDetailMedia]);
+
+  // === Klik tombol Play di Hero → langsung play ===
   const handlePlay = useCallback(async (item: MediaItem) => {
-    // Kalau belum punya imdbId, fetch dulu
     let enrichedItem = item;
     if (!item.imdbId) {
       const detail = await fetchDetail(item.tmdbId, item.type);
       if (detail) enrichedItem = detail;
     }
-
     setPlayerMedia({
       id: enrichedItem.id,
       imdbId: enrichedItem.imdbId,
@@ -104,29 +116,34 @@ export default function HomePage() {
 
   if (loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-black">
-        <div className="flex flex-col items-center gap-4">
-          <div className="relative h-16 w-16">
-            <div className="absolute inset-0 rounded-full border-2 border-white/10"></div>
-            <div className="absolute inset-0 rounded-full border-2 border-t-red-600 animate-spin"></div>
+      <div className="min-h-screen bg-black">
+        <Header />
+        <div className="flex min-h-[60vh] items-center justify-center">
+          <div className="flex flex-col items-center gap-4">
+            <div className="relative h-16 w-16">
+              <div className="absolute inset-0 rounded-full border-2 border-white/10"></div>
+              <div className="absolute inset-0 rounded-full border-2 border-t-red-600 animate-spin"></div>
+            </div>
+            <p className="text-sm font-medium text-white/60">Memuat film terbaru...</p>
           </div>
-          <p className="text-sm font-medium text-white/60">Memuat film terbaru...</p>
         </div>
+        <Footer />
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-black p-6 text-center">
-        <div className="rounded-full bg-red-600/20 p-4">
-          <Flame className="h-8 w-8 text-red-500" />
+      <div className="min-h-screen bg-black">
+        <Header />
+        <div className="flex min-h-[60vh] flex-col items-center justify-center gap-4 p-6 text-center">
+          <div className="rounded-full bg-red-600/20 p-4">
+            <Flame className="h-8 w-8 text-red-500" />
+          </div>
+          <p className="text-lg font-semibold text-white">Gagal memuat konten</p>
+          <p className="max-w-md text-sm text-white/50">{error}</p>
         </div>
-        <p className="text-lg font-semibold text-white">Gagal memuat konten</p>
-        <p className="max-w-md text-sm text-white/50">{error}</p>
-        <p className="mt-2 text-xs text-white/40">
-          Pastikan <code className="rounded bg-white/10 px-1.5 py-0.5 text-white/70">NEXT_PUBLIC_TMDB_API_KEY</code> sudah diset
-        </p>
+        <Footer />
       </div>
     );
   }
@@ -134,9 +151,13 @@ export default function HomePage() {
   const hero = trending[0];
 
   return (
-    <div className="min-h-screen bg-black pb-20">
+    <div className="min-h-screen bg-black">
+      <Header />
+
       {/* HERO */}
-      {hero && <Hero item={hero} onPlay={handlePlay} />}
+      {hero && (
+        <Hero item={hero} onPlay={handlePlay} onMoreInfo={handlePosterClick} />
+      )}
 
       <div className="mx-auto max-w-[1400px] px-4 py-8 sm:px-6 lg:px-8">
         {/* Trending */}
@@ -144,7 +165,7 @@ export default function HomePage() {
           title="Trending Minggu Ini"
           icon={<TrendingUp className="h-5 w-5 text-red-500" />}
           items={trending}
-          onPlay={handlePlay}
+          onItemClick={handlePosterClick}
         />
 
         {/* Now Playing */}
@@ -152,7 +173,7 @@ export default function HomePage() {
           title="Sedang Tayang di Bioskop"
           icon={<Film className="h-5 w-5 text-blue-500" />}
           items={nowPlaying}
-          onPlay={handlePlay}
+          onItemClick={handlePosterClick}
         />
 
         {/* Popular Movies */}
@@ -160,7 +181,7 @@ export default function HomePage() {
           title="Film Populer"
           icon={<Flame className="h-5 w-5 text-orange-500" />}
           items={popularMovies}
-          onPlay={handlePlay}
+          onItemClick={handlePosterClick}
         />
 
         {/* Popular TV */}
@@ -168,7 +189,7 @@ export default function HomePage() {
           title="Series Populer"
           icon={<Tv className="h-5 w-5 text-purple-500" />}
           items={popularTV}
-          onPlay={handlePlay}
+          onItemClick={handlePosterClick}
         />
 
         {/* Top Rated Movies */}
@@ -176,7 +197,7 @@ export default function HomePage() {
           title="Film Rating Tertinggi"
           icon={<Award className="h-5 w-5 text-yellow-500" />}
           items={topRated}
-          onPlay={handlePlay}
+          onItemClick={handlePosterClick}
         />
 
         {/* Top Rated TV */}
@@ -184,7 +205,7 @@ export default function HomePage() {
           title="Series Rating Tertinggi"
           icon={<Star className="h-5 w-5 text-yellow-500" />}
           items={topRatedTV}
-          onPlay={handlePlay}
+          onItemClick={handlePosterClick}
         />
 
         {/* Action */}
@@ -192,7 +213,7 @@ export default function HomePage() {
           title="Action"
           icon={<Sparkles className="h-5 w-5 text-red-500" />}
           items={actionMovies}
-          onPlay={handlePlay}
+          onItemClick={handlePosterClick}
         />
 
         {/* Comedy */}
@@ -200,25 +221,25 @@ export default function HomePage() {
           title="Comedy"
           icon={<Sparkles className="h-5 w-5 text-green-500" />}
           items={comedyMovies}
-          onPlay={handlePlay}
-        />
-
-        {/* Upcoming */}
-        <Section
-          title="Segera Tayang"
-          icon={<Calendar className="h-5 w-5 text-cyan-500" />}
-          items={upcoming}
-          onPlay={handlePlay}
+          onItemClick={handlePosterClick}
         />
       </div>
+
+      <Footer />
     </div>
   );
 }
 
 // ============================================================
-// HERO - Besar dengan tombol Play + Info
+// HERO
 // ============================================================
-function Hero({ item, onPlay }: { item: MediaItem; onPlay: (i: MediaItem) => void }) {
+function Hero({
+  item, onPlay, onMoreInfo,
+}: {
+  item: MediaItem;
+  onPlay: (i: MediaItem) => void;
+  onMoreInfo: (i: MediaItem) => void;
+}) {
   return (
     <div className="relative h-[70vh] min-h-[500px] w-full overflow-hidden">
       <img
@@ -226,7 +247,6 @@ function Hero({ item, onPlay }: { item: MediaItem; onPlay: (i: MediaItem) => voi
         alt={item.title}
         className="absolute inset-0 h-full w-full object-cover"
       />
-      {/* Gradient overlays */}
       <div className="absolute inset-0 bg-gradient-to-t from-black via-black/40 to-transparent" />
       <div className="absolute inset-0 bg-gradient-to-r from-black/80 via-black/20 to-transparent" />
 
@@ -247,9 +267,7 @@ function Hero({ item, onPlay }: { item: MediaItem; onPlay: (i: MediaItem) => voi
                 {item.rating.toFixed(1)}
               </span>
             )}
-            {item.year && (
-              <span className="text-white/80">{item.year}</span>
-            )}
+            {item.year && <span className="text-white/80">{item.year}</span>}
             <span className="rounded border border-white/30 px-2 py-0.5 text-xs uppercase text-white/80">
               {item.type === "tv" ? "TV Series" : "Movie"}
             </span>
@@ -269,6 +287,12 @@ function Hero({ item, onPlay }: { item: MediaItem; onPlay: (i: MediaItem) => voi
               <Play className="h-5 w-5 fill-black" />
               Putar Sekarang
             </button>
+            <button
+              onClick={() => onMoreInfo(item)}
+              className="flex items-center gap-2 rounded-md bg-white/20 px-6 py-3 text-base font-semibold text-white backdrop-blur-sm transition hover:bg-white/30 active:scale-95"
+            >
+              Info Selengkapnya
+            </button>
           </div>
         </div>
       </div>
@@ -277,15 +301,15 @@ function Hero({ item, onPlay }: { item: MediaItem; onPlay: (i: MediaItem) => voi
 }
 
 // ============================================================
-// SECTION - Horizontal scrollable
+// SECTION (horizontal scroll)
 // ============================================================
 function Section({
-  title, icon, items, onPlay,
+  title, icon, items, onItemClick,
 }: {
   title: string;
   icon?: React.ReactNode;
   items: MediaItem[];
-  onPlay: (i: MediaItem) => void;
+  onItemClick: (i: MediaItem) => void;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -328,7 +352,11 @@ function Section({
         className="flex gap-3 overflow-x-auto scroll-smooth pb-2 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
       >
         {items.map((item, idx) => (
-          <MediaCard key={`${item.id}-${idx}`} item={item} onClick={() => onPlay(item)} />
+          <MediaCard
+            key={`${item.id}-${idx}`}
+            item={item}
+            onClick={() => onItemClick(item)}
+          />
         ))}
       </div>
     </section>
@@ -336,9 +364,14 @@ function Section({
 }
 
 // ============================================================
-// MEDIA CARD - Poster card dengan hover effect
+// MEDIA CARD
 // ============================================================
-function MediaCard({ item, onClick }: { item: MediaItem; onClick: () => void }) {
+function MediaCard({
+  item, onClick,
+}: {
+  item: MediaItem;
+  onClick: () => void;
+}) {
   const [hovered, setHovered] = useState(false);
 
   return (
@@ -356,7 +389,7 @@ function MediaCard({ item, onClick }: { item: MediaItem; onClick: () => void }) 
           className="h-full w-full object-cover transition duration-300 group-hover:scale-110"
         />
 
-        {/* Top badges */}
+        {/* Badges */}
         <div className="absolute left-1.5 top-1.5 flex flex-col gap-1">
           {item.rating > 0 && (
             <span className="flex items-center gap-0.5 rounded bg-black/80 px-1.5 py-0.5 text-[10px] font-bold text-yellow-400 backdrop-blur-sm">
@@ -380,7 +413,7 @@ function MediaCard({ item, onClick }: { item: MediaItem; onClick: () => void }) 
               <Play className="h-6 w-6 fill-black text-black" />
             </div>
             <span className="rounded-full bg-red-600 px-3 py-1 text-[10px] font-bold uppercase text-white">
-              Putar
+              Lihat Detail
             </span>
           </div>
         </div>
