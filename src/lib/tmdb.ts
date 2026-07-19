@@ -1,10 +1,32 @@
 // ============================================================
-// TMDB Client - Via Worker Proxy (API key tidak ke-expose ke client)
-// Pakai /api/tmdb/* proxy yang baca TMDB_API_KEY dari server env
+// TMDB Client
+// - Client components: pakai /api/tmdb/* proxy (API key tidak ke-expose)
+// - Server-side (API routes lama): pakai TMDB_BASE + TMDB_API_KEY langsung
 // ============================================================
 
-const TMDB_BASE = "/api/tmdb";  // proxy ke Worker
+// Internal proxy URL (untuk client-side fetch via tmdbFetch)
+const TMDB_PROXY = "/api/tmdb";
+
+// Real TMDB URL (untuk backward-compat dengan file lama)
+const TMDB_REAL_BASE = "https://api.themoviedb.org/3";
 const IMG_BASE = "https://image.tmdb.org/t/p";
+
+// ============================================================
+// Export konstanta untuk backward-compatibility dengan API routes lama
+// (file seperti /api/discover/route.ts, /api/genres/route.ts, dll)
+// Di server-side, process.env.TMDB_API_KEY tersedia di Cloudflare Workers runtime
+// ============================================================
+export const TMDB_API_KEY =
+  (typeof process !== "undefined" && process.env?.TMDB_API_KEY) ||
+  (typeof process !== "undefined" && process.env?.NEXT_PUBLIC_TMDB_API_KEY) ||
+  "";
+export const TMDB_BASE = TMDB_REAL_BASE;
+export const TMDB_IMAGE_BASE = IMG_BASE;
+export const TMDB_IMG_BASE = IMG_BASE;
+export const TMDB_API_BASE = TMDB_REAL_BASE;
+export const TMDB_BASE_URL = TMDB_REAL_BASE;
+export const TMDB_KEY = TMDB_API_KEY;
+export const API_KEY = TMDB_API_KEY;
 
 // ============================================================
 // Types
@@ -83,12 +105,25 @@ export function getStillUrl(path?: string | null, size: "w300" | "w780" | "origi
 }
 
 // ============================================================
-// Internal fetch helper (via Worker proxy)
+// Internal fetch helper
+// - Client-side (browser): pakai proxy /api/tmdb/*
+// - Server-side (SSR/API): pakai direct TMDB URL dengan API key
 // ============================================================
 async function tmdbFetch(path: string, params: Record<string, string> = {}): Promise<any> {
-  const url = new URL(`${TMDB_BASE}${path}`, window.location.origin);
+  let url: URL;
+  const finalParams = { ...params };
+
+  if (typeof window !== "undefined") {
+    // Browser: pakai proxy (API key tidak ke-expose)
+    url = new URL(`${TMDB_PROXY}${path}`, window.location.origin);
+  } else {
+    // Server: direct TMDB API dengan API key
+    url = new URL(`${TMDB_REAL_BASE}${path}`);
+    if (TMDB_API_KEY) finalParams.api_key = TMDB_API_KEY;
+  }
+
   url.searchParams.set("language", "en-US");
-  Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
+  Object.entries(finalParams).forEach(([k, v]) => url.searchParams.set(k, v));
 
   const r = await fetch(url.toString());
   if (!r.ok) {
@@ -403,7 +438,7 @@ export async function fetchVideos(tmdbId: number, type: "movie" | "tv"): Promise
 }
 
 // ============================================================
-// BACKWARD-COMPATIBLE ALIASES
+// BACKWARD-COMPATIBLE ALIASES (untuk file lama yang pakai nama get*)
 // ============================================================
 export const getTrending = fetchTrending;
 export const getTrendingMovies = fetchTrendingMovies;
@@ -451,16 +486,6 @@ export const getVideos = fetchVideos;
 export const getImagePath = getImageUrl;
 export const getStill = getStillUrl;
 export const getProfile = getProfileUrl;
-
-// Export konstanta untuk backward-compatibility dengan API routes lama
-export const TMDB_API_KEY = "";  // Tidak dipakai di client lagi
-export const TMDB_IMAGE_BASE = IMG_BASE;
-export const TMDB_IMG_BASE = IMG_BASE;
-export const TMDB_API_BASE = "https://api.themoviedb.org/3";
-export const TMDB_BASE_URL = "https://api.themoviedb.org/3";
-export const TMDB_BASE = "https://api.themoviedb.org/3";
-export const TMDB_KEY = "";
-export const API_KEY = "";
 
 export default {
   fetchTrending,
