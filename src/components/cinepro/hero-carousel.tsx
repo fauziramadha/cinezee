@@ -1,238 +1,215 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
-import Image from "next/image";
-import { Play, Info, Star, ChevronLeft, ChevronRight } from "lucide-react";
-import useEmblaCarousel from "embla-carousel-react";
-import { Button } from "@/components/ui/button";
-import { getImageUrl, type Movie } from "@/lib/tmdb";
-import { useAppStore, type SelectedMedia } from "@/lib/store";
-import { cn } from "@/lib/utils";
+import { useEffect, useState, useRef, useCallback } from "react";
+import { Play, Star, Flame } from "lucide-react";
+import { useAppStore } from "@/lib/store";
 
-interface HeroCarouselProps {
-  movies: Movie[];
+interface MediaItem {
+  id: string;
+  tmdbId: number;
+  imdbId?: string;
+  title: string;
+  type: "movie" | "tv";
+  poster: string;
+  backdrop: string;
+  logo?: string;
+  overview: string;
+  year: string;
+  rating: number;
+  genre?: string;
+  seasons?: Array<{ seasonNumber: number; episodeCount: number; name?: string }>;
 }
 
-export function HeroCarousel({ movies }: HeroCarouselProps) {
-  const [emblaRef, emblaApi] = useEmblaCarousel({
-    loop: true,
-    align: "start",
-  });
-  const [selected, setSelected] = useState(0);
-  const setSelectedMedia = useAppStore((s) => s.setSelectedMedia);
-  const openPlayer = useAppStore((s) => s.openPlayer);
+const SLIDE_DURATION = 7000; // 7 detik per slide
 
-  const onSelect = useCallback(() => {
-    if (!emblaApi) return;
-    setSelected(emblaApi.selectedScrollSnap());
-  }, [emblaApi]);
+export function HeroCarousel({
+  items,
+  onPlay,
+  onMoreInfo,
+}: {
+  items: MediaItem[];
+  onPlay: (item: MediaItem) => void;
+  onMoreInfo: (item: MediaItem) => void;
+}) {
+  const [currentIdx, setCurrentIdx] = useState(0);
+  const [isPaused, setIsPaused] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const intervalRef = useRef<NodeJS.Timeout | null>(null);
+  const progressRef = useRef<NodeJS.Timeout | null>(null);
+  const { setDetailMedia } = useAppStore();
 
+  const goToNext = useCallback(() => {
+    setCurrentIdx((prev) => (prev + 1) % items.length);
+    setProgress(0);
+  }, [items.length]);
+
+  const goToPrev = useCallback(() => {
+    setCurrentIdx((prev) => (prev - 1 + items.length) % items.length);
+    setProgress(0);
+  }, [items.length]);
+
+  // Auto-advance with progress bar
   useEffect(() => {
-    if (!emblaApi) return;
-    emblaApi.on("select", onSelect);
+    if (isPaused || items.length === 0) return;
+
+    // Progress bar animation (update setiap 50ms)
+    progressRef.current = setInterval(() => {
+      setProgress((prev) => {
+        const newProgress = prev + (50 / SLIDE_DURATION) * 100;
+        return newProgress >= 100 ? 100 : newProgress;
+      });
+    }, 50);
+
+    // Auto-advance
+    intervalRef.current = setInterval(() => {
+      setCurrentIdx((prev) => (prev + 1) % items.length);
+      setProgress(0);
+    }, SLIDE_DURATION);
+
     return () => {
-      emblaApi.off("select", onSelect);
+      if (progressRef.current) clearInterval(progressRef.current);
+      if (intervalRef.current) clearInterval(intervalRef.current);
     };
-  }, [emblaApi, onSelect]);
+  }, [isPaused, items.length, currentIdx]);
 
-  // Auto-rotate every 8 seconds
+  // Reset progress when slide changes manually
   useEffect(() => {
-    if (!emblaApi) return;
-    const interval = setInterval(() => {
-      emblaApi.scrollNext();
-    }, 8000);
-    return () => clearInterval(interval);
-  }, [emblaApi]);
+    setProgress(0);
+  }, [currentIdx]);
 
-  const scrollPrev = useCallback(() => emblaApi?.scrollPrev(), [emblaApi]);
-  const scrollNext = useCallback(() => emblaApi?.scrollNext(), [emblaApi]);
+  if (items.length === 0) return null;
 
-  if (!movies.length) return null;
-
-  // Take first 5 for hero
-  const heroMovies = movies.slice(0, 5);
-
-  // ============================================================
-  // FIX: handlePlay & handleInfo sekarang kirim slug & source
-  // supaya player/detail-modal tau kalau ini cinemacity movie
-  // ============================================================
-  const handlePlay = (movie: Movie) => {
-    const mediaType: "movie" | "tv" = movie.media_type || (movie.title ? "movie" : "tv");
-    const title = movie.title || movie.name || "Untitled";
-    openPlayer({
-      id: movie.id,
-      type: mediaType,
-      title,
-      posterPath: movie.poster_path,
-      backdropPath: movie.backdrop_path,
-      slug: (movie as any).slug,
-      source: (movie as any).source,
-    } as SelectedMedia);
-  };
-
-  const handleInfo = (movie: Movie) => {
-    const mediaType: "movie" | "tv" = movie.media_type || (movie.title ? "movie" : "tv");
-    const title = movie.title || movie.name || "Untitled";
-    const selectedMedia: SelectedMedia = {
-      id: movie.id,
-      type: mediaType,
-      title,
-      posterPath: movie.poster_path,
-      backdropPath: movie.backdrop_path,
-      slug: (movie as any).slug,
-      source: (movie as any).source,
-    } as SelectedMedia;
-    setSelectedMedia(selectedMedia);
-  };
+  const current = items[currentIdx];
 
   return (
-    <section className="relative h-[55vh] min-h-[360px] w-full overflow-hidden sm:h-[65vh] md:h-[75vh]">
-      {/* Embla viewport */}
-      <div ref={emblaRef} className="h-full overflow-hidden">
-        <div className="flex h-full">
-          {heroMovies.map((movie, idx) => {
-            const title = movie.title || movie.name || "Untitled";
-            const year = (movie.release_date || movie.first_air_date || "").split("-")[0];
-            const rating = movie.vote_average?.toFixed(1) || "N/A";
-            const mediaType: "movie" | "tv" =
-              movie.media_type || (movie.title ? "movie" : "tv");
+    <div
+      className="relative h-[70vh] min-h-[500px] w-full overflow-hidden"
+      onMouseEnter={() => setIsPaused(true)}
+      onMouseLeave={() => setIsPaused(false)}
+    >
+      {/* === Background images (all slides, fade transition) === */}
+      {items.map((item, idx) => (
+        <div
+          key={item.id}
+          className="absolute inset-0 transition-opacity duration-1000"
+          style={{ opacity: idx === currentIdx ? 1 : 0 }}
+        >
+          <img
+            src={item.backdrop}
+            alt={item.title}
+            className="h-full w-full object-cover"
+            onError={(e) => {
+              (e.target as HTMLImageElement).src = item.poster;
+            }}
+          />
+          <div className="absolute inset-0 bg-gradient-to-t from-black via-black/40 to-transparent" />
+          <div className="absolute inset-0 bg-gradient-to-r from-black/80 via-black/20 to-transparent" />
+        </div>
+      ))}
 
-            return (
-              <div
-                key={`hero-${movie.id}-${idx}`}
-                className="relative min-w-0 flex-[0_0_100%]"
-              >
-                {/* Backdrop image */}
-                <div className="absolute inset-0">
-                  {movie.backdrop_path && (
-                    <Image
-                      src={getImageUrl(movie.backdrop_path, "original")}
-                      alt={title}
-                      fill
-                      priority={idx === 0}
-                      sizes="100vw"
-                      className="object-cover"
-                      unoptimized
-                    />
-                  )}
-                </div>
+      {/* === Content === */}
+      <div className="relative z-10 flex h-full flex-col justify-end p-6 sm:p-10 md:p-14 lg:p-16">
+        <div className="max-w-2xl">
+          <span className="mb-3 inline-flex w-fit items-center gap-1.5 rounded-full bg-red-600 px-3 py-1 text-xs font-bold uppercase tracking-wider text-white">
+            <Flame className="h-3 w-3" /> Trending
+          </span>
 
-                {/* Gradient overlays */}
-                <div className="hero-gradient absolute inset-0" />
-                <div className="hero-gradient-left absolute inset-0" />
+          {/* === TMDB Logo atau Judul === */}
+          {current.logo ? (
+            <img
+              src={current.logo}
+              alt={current.title}
+              className="mb-3 h-16 w-auto max-w-[80%] object-contain object-left drop-shadow-2xl sm:h-20 md:h-28"
+            />
+          ) : (
+            <h1 className="mb-3 text-3xl font-black leading-tight text-white drop-shadow-2xl sm:text-5xl md:text-6xl lg:text-7xl">
+              {current.title}
+            </h1>
+          )}
 
-                {/* Content */}
-                <div className="relative z-10 flex h-full items-end md:items-center">
-                  <div className="w-full max-w-2xl px-4 pb-12 sm:px-6 md:pb-0 md:pl-8 lg:pl-12">
-                    {/* Media type badge */}
-                    <div className="mb-3 flex items-center gap-2">
-                      <span className="rounded bg-primary/90 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-primary-foreground">
-                        {mediaType === "tv" ? "TV Series" : "Movie"}
-                      </span>
-                      {rating !== "N/A" && (
-                        <span className="flex items-center gap-1 rounded bg-black/50 px-2 py-0.5 text-[10px] font-semibold text-white backdrop-blur-sm">
-                          <Star className="h-3 w-3 fill-yellow-400 text-yellow-400" />
-                          {rating}
-                        </span>
-                      )}
-                      {year && (
-                        <span className="rounded bg-black/50 px-2 py-0.5 text-[10px] font-medium text-white backdrop-blur-sm">
-                          {year}
-                        </span>
-                      )}
-                    </div>
+          {/* === Meta info: rating, year, type, genre === */}
+          <div className="mb-3 flex flex-wrap items-center gap-3 text-sm">
+            {current.rating > 0 && (
+              <span className="flex items-center gap-1 rounded-md bg-yellow-500/20 px-2 py-1 font-semibold text-yellow-400">
+                <Star className="h-3.5 w-3.5 fill-yellow-400" />
+                {current.rating.toFixed(1)}
+              </span>
+            )}
+            {current.year && <span className="text-white/80">{current.year}</span>}
+            <span className="rounded border border-white/30 px-2 py-0.5 text-xs uppercase text-white/80">
+              {current.type === "tv" ? "TV Series" : "Movie"}
+            </span>
+            {current.genre && <span className="text-white/60 text-xs">{current.genre}</span>}
+          </div>
 
-                    {/* Title — FIX: key pakai movie.id + idx, bukan selected */}
-                    <h1
-                      className="slide-in text-3xl font-extrabold tracking-tight text-white drop-shadow-lg sm:text-4xl md:text-5xl lg:text-6xl"
-                      key={`title-${movie.id}-${idx}`}
-                    >
-                      {title}
-                    </h1>
+          {/* === Synopsis === */}
+          {current.overview && (
+            <p className="mb-5 max-w-xl text-sm text-white/80 line-clamp-3 sm:text-base md:text-lg">
+              {current.overview}
+            </p>
+          )}
 
-                    {/* Overview */}
-                    {movie.overview && (
-                      <p className="mt-3 line-clamp-3 max-w-xl text-sm text-white/80 drop-shadow sm:text-base md:line-clamp-4 md:text-lg">
-                        {movie.overview}
-                      </p>
-                    )}
-
-                    {/* Buttons */}
-                    <div className="mt-6 flex flex-wrap gap-3">
-                      <Button
-                        size="lg"
-                        onClick={() => handlePlay(movie)}
-                        className="h-11 gap-2 bg-primary px-6 text-sm font-semibold text-primary-foreground hover:bg-primary/90 sm:h-12 sm:px-8 sm:text-base"
-                      >
-                        <Play className="h-5 w-5 fill-current" />
-                        Play Now
-                      </Button>
-                      <Button
-                        size="lg"
-                        variant="secondary"
-                        onClick={() => handleInfo(movie)}
-                        className="h-11 gap-2 bg-white/15 px-6 text-sm font-semibold text-white backdrop-blur-md hover:bg-white/25 sm:h-12 sm:px-8 sm:text-base"
-                      >
-                        <Info className="h-5 w-5" />
-                        More Info
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            );
-          })}
+          {/* === CTA buttons === */}
+          <div className="flex gap-3">
+            <button
+              onClick={() => onPlay(current)}
+              className="flex items-center gap-2 rounded-md bg-white px-7 py-3 text-base font-bold text-black transition hover:bg-white/90 active:scale-95"
+            >
+              <Play className="h-5 w-5 fill-black" />
+              Putar Sekarang
+            </button>
+            <button
+              onClick={() => onMoreInfo(current)}
+              className="flex items-center gap-2 rounded-md bg-white/20 px-6 py-3 text-base font-semibold text-white backdrop-blur-sm transition hover:bg-white/30 active:scale-95"
+            >
+              Info Selengkapnya
+            </button>
+          </div>
         </div>
       </div>
 
-      {/* Navigation arrows */}
-      <button
-        onClick={scrollPrev}
-        className="absolute left-2 top-1/2 z-20 hidden h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-black/40 text-white backdrop-blur-sm transition-all hover:bg-primary md:flex"
-        aria-label="Previous slide"
-      >
-        <ChevronLeft className="h-5 w-5" />
-      </button>
-      <button
-        onClick={scrollNext}
-        className="absolute right-2 top-1/2 z-20 hidden h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-black/40 text-white backdrop-blur-sm transition-all hover:bg-primary md:flex"
-        aria-label="Next slide"
-      >
-        <ChevronRight className="h-5 w-5" />
-      </button>
-
-      {/* Progress bar indicator — fills up over 8s, resets on slide change */}
-      <div className="absolute bottom-3 left-1/2 z-20 flex -translate-x-1/2 gap-1.5 md:bottom-5">
-        {heroMovies.map((_, idx) => (
-          <button
-            key={`dot-${idx}`}
-            onClick={() => emblaApi?.scrollTo(idx)}
-            className="h-1 w-8 overflow-hidden rounded-full bg-white/30 sm:w-10"
-            aria-label={`Go to slide ${idx + 1}`}
-          >
-            {idx === selected && (
-              <span
-                key={`progress-${selected}`}
-                className="block h-full rounded-full bg-primary"
-                style={{
-                  animation: "hero-progress 8s linear forwards",
-                }}
-              />
-            )}
-            {idx < selected && (
-              <span className="block h-full w-full rounded-full bg-primary" />
-            )}
-          </button>
-        ))}
+      {/* === Dots indicator + Progress bar === */}
+      <div className="absolute bottom-4 left-1/2 z-20 -translate-x-1/2">
+        <div className="flex gap-2">
+          {items.map((_, idx) => (
+            <button
+              key={idx}
+              onClick={() => { setCurrentIdx(idx); setProgress(0); }}
+              className={`h-1.5 rounded-full transition-all ${
+                idx === currentIdx ? "w-8 bg-white/30" : "w-1.5 bg-white/40 hover:bg-white/60"
+              }`}
+              aria-label={`Slide ${idx + 1}`}
+            >
+              {idx === currentIdx && (
+                <div
+                  className="h-full rounded-full bg-red-600"
+                  style={{ width: `${progress}%` }}
+                />
+              )}
+            </button>
+          ))}
+        </div>
       </div>
 
-      {/* Keyframe animation injected once */}
-      <style>{`
-        @keyframes hero-progress {
-          from { width: 0%; }
-          to { width: 100%; }
-        }
-      `}</style>
-    </section>
+      {/* === Navigation arrows (desktop only) === */}
+      <button
+        onClick={goToPrev}
+        className="absolute left-4 top-1/2 z-20 hidden h-12 w-12 -translate-y-1/2 items-center justify-center rounded-full bg-black/40 text-white backdrop-blur-sm transition hover:bg-black/60 md:flex"
+        aria-label="Previous slide"
+      >
+        <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M15 19l-7-7 7-7" />
+        </svg>
+      </button>
+      <button
+        onClick={goToNext}
+        className="absolute right-4 top-1/2 z-20 hidden h-12 w-12 -translate-y-1/2 items-center justify-center rounded-full bg-black/40 text-white backdrop-blur-sm transition hover:bg-black/60 md:flex"
+        aria-label="Next slide"
+      >
+        <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5l7 7-7 7" />
+        </svg>
+      </button>
+    </div>
   );
 }
