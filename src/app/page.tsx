@@ -1,142 +1,205 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Header } from "@/components/cinepro/header";
-import { HeroCarousel } from "@/components/cinepro/hero-carousel";
-import { ContentRow } from "@/components/cinepro/content-row";
-import { Top10Row } from "@/components/cinepro/top10-row";
-import { WatchHistory } from "@/components/cinepro/watch-history";
-import { Footer } from "@/components/cinepro/footer";
-import { SearchModal } from "@/components/cinepro/search-modal";
-import { DetailModal } from "@/components/cinepro/detail-modal";
-import { PlayerModal } from "@/components/cinepro/player-modal";
+import { Play, Star, TrendingUp, Film, Tv } from "lucide-react";
 import { useAppStore } from "@/lib/store";
-import { fetchCinemacityHome, fetchCinemacityGenre } from "@/lib/cinemacity-api";
-import type { Movie } from "@/lib/tmdb";
-import { Loader2 } from "lucide-react";
+import { fetchTrending, fetchPopular, TMDBItem } from "@/lib/tmdb-api";
 
-export default function Home() {
-  const [allMovies, setAllMovies] = useState<Movie[]>([]);
-  const [asianMovies, setAsianMovies] = useState<Movie[]>([]);
+export default function HomePage() {
+  const { setPlayerMedia } = useAppStore();
+
+  const [trending, setTrending] = useState<TMDBItem[]>([]);
+  const [popularMovies, setPopularMovies] = useState<TMDBItem[]>([]);
+  const [popularTV, setPopularTV] = useState<TMDBItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const loadHistory = useAppStore((s) => s.loadHistory);
   useEffect(() => {
-    loadHistory();
-  }, [loadHistory]);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    const loadData = async () => {
-      await Promise.resolve();
-      if (cancelled) return;
-      setLoading(true);
-      setError(null);
-
+    const load = async () => {
       try {
-        // Fetch home + Asian genre in parallel
-        const [all, asian] = await Promise.all([
-          fetchCinemacityHome("all"),
-          fetchCinemacityGenre("asian", 1).catch(() => [] as Movie[]),
+        setLoading(true);
+        const [tr, popMov, popTV] = await Promise.all([
+          fetchTrending("week", "all"),
+          fetchPopular("movie"),
+          fetchPopular("tv"),
         ]);
-
-        if (cancelled) return;
-        setAllMovies(all);
-        setAsianMovies(asian);
-      } catch (err) {
-        if (cancelled) return;
-        setError(err instanceof Error ? err.message : "Failed to load content");
+        setTrending(tr);
+        setPopularMovies(popMov);
+        setPopularTV(popTV);
+      } catch (err: any) {
+        setError(err?.message || "Failed to load");
       } finally {
-        if (!cancelled) setLoading(false);
+        setLoading(false);
       }
     };
-
-    loadData();
-
-    return () => {
-      cancelled = true;
-    };
+    load();
   }, []);
 
-  // Pisahkan jadi movies & TV untuk section unik
-  const moviesOnly = allMovies.filter((m) => m.media_type === "movie");
-  const tvOnly = allMovies.filter((m) => m.media_type === "tv");
+  const handlePlay = (item: TMDBItem) => {
+    // Pastikan playerMedia punya imdbId
+    setPlayerMedia({
+      id: item.id,
+      imdbId: item.id.startsWith("tt") ? item.id : undefined,
+      tmdbId: item.tmdbId,
+      title: item.title,
+      type: item.type,
+      poster: item.poster,
+      backdrop: item.backdrop,
+      overview: item.overview,
+      seasons: item.seasons,
+    });
+  };
 
-  // Hero = first 5 movies dengan poster
-  const heroMovies = allMovies.filter((m) => m.poster_path).slice(0, 5);
+  if (loading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-zinc-950">
+        <div className="text-white/70">Loading...</div>
+      </div>
+    );
+  }
 
-  // TOP 10 = 10 first movies
-  const top10 = allMovies.slice(0, 10);
-
-  // Latest Movies (cuma movies, max 20)
-  const latestMovies = moviesOnly.slice(0, 20);
-  // TV Series (cuma TV, max 20)
-  const latestTV = tvOnly.slice(0, 20);
-  // Asian (max 20)
-  const asian = asianMovies.slice(0, 20);
+  if (error) {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center gap-3 bg-zinc-950 p-6">
+        <p className="text-red-400">Error: {error}</p>
+        <p className="text-xs text-white/50">
+          Pastikan TMDB_API_KEY sudah diset di Cloudflare Workers secrets
+        </p>
+      </div>
+    );
+  }
 
   return (
-    <main className="min-h-screen bg-background">
-      <Header />
-
-      {/* Hero */}
-      {loading ? (
-        <div className="flex h-[70vh] min-h-[480px] items-center justify-center bg-muted/20 md:h-[85vh]">
-          <div className="flex flex-col items-center gap-3">
-            <Loader2 className="h-10 w-10 animate-spin text-primary" />
-            <p className="text-sm text-muted-foreground">
-              Loading cinemacity content...
-            </p>
-          </div>
-        </div>
-      ) : error ? (
-        <div className="flex h-[70vh] min-h-[480px] flex-col items-center justify-center gap-3 px-4 text-center md:h-[85vh]">
-          <p className="text-sm text-destructive">{error}</p>
-          <button
-            onClick={() => window.location.reload()}
-            className="text-xs text-primary hover:underline"
-          >
-            Try again
-          </button>
-        </div>
-      ) : (
-        <HeroCarousel movies={heroMovies} />
+    <div className="min-h-screen bg-zinc-950 pb-20">
+      {/* HERO (Trending pertama) */}
+      {trending[0] && (
+        <HeroSection item={trending[0]} onPlay={handlePlay} />
       )}
 
-      {/* Content rows */}
-      <div className="relative z-10 space-y-8 pb-16 pt-6">
-        {/* Continue Watching */}
-        <WatchHistory />
+      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+        {/* Trending */}
+        <Section
+          title="Trending Minggu Ini"
+          icon={<TrendingUp className="h-5 w-5" />}
+          items={trending}
+          onPlay={handlePlay}
+        />
 
-        {/* TOP 10 — dengan angka elegan */}
-        {!loading && top10.length > 0 && (
-          <Top10Row title="Top 10 Movies & TV" movies={top10} />
-        )}
+        {/* Popular Movies */}
+        <Section
+          title="Film Populer"
+          icon={<Film className="h-5 w-5" />}
+          items={popularMovies}
+          onPlay={handlePlay}
+        />
 
-        {/* Latest Movies (max 20) */}
-        {!loading && latestMovies.length > 0 && (
-          <ContentRow title="🎬 Latest Movies" movies={latestMovies} />
-        )}
-
-        {/* TV Series (max 20) */}
-        {!loading && latestTV.length > 0 && (
-          <ContentRow title="📺 TV Series" movies={latestTV} />
-        )}
-
-        {/* Asian (max 20) */}
-        {!loading && asian.length > 0 && (
-          <ContentRow title="🌏 Asian" movies={asian} />
-        )}
+        {/* Popular TV */}
+        <Section
+          title="Series Populer"
+          icon={<Tv className="h-5 w-5" />}
+          items={popularTV}
+          onPlay={handlePlay}
+        />
       </div>
+    </div>
+  );
+}
 
-      <Footer />
+// ============================================================
+// Hero Section (backdrop besar + tombol Play)
+// ============================================================
+function HeroSection({ item, onPlay }: { item: TMDBItem; onPlay: (i: TMDBItem) => void }) {
+  return (
+    <div className="relative h-[60vh] min-h-[400px] w-full overflow-hidden">
+      <img
+        src={item.backdrop}
+        alt={item.title}
+        className="absolute inset-0 h-full w-full object-cover"
+      />
+      <div className="absolute inset-0 bg-gradient-to-t from-zinc-950 via-zinc-950/60 to-transparent" />
+      <div className="absolute inset-0 bg-gradient-to-r from-zinc-950/80 to-transparent" />
 
-      {/* Modals */}
-      <SearchModal />
-      <DetailModal />
-      <PlayerModal />
-    </main>
+      <div className="relative z-10 flex h-full flex-col justify-end p-6 sm:p-10 md:p-14">
+        <h1 className="max-w-2xl text-3xl font-bold text-white sm:text-4xl md:text-5xl">
+          {item.title}
+        </h1>
+        <div className="mt-3 flex items-center gap-3 text-sm text-white/80">
+          <span className="flex items-center gap-1">
+            <Star className="h-4 w-4 fill-yellow-500 text-yellow-500" />
+            {item.rating.toFixed(1)}
+          </span>
+          <span>•</span>
+          <span>{item.year}</span>
+          <span>•</span>
+          <span className="rounded bg-white/10 px-2 py-0.5 text-xs uppercase">
+            {item.type}
+          </span>
+        </div>
+        <p className="mt-3 max-w-xl text-sm text-white/70 line-clamp-3 sm:text-base">
+          {item.overview}
+        </p>
+        <div className="mt-5 flex gap-3">
+          <button
+            onClick={() => onPlay(item)}
+            className="flex items-center gap-2 rounded-md bg-white px-6 py-2.5 text-sm font-semibold text-black transition hover:bg-white/90"
+          >
+            <Play className="h-4 w-4 fill-black" />
+            Play
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
+// Section (horizontal scrollable poster grid)
+// ============================================================
+function Section({
+  title,
+  icon,
+  items,
+  onPlay,
+}: {
+  title: string;
+  icon?: React.ReactNode;
+  items: TMDBItem[];
+  onPlay: (i: TMDBItem) => void;
+}) {
+  if (!items.length) return null;
+  return (
+    <section className="mt-8">
+      <h2 className="mb-3 flex items-center gap-2 text-lg font-semibold text-white sm:text-xl">
+        {icon}
+        {title}
+      </h2>
+      <div className="flex gap-3 overflow-x-auto pb-3 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+        {items.map((item) => (
+          <button
+            key={`${item.id}-${item.type}`}
+            onClick={() => onPlay(item)}
+            className="group relative w-32 shrink-0 sm:w-40 md:w-44"
+          >
+            <div className="aspect-[2/3] overflow-hidden rounded-md bg-zinc-900">
+              <img
+                src={item.poster}
+                alt={item.title}
+                loading="lazy"
+                className="h-full w-full object-cover transition group-hover:scale-105"
+              />
+            </div>
+            <div className="absolute inset-0 flex items-center justify-center bg-black/60 opacity-0 transition group-hover:opacity-100">
+              <Play className="h-8 w-8 fill-white text-white" />
+            </div>
+            <div className="mt-2">
+              <p className="line-clamp-1 text-xs font-medium text-white sm:text-sm">
+                {item.title}
+              </p>
+              <p className="text-[10px] text-white/50">{item.year}</p>
+            </div>
+          </button>
+        ))}
+      </div>
+    </section>
   );
 }
