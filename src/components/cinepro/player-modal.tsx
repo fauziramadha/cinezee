@@ -208,17 +208,92 @@ function makeCustomLoader(Hls: any) {
       .join(nl);
   }
 
+  // ============================================================
+  // PROXY REWRITER: ganti URL vaplayer ke /api/vaplayer/proxy
+  // ============================================================
+  const VAPLAYER_DOMAINS = [
+    "onlinevisibilitysystem.site",
+    "quietmidnightgardeningideas.site",
+    "app.putgate.com",
+    "vidapi.cloud",
+  ];
+
+  function rewriteToProxy(url: string): string {
+    try {
+      // Kalau URL mengandung domain vaplayer, rewrite ke proxy
+      const isVaplayer = VAPLAYER_DOMAINS.some(d => url.includes(d));
+      if (!isVaplayer) return url;
+
+      // Encode URL ke base64 (URL-safe)
+      const encoded = btoa(url).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+      return `/api/vaplayer/proxy?u=${encoded}`;
+    } catch {
+      return url;
+    }
+  }
+
+  function rewriteM3u8Content(m3u8: string, baseUrl: string): string {
+    let result = m3u8;
+
+    // Rewrite URL absolut (https://...)
+    VAPLAYER_DOMAINS.forEach(domain => {
+      const regex = new RegExp(`https?://[^/]*${domain.replace(/\./g, "\\.")}[^\\s"']*`, "g");
+      result = result.replace(regex, (match) => {
+        const encoded = btoa(match).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+        return `/api/vaplayer/proxy?u=${encoded}`;
+      });
+    });
+
+    // Rewrite URL relatif (mulai dengan /)
+    let origin: string;
+    try {
+      origin = new URL(baseUrl).origin;
+    } catch {
+      origin = "";
+    }
+
+    if (origin) {
+      const lines = result.split(/\r?\n/);
+      const rewritten = lines.map(line => {
+        // Skip comment dan empty line
+        if (!line || line.startsWith("#")) return line;
+        // Skip kalau sudah proxy URL
+        if (line.startsWith("/api/") || line.startsWith("http")) {
+          // Kalau http dan bukan vaplayer domain, biarkan
+          if (line.startsWith("http") && !VAPLAYER_DOMAINS.some(d => line.includes(d))) {
+            return line;
+          }
+          // Kalau sudah /api/, biarkan
+          if (line.startsWith("/api/")) return line;
+        }
+        // Rewrite relative URL
+        if (line.startsWith("/")) {
+          const fullUrl = `${origin}${line}`;
+          const encoded = btoa(fullUrl).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+          return `/api/vaplayer/proxy?u=${encoded}`;
+        }
+        return line;
+      });
+      result = rewritten.join("\n");
+    }
+
+    return result;
+  }
+
   return class CustomLoader extends Hls.DefaultConfig.loader {
     load(context: any, config: any, callbacks: any) {
+      const originalUrl = context.url || "";
+
+      // === Rewrite URL ke proxy ===
+      const newUrl = rewriteToProxy(originalUrl);
+      context.url = newUrl;
+
       const onSuccess = callbacks.onSuccess;
       callbacks.onSuccess = (response: any, stats: any, ctx: any, details: any) => {
-        if (typeof response.data === "string") {
-          response.data = response.data.replace(
-            /\.(m3u8)\b/g,
-            (match: string) => `${match}?${Math.floor(Math.random() * 1e9)}`
-          );
-        }
-        if (context.type === "manifest" && typeof response.data === "string") {
+        // === Rewrite m3u8 content (URL di dalam m3u8) ===
+        if (typeof response.data === "string" && response.data.includes("#EXTM3U")) {
+          response.data = rewriteM3u8Content(response.data, originalUrl);
+          // Reorder audio tracks
           response.data = reorderAudioByLang(response.data);
         }
         if (onSuccess) onSuccess.call(this, response, stats, ctx, details);
