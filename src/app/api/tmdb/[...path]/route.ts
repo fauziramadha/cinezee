@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 
-export const runtime = "edge";
+// HAPUS "export const runtime = 'edge'" - pakai Node.js default (OpenNext Cloudflare)
 
 const TMDB_BASE = "https://api.themoviedb.org/3";
 const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
@@ -9,51 +9,46 @@ export async function GET(
   request: NextRequest,
   { params }: { params: { path: string[] } }
 ) {
-  // Baca API key dari process.env (Cloudflare Workers + OpenNext sudah inject ini)
-  const TMDB_KEY = 
-    process.env.TMDB_API_KEY || 
-    process.env.NEXT_PUBLIC_TMDB_API_KEY || 
-    "";
-
-  if (!TMDB_KEY) {
-    return NextResponse.json(
-      {
-        error: "TMDB_API_KEY belum diset di environment",
-        debug: {
-          process_env_exists: typeof process !== "undefined",
-          env_keys_count: typeof process !== "undefined" ? Object.keys(process.env).length : 0,
-          tmdb_keys: typeof process !== "undefined" 
-            ? Object.keys(process.env).filter(k => k.toUpperCase().includes("TMDB"))
-            : [],
-        },
-        hint: "Set TMDB_API_KEY sebagai Secret di Cloudflare Workers Dashboard",
-      },
-      { status: 500 }
-    );
-  }
-
-  // Reconstruct path
-  const pathSegments = params?.path || [];
-  if (pathSegments.length === 0) {
-    return NextResponse.json({ error: "Path required" }, { status: 400 });
-  }
-  const tmdbPath = "/" + pathSegments.join("/");
-
-  // Copy query params
-  const { searchParams } = new URL(request.url);
-  const tmdbParams = new URLSearchParams();
-  tmdbParams.set("api_key", TMDB_KEY);
-  tmdbParams.set("language", searchParams.get("language") || "en-US");
-
-  searchParams.forEach((value, key) => {
-    if (key !== "language" && key !== "api_key") {
-      tmdbParams.set(key, value);
-    }
-  });
-
-  const tmdbUrl = `${TMDB_BASE}${tmdbPath}?${tmdbParams.toString()}`;
-
   try {
+    const TMDB_KEY =
+      process.env.TMDB_API_KEY ||
+      process.env.NEXT_PUBLIC_TMDB_API_KEY ||
+      "";
+
+    if (!TMDB_KEY) {
+      return NextResponse.json(
+        {
+          error: "TMDB_API_KEY belum diset di environment",
+          debug: {
+            env_keys_count: typeof process !== "undefined" ? Object.keys(process.env).length : 0,
+            tmdb_keys: typeof process !== "undefined"
+              ? Object.keys(process.env).filter(k => k.toUpperCase().includes("TMDB"))
+              : [],
+          },
+        },
+        { status: 500 }
+      );
+    }
+
+    const pathSegments = params?.path || [];
+    if (pathSegments.length === 0) {
+      return NextResponse.json({ error: "Path required" }, { status: 400 });
+    }
+    const tmdbPath = "/" + pathSegments.join("/");
+
+    const { searchParams } = new URL(request.url);
+    const tmdbParams = new URLSearchParams();
+    tmdbParams.set("api_key", TMDB_KEY);
+    tmdbParams.set("language", searchParams.get("language") || "en-US");
+
+    searchParams.forEach((value, key) => {
+      if (key !== "language" && key !== "api_key") {
+        tmdbParams.set(key, value);
+      }
+    });
+
+    const tmdbUrl = `${TMDB_BASE}${tmdbPath}?${tmdbParams.toString()}`;
+
     const r = await fetch(tmdbUrl, {
       headers: {
         "User-Agent": UA,
@@ -85,7 +80,11 @@ export async function GET(
     });
   } catch (err: any) {
     return NextResponse.json(
-      { error: "TMDB fetch failed", message: err?.message, path: tmdbPath },
+      { 
+        error: "TMDB proxy crashed", 
+        message: err?.message || String(err),
+        stack: err?.stack?.split("\n").slice(0, 5),
+      },
       { status: 500 }
     );
   }
