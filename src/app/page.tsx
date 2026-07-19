@@ -11,8 +11,9 @@ import { Footer } from "@/components/cinepro/footer";
 import { HeroCarousel } from "@/components/cinepro/hero-carousel";
 import { MovieCard } from "@/components/cinepro/movie-card";
 
-const TMDB_KEY = process.env.NEXT_PUBLIC_TMDB_API_KEY || "";
-const TMDB_BASE = "https://api.themoviedb.org/3";
+// PENTING: Pakai proxy /api/tmdb/* (bukan direct TMDB call)
+// Proxy route baca TMDB_API_KEY dari server env (sudah confirmed work)
+const TMDB_PROXY = "/api/tmdb";
 const TMDB_IMG = "https://image.tmdb.org/t/p";
 
 interface MediaItem {
@@ -46,103 +47,123 @@ interface EpisodeItem {
 
 function imgUrl(path?: string | null, size: string = "w342"): string {
   if (!path) return "/placeholder-poster.png";
+  if (path.startsWith("http")) return path;
   return `${TMDB_IMG}/${size}${path}`;
 }
 
-async function fetchVidapiIds(type: "movie" | "tv", pages = 5): Promise<Set<string>> {
+// ============================================================
+// Fetch VidAPI raw (multiple pages paralel)
+// ============================================================
+async function fetchVidapiRaw(type: "movie" | "tv", pages = 5): Promise<any[]> {
   const endpoint = type === "movie" ? "movies" : "tvshows";
-  const ids = new Set<string>();
+  const allItems: any[] = [];
   await Promise.all(
     Array.from({ length: pages }, (_, i) => i + 1).map(async (page) => {
       try {
         const r = await fetch(`https://vidapi.ru/${endpoint}/latest/page-${page}.json`);
         if (!r.ok) return;
         const data = await r.json();
-        (data.items || []).forEach((item: any) => {
-          if (item.tmdb_id) ids.add(String(item.tmdb_id));
-        });
-      } catch {}
+        allItems.push(...(data.items || []));
+      } catch (e) {
+        console.warn(`[VidAPI] Failed page ${page}:`, e);
+      }
     })
   );
-  return ids;
+  return allItems;
 }
 
-async function fetchTMDB(endpoint: string): Promise<any[]> {
-  if (!TMDB_KEY) return [];
+// ============================================================
+// TMDB fetch via proxy (bukan direct call)
+// ============================================================
+async function tmdbFetch(path: string): Promise<any | null> {
   try {
-    const r = await fetch(`${TMDB_BASE}${endpoint}?api_key=${TMDB_KEY}&language=en-US&page=1`);
-    if (!r.ok) return [];
-    const data = await r.json();
-    return data.results || [];
-  } catch { return []; }
-}
-
-async function enrichItem(tmdbId: number, type: "movie" | "tv"): Promise<any | null> {
-  if (!TMDB_KEY || !tmdbId) return null;
-  try {
-    const r = await fetch(
-      `${TMDB_BASE}/${type}/${tmdbId}?api_key=${TMDB_KEY}&language=en-US&append_to_response=external_ids,images&include_image_language=en,null`
-    );
+    const r = await fetch(`${TMDB_PROXY}${path}`);
     if (!r.ok) return null;
     return await r.json();
-  } catch { return null; }
+  } catch (e) {
+    console.warn(`[TMDB proxy] failed: ${path}`, e);
+    return null;
+  }
 }
 
-async function fetchFilteredMedia(type: "movie" | "tv"): Promise<MediaItem[]> {
-  const vidapiIds = await fetchVidapiIds(type, 5);
-
-  const endpoints = type === "movie"
-    ? ["/movie/now_playing", "/movie/popular"]
-    : ["/tv/popular", "/tv/airing_today"];
-
-  const [list1, list2] = await Promise.all(endpoints.map(fetchTMDB));
-
-  const seen = new Set<number>();
-  const merged = [...list1, ...list2]
-    .filter(m => {
-      if (seen.has(m.id)) return false;
-      seen.add(m.id);
-      return true;
-    })
-    .sort((a, b) => (b.popularity || 0) - (a.popularity || 0));
-
-  const available = merged.filter(m => vidapiIds.has(String(m.id)));
-
-  const top = available.slice(0, 30);
-  const enriched = await Promise.all(
-    top.map(async (m) => {
-      const detail = await enrichItem(m.id, type);
-      const logo = detail?.images?.logos?.find((l: any) => l.iso_639_1 === "en")
-                || detail?.images?.logos?.[0];
-      return {
-        id: detail?.external_ids?.imdb_id || `tmdb-${m.id}`,
-        tmdbId: m.id,
-        imdbId: detail?.external_ids?.imdb_id,
-        title: m.title || m.name || "Untitled",
-        type,
-        poster: imgUrl(m.poster_path, "w342"),
-        backdrop: imgUrl(m.backdrop_path, "w1280"),
-        logo: logo ? imgUrl(logo.file_path, "w500") : undefined,
-        overview: m.overview || "",
-        year: (m.release_date || m.first_air_date || "").slice(0, 4),
-        rating: m.vote_average || 0,
-        genre: m.genre_ids?.length ? String(m.genre_ids[0]) : undefined,
-        seasons: type === "tv" && detail?.seasons
-          ? detail.seasons
-              .filter((s: any) => s.season_number > 0)
-              .map((s: any) => ({
-                seasonNumber: s.season_number,
-                episodeCount: s.episode_count,
-                name: s.name,
-              }))
-          : undefined,
-      } as MediaItem;
-    })
+// ============================================================
+// Enrich dengan TMDB detail (via proxy)
+// ============================================================
+async function enrichItemWithTMDB(tmdbId: number, type: "movie" | "tv"): Promise<any | null> {
+  if (!tmdbId) return null;
+  return await tmdbFetch(
+    `/${type}/${tmdbId}?append_to_response=external_ids,images&include_image_language=en,null`
   );
-
-  return enriched;
 }
 
+// ============================================================
+// MAIN: VidAPI primary + TMDB enrich + sort by TMDB popularity
+// ============================================================
+async function fetchFilteredMedia(type: "movie" | "tv"): Promise<MediaItem[]> {
+  // 1. Fetch VidAPI raw (5 pages paralel = ~120 items)
+  const vidapiItems = await fetchVidapiRaw(type, 5);
+  console.log(`[Home] VidAPI ${type} raw: ${vidapiItems.length} items`);
+
+  // 2. Filter longgar: ada tmdb_id + ada poster (tidak filter year/rating ketat)
+  const filtered = vidapiItems.filter(item =>
+    item.tmdb_id && item.poster_url
+  );
+  console.log(`[Home] VidAPI ${type} after basic filter: ${filtered.length} items`);
+
+  // 3. Enrich dengan TMDB (batch 10 paralel)
+  const batchSize = 10;
+  const enriched: (MediaItem & { _popularity: number })[] = [];
+
+  for (let i = 0; i < filtered.length; i += batchSize) {
+    const batch = filtered.slice(i, i + batchSize);
+    const batchResults = await Promise.all(
+      batch.map(async (item) => {
+        const tmdbId = parseInt(item.tmdb_id, 10) || 0;
+        const detail = await enrichItemWithTMDB(tmdbId, type);
+
+        const logo = detail?.images?.logos?.find((l: any) => l.iso_639_1 === "en")
+                  || detail?.images?.logos?.[0];
+
+        return {
+          id: detail?.external_ids?.imdb_id || item.imdb_id || `tmdb-${item.tmdb_id}`,
+          tmdbId,
+          imdbId: detail?.external_ids?.imdb_id || item.imdb_id,
+          title: detail?.title || detail?.name || item.title || "Untitled",
+          type,
+          poster: detail?.poster_path ? imgUrl(detail.poster_path, "w342") : item.poster_url,
+          backdrop: detail?.backdrop_path ? imgUrl(detail.backdrop_path, "w1280") : item.poster_url,
+          logo: logo ? imgUrl(logo.file_path, "w500") : undefined,
+          overview: detail?.overview || "",
+          year: detail?.release_date?.slice(0, 4) || detail?.first_air_date?.slice(0, 4) || item.year || "",
+          rating: detail?.vote_average || parseFloat(item.rating) || 0,
+          genre: detail?.genres?.length ? detail.genres.map((g: any) => g.name).join(", ") : item.genre,
+          seasons: type === "tv" && detail?.seasons
+            ? detail.seasons
+                .filter((s: any) => s.season_number > 0)
+                .map((s: any) => ({
+                  seasonNumber: s.season_number,
+                  episodeCount: s.episode_count,
+                  name: s.name,
+                }))
+            : undefined,
+          _popularity: detail?.popularity || 0,
+        } as MediaItem & { _popularity: number };
+      })
+    );
+    enriched.push(...batchResults);
+  }
+  console.log(`[Home] ${type} enriched: ${enriched.length} items`);
+
+  // 4. Sort by TMDB popularity descending
+  const sorted = enriched.sort((a, b) => (b._popularity || 0) - (a._popularity || 0));
+
+  // 5. Strip _popularity, return top 30
+  return sorted.slice(0, 30).map(({ _popularity, ...rest }) => rest);
+}
+
+// ============================================================
+// Fetch latest episodes dengan TMDB stills (via proxy)
+// ============================================================
 async function fetchLatestEpisodesWithStills(): Promise<EpisodeItem[]> {
   try {
     const r = await fetch("https://vidapi.ru/episodes/latest/page-1.json");
@@ -168,13 +189,12 @@ async function fetchLatestEpisodesWithStills(): Promise<EpisodeItem[]> {
             airDate: ep.air_date,
             embedUrl: ep.embed_url,
           };
-          if (TMDB_KEY && item.showTmdbId > 0) {
+          if (item.showTmdbId > 0) {
             try {
-              const r = await fetch(
-                `${TMDB_BASE}/tv/${item.showTmdbId}/season/${item.season}/episode/${item.episode}?api_key=${TMDB_KEY}&language=en-US`
+              const data = await tmdbFetch(
+                `/tv/${item.showTmdbId}/season/${item.season}/episode/${item.episode}`
               );
-              if (r.ok) {
-                const data = await r.json();
+              if (data) {
                 if (data.still_path) item.still = imgUrl(data.still_path, "w300");
                 if (data.overview) item.overview = data.overview;
               }
