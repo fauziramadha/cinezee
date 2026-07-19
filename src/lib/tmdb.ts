@@ -1,30 +1,10 @@
 // ============================================================
-// TMDB Client - Langsung dari browser (no Worker proxy needed)
-// Backward-compatible: mendukung nama function lama & baru.
+// TMDB Client - Via Worker Proxy (API key tidak ke-expose ke client)
+// Pakai /api/tmdb/* proxy yang baca TMDB_API_KEY dari server env
 // ============================================================
 
-// Server-side API key (untuk API routes)
-const SERVER_TMDB_KEY = process.env.TMDB_API_KEY || process.env.NEXT_PUBLIC_TMDB_API_KEY || "";
-// Client-side API key (untuk komponen client)
-const CLIENT_TMDB_KEY = process.env.NEXT_PUBLIC_TMDB_API_KEY || "";
-
-// Pilih yang tersedia (prefer server-side untuk API routes)
-const TMDB_API_KEY = SERVER_TMDB_KEY || CLIENT_TMDB_KEY;
-const TMDB_BASE = "https://api.themoviedb.org/3";
+const TMDB_BASE = "/api/tmdb";  // proxy ke Worker
 const IMG_BASE = "https://image.tmdb.org/t/p";
-
-// Export konstanta untuk backward-compatibility dengan file lama
-export { TMDB_API_KEY, TMDB_BASE, IMG_BASE };
-
-// Alias untuk variasi nama yang mungkin dipakai
-export const TMDB_IMAGE_BASE = IMG_BASE;
-export const TMDB_IMG_BASE = IMG_BASE;
-export const TMDB_API_BASE = TMDB_BASE;
-export const TMDB_BASE_URL = TMDB_BASE;
-export const TMDB_KEY = TMDB_API_KEY;
-export const API_KEY = TMDB_API_KEY;
-export const TMDB_API_KEY_SERVER = SERVER_TMDB_KEY;
-export const TMDB_API_KEY_CLIENT = CLIENT_TMDB_KEY;
 
 // ============================================================
 // Types
@@ -44,7 +24,6 @@ export interface MediaItem {
   genres?: number[];
 }
 
-// Alias untuk compatibility dengan kode lama
 export type Movie = MediaItem;
 export type TVShow = MediaItem;
 
@@ -77,7 +56,6 @@ export interface Episode {
 // ============================================================
 export function getImageUrl(path?: string | null, size: string = "w342"): string {
   if (!path) return "/placeholder-poster.png";
-  // Kalau path sudah full URL, return as-is
   if (path.startsWith("http")) return path;
   return `${IMG_BASE}/${size}${path}`;
 }
@@ -105,16 +83,18 @@ export function getStillUrl(path?: string | null, size: "w300" | "w780" | "origi
 }
 
 // ============================================================
-// Internal fetch helper
+// Internal fetch helper (via Worker proxy)
 // ============================================================
 async function tmdbFetch(path: string, params: Record<string, string> = {}): Promise<any> {
-  if (!TMDB_API_KEY) throw new Error("NEXT_PUBLIC_TMDB_API_KEY belum diset");
-  const url = new URL(`${TMDB_BASE}${path}`);
-  url.searchParams.set("api_key", TMDB_API_KEY);
+  const url = new URL(`${TMDB_BASE}${path}`, window.location.origin);
   url.searchParams.set("language", "en-US");
   Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
+
   const r = await fetch(url.toString());
-  if (!r.ok) throw new Error(`TMDB error ${r.status}: ${path}`);
+  if (!r.ok) {
+    const errText = await r.text().catch(() => "");
+    throw new Error(`TMDB ${r.status}: ${errText.slice(0, 200) || r.statusText}`);
+  }
   return r.json();
 }
 
@@ -242,7 +222,7 @@ export async function fetchDiscover(
 }
 
 // ============================================================
-// Detail (movie / tv / person)
+// Detail
 // ============================================================
 export async function fetchDetail(tmdbId: number, type: "movie" | "tv"): Promise<MediaItem | null> {
   try {
@@ -272,32 +252,28 @@ export async function fetchDetail(tmdbId: number, type: "movie" | "tv"): Promise
 }
 
 export async function fetchMovieDetail(tmdbId: number): Promise<any> {
-  const data = await tmdbFetch(`/movie/${tmdbId}`, {
+  return tmdbFetch(`/movie/${tmdbId}`, {
     append_to_response: "external_ids,credits,videos,similar,recommendations,images,release_dates",
   });
-  return data;
 }
 
 export async function fetchTVDetail(tmdbId: number): Promise<any> {
-  const data = await tmdbFetch(`/tv/${tmdbId}`, {
+  return tmdbFetch(`/tv/${tmdbId}`, {
     append_to_response: "external_ids,credits,videos,similar,recommendations,images,content_ratings",
   });
-  return data;
 }
 
 export async function fetchPersonDetail(personId: number): Promise<any> {
-  const data = await tmdbFetch(`/person/${personId}`, {
+  return tmdbFetch(`/person/${personId}`, {
     append_to_response: "movie_credits,tv_credits,images,external_ids",
   });
-  return data;
 }
 
 // ============================================================
 // Season & Episode
 // ============================================================
 export async function fetchSeason(tvId: number, seasonNumber: number): Promise<any> {
-  const data = await tmdbFetch(`/tv/${tvId}/season/${seasonNumber}`);
-  return data;
+  return tmdbFetch(`/tv/${tvId}/season/${seasonNumber}`);
 }
 
 export async function fetchEpisode(
@@ -305,8 +281,7 @@ export async function fetchEpisode(
   seasonNumber: number,
   episodeNumber: number,
 ): Promise<any> {
-  const data = await tmdbFetch(`/tv/${tvId}/season/${seasonNumber}/episode/${episodeNumber}`);
-  return data;
+  return tmdbFetch(`/tv/${tvId}/season/${seasonNumber}/episode/${episodeNumber}`);
 }
 
 // ============================================================
@@ -368,7 +343,6 @@ export async function fetchGenres(type: "movie" | "tv" = "movie"): Promise<Genre
 }
 
 export async function fetchNetworks(): Promise<any[]> {
-  // TMDB tidak punya endpoint list networks, pakai hardcode popular
   return [
     { id: 213, name: "Netflix" },
     { id: 1024, name: "Amazon Prime" },
@@ -376,14 +350,14 @@ export async function fetchNetworks(): Promise<any[]> {
     { id: 453, name: "Hulu" },
     { id: 49, name: "HBO" },
     { id: 4330, name: "Apple TV+" },
-    { id: 60, name: " Paramount+" },
+    { id: 60, name: "Paramount+" },
     { id: 25, name: "ABC" },
     { id: 2, name: "BBC" },
   ];
 }
 
 // ============================================================
-// External IDs helper
+// External IDs
 // ============================================================
 export async function fetchImdbId(tmdbId: number, type: "movie" | "tv"): Promise<string | null> {
   try {
@@ -395,8 +369,7 @@ export async function fetchImdbId(tmdbId: number, type: "movie" | "tv"): Promise
 }
 
 export async function fetchExternalIds(tmdbId: number, type: "movie" | "tv"): Promise<any> {
-  const data = await tmdbFetch(`/${type}/${tmdbId}/external_ids`);
-  return data;
+  return tmdbFetch(`/${type}/${tmdbId}/external_ids`);
 }
 
 // ============================================================
@@ -421,8 +394,7 @@ export async function fetchSimilar(
 }
 
 export async function fetchCredits(tmdbId: number, type: "movie" | "tv"): Promise<any> {
-  const data = await tmdbFetch(`/${type}/${tmdbId}/credits`);
-  return data;
+  return tmdbFetch(`/${type}/${tmdbId}/credits`);
 }
 
 export async function fetchVideos(tmdbId: number, type: "movie" | "tv"): Promise<any[]> {
@@ -431,74 +403,65 @@ export async function fetchVideos(tmdbId: number, type: "movie" | "tv"): Promise
 }
 
 // ============================================================
-// =============================================================
-// BACKWARD-COMPATIBLE ALIASES (untuk file lama)
-// Semua function dengan prefix "get" di-mapping ke "fetch"
-// =============================================================
-// =============================================================
-
+// BACKWARD-COMPATIBLE ALIASES
+// ============================================================
 export const getTrending = fetchTrending;
 export const getTrendingMovies = fetchTrendingMovies;
 export const getTrendingTV = fetchTrendingTV;
-
 export const getNowPlaying = fetchNowPlaying;
 export const getPopularMovies = fetchPopularMovies;
 export const getTopRatedMovies = fetchTopRatedMovies;
 export const getUpcomingMovies = fetchUpcomingMovies;
-
 export const getPopularTV = fetchPopularTV;
 export const getTopRatedTV = fetchTopRatedTV;
 export const getAiringTodayTV = fetchAiringTodayTV;
 export const getOnTheAirTV = fetchOnTheAirTV;
-
-// Alias umum: getMovies / getTVShows
 export const getMovies = fetchPopularMovies;
 export const getTVShows = fetchPopularTV;
 export const getPopular = fetchPopularMovies;
-
 export const getTopRated = fetchTopRatedMovies;
 export const getUpcoming = fetchUpcomingMovies;
 export const getNowPlayingMovies = fetchNowPlaying;
-
 export const getByGenre = fetchByGenre;
 export const getDiscover = fetchDiscover;
-
 export const getDetail = fetchDetail;
 export const getMovieDetail = fetchMovieDetail;
 export const getTVDetail = fetchTVDetail;
 export const getTVShowDetail = fetchTVDetail;
 export const getPersonDetail = fetchPersonDetail;
 export const getPerson = fetchPersonDetail;
-
 export const getSeason = fetchSeason;
 export const getSeasonDetail = fetchSeason;
 export const getEpisode = fetchEpisode;
 export const getEpisodeDetail = fetchEpisode;
-
 export const search = searchMulti;
 export const getSearch = searchMulti;
 export const getSearchMovies = searchMovies;
 export const getSearchTV = searchTV;
 export const getSearchPeople = searchPeople;
-
 export const getGenres = fetchGenres;
 export const getGenreList = fetchGenres;
 export const getNetworks = fetchNetworks;
-
 export const getImdbId = fetchImdbId;
 export const getExternalIds = fetchExternalIds;
-
 export const getRecommendations = fetchRecommendations;
 export const getSimilar = fetchSimilar;
 export const getCredits = fetchCredits;
 export const getVideos = fetchVideos;
-
-// Image helpers alias
 export const getImagePath = getImageUrl;
 export const getStill = getStillUrl;
 export const getProfile = getProfileUrl;
 
-// Default export untuk memudahkan import
+// Export konstanta untuk backward-compatibility dengan API routes lama
+export const TMDB_API_KEY = "";  // Tidak dipakai di client lagi
+export const TMDB_IMAGE_BASE = IMG_BASE;
+export const TMDB_IMG_BASE = IMG_BASE;
+export const TMDB_API_BASE = "https://api.themoviedb.org/3";
+export const TMDB_BASE_URL = "https://api.themoviedb.org/3";
+export const TMDB_BASE = "https://api.themoviedb.org/3";
+export const TMDB_KEY = "";
+export const API_KEY = "";
+
 export default {
   fetchTrending,
   fetchPopularMovies,
