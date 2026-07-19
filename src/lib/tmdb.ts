@@ -3,9 +3,28 @@
 // Backward-compatible: mendukung nama function lama & baru
 // ============================================================
 
-const TMDB_API_KEY = process.env.NEXT_PUBLIC_TMDB_API_KEY || "";
+// Server-side API key (untuk API routes)
+const SERVER_TMDB_KEY = process.env.TMDB_API_KEY || process.env.NEXT_PUBLIC_TMDB_API_KEY || "";
+// Client-side API key (untuk komponen client)
+const CLIENT_TMDB_KEY = process.env.NEXT_PUBLIC_TMDB_API_KEY || "";
+
+// Pilih yang tersedia (prefer server-side untuk API routes)
+const TMDB_API_KEY = SERVER_TMDB_KEY || CLIENT_TMDB_KEY;
 const TMDB_BASE = "https://api.themoviedb.org/3";
 const IMG_BASE = "https://image.tmdb.org/t/p";
+
+// Export konstanta untuk backward-compatibility dengan file lama
+export { TMDB_API_KEY, TMDB_BASE, IMG_BASE };
+
+// Alias untuk variasi nama yang mungkin dipakai
+export const TMDB_IMAGE_BASE = IMG_BASE;
+export const TMDB_IMG_BASE = IMG_BASE;
+export const TMDB_API_BASE = TMDB_BASE;
+export const TMDB_BASE_URL = TMDB_BASE;
+export const TMDB_KEY = TMDB_API_KEY;
+export const API_KEY = TMDB_API_KEY;
+export const TMDB_API_KEY_SERVER = SERVER_TMDB_KEY;
+export const TMDB_API_KEY_CLIENT = CLIENT_TMDB_KEY;
 
 // ============================================================
 // Types
