@@ -47,6 +47,42 @@ interface PlayerMediaSeason {
   name?: string;
 }
 
+// ============================================================
+// PROXY WRAPPER (untuk Safari/iPhone native HLS player)
+// Pakai URL-encoded (bukan base64) supaya konsisten dengan proxy route
+// ============================================================
+const VAPLAYER_DOMAINS = [
+  "onlinevisibilitysystem.site",
+  "quietmidnightgardeningideas.site",
+  "app.putgate.com",
+  "vidapi.cloud",
+];
+
+function wrapWithProxy(url: string): string {
+  if (!url) return url;
+  // Kalau URL mengandung domain vaplayer, rewrite ke proxy
+  const isVaplayer = VAPLAYER_DOMAINS.some(d => url.includes(d));
+  if (!isVaplayer) return url;
+  // URL-encode supaya aman di query string
+  return `/api/vaplayer/proxy?u=${encodeURIComponent(url)}`;
+}
+
+// Helper: extract URL asli dari proxy URL (untuk label hostname)
+function getOriginalUrl(url: string): string {
+  if (url.startsWith("/api/vaplayer/proxy?u=")) {
+    try {
+      const params = new URLSearchParams(url.split("?")[1]);
+      return params.get("u") || url;
+    } catch {
+      return url;
+    }
+  }
+  return url;
+}
+
+// ============================================================
+// SUBTITLE PREFERENCE
+// ============================================================
 const SUBTITLE_PREF_KEY = "cinestream_subtitle_pref";
 
 function getSavedSubtitlePref(): { label: string; language: string } | null {
@@ -143,10 +179,12 @@ function extractImdbId(media: any): string | null {
   return null;
 }
 
+// Update: labelFromStreamUrl pakai getOriginalUrl supaya hostname tetap kebaca
 function labelFromStreamUrl(url: string, idx: number): string {
+  const originalUrl = getOriginalUrl(url);
   let hostname = "unknown";
   try {
-    hostname = new URL(url).hostname;
+    hostname = new URL(originalUrl).hostname;
   } catch {}
   if (hostname.includes("putgate"))           return `Server ${idx + 1} (Mirror)`;
   if (hostname.includes("onlinevisibility"))  return `Server ${idx + 1} (HD)`;
@@ -172,6 +210,9 @@ function buildEpisodesFromSeasons(seasons: PlayerMediaSeason[]): StreamEpisode[]
   return eps;
 }
 
+// ============================================================
+// HLS.js Loader (dengan proxy rewriter - URL-encoded)
+// ============================================================
 let hlsPromise: Promise<any> | null = null;
 async function loadHls(): Promise<any> {
   if (typeof window === "undefined") return null;
@@ -208,30 +249,12 @@ function makeCustomLoader(Hls: any) {
       .join(nl);
   }
 
-  // ============================================================
-  // PROXY REWRITER: ganti URL vaplayer ke /api/vaplayer/proxy
-  // ============================================================
-  const VAPLAYER_DOMAINS = [
-    "onlinevisibilitysystem.site",
-    "quietmidnightgardeningideas.site",
-    "app.putgate.com",
-    "vidapi.cloud",
-  ];
-
+  // Rewrite URL ke proxy (URL-encoded)
   function rewriteToProxy(url: string): string {
-    try {
-      // Kalau URL mengandung domain vaplayer, rewrite ke proxy
-      const isVaplayer = VAPLAYER_DOMAINS.some(d => url.includes(d));
-      if (!isVaplayer) return url;
-
-      // Encode URL ke base64 (URL-safe)
-      const encoded = btoa(url).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
-      return `/api/vaplayer/proxy?u=${encoded}`;
-    } catch {
-      return url;
-    }
+    return wrapWithProxy(url);
   }
 
+  // Rewrite m3u8 content (URL di dalam m3u8 jadi proxy URL juga)
   function rewriteM3u8Content(m3u8: string, baseUrl: string): string {
     let result = m3u8;
 
@@ -239,8 +262,7 @@ function makeCustomLoader(Hls: any) {
     VAPLAYER_DOMAINS.forEach(domain => {
       const regex = new RegExp(`https?://[^/]*${domain.replace(/\./g, "\\.")}[^\\s"']*`, "g");
       result = result.replace(regex, (match) => {
-        const encoded = btoa(match).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
-        return `/api/vaplayer/proxy?u=${encoded}`;
+        return `/api/vaplayer/proxy?u=${encodeURIComponent(match)}`;
       });
     });
 
@@ -255,22 +277,14 @@ function makeCustomLoader(Hls: any) {
     if (origin) {
       const lines = result.split(/\r?\n/);
       const rewritten = lines.map(line => {
-        // Skip comment dan empty line
         if (!line || line.startsWith("#")) return line;
-        // Skip kalau sudah proxy URL
-        if (line.startsWith("/api/") || line.startsWith("http")) {
-          // Kalau http dan bukan vaplayer domain, biarkan
-          if (line.startsWith("http") && !VAPLAYER_DOMAINS.some(d => line.includes(d))) {
-            return line;
-          }
-          // Kalau sudah /api/, biarkan
-          if (line.startsWith("/api/")) return line;
+        if (line.startsWith("/api/")) return line;
+        if (line.startsWith("http") && !VAPLAYER_DOMAINS.some(d => line.includes(d))) {
+          return line;
         }
-        // Rewrite relative URL
         if (line.startsWith("/")) {
           const fullUrl = `${origin}${line}`;
-          const encoded = btoa(fullUrl).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
-          return `/api/vaplayer/proxy?u=${encoded}`;
+          return `/api/vaplayer/proxy?u=${encodeURIComponent(fullUrl)}`;
         }
         return line;
       });
@@ -290,10 +304,8 @@ function makeCustomLoader(Hls: any) {
 
       const onSuccess = callbacks.onSuccess;
       callbacks.onSuccess = (response: any, stats: any, ctx: any, details: any) => {
-        // === Rewrite m3u8 content (URL di dalam m3u8) ===
         if (typeof response.data === "string" && response.data.includes("#EXTM3U")) {
           response.data = rewriteM3u8Content(response.data, originalUrl);
-          // Reorder audio tracks
           response.data = reorderAudioByLang(response.data);
         }
         if (onSuccess) onSuccess.call(this, response, stats, ctx, details);
@@ -303,6 +315,9 @@ function makeCustomLoader(Hls: any) {
   };
 }
 
+// ============================================================
+// PLAYER MODAL COMPONENT
+// ============================================================
 export function PlayerModal() {
   const { playerMedia, closePlayer, addToHistory, updateHistoryProgress, history } = useAppStore();
 
@@ -473,9 +488,10 @@ export function PlayerModal() {
                     ep.episode,
                   );
                   if (fresh.stream_urls.length > 0) {
+                    // === WRAP dengan proxy supaya Safari/iPhone juga work ===
                     const newServers: ServerOption[] = fresh.stream_urls.map((u, i) => ({
                       title: labelFromStreamUrl(u.url, i),
-                      streamUrl: u.url,
+                      streamUrl: wrapWithProxy(u.url),
                     }));
                     setServers(newServers);
                     setCurrentServerIdx(0);
@@ -498,7 +514,6 @@ export function PlayerModal() {
       setError("Failed to load video player");
     }
   }, [changeStreamSource, retryCount, servers, currentServerIdx]);
-
   // ============================================================
   // FETCH STREAM URL when player opens
   // ============================================================
@@ -580,9 +595,10 @@ export function PlayerModal() {
             throw new Error("Stream URL tidak tersedia untuk episode ini.");
           }
 
+          // === WRAP dengan proxy supaya Safari/iPhone juga work ===
           const newServers: ServerOption[] = data.stream_urls.map((u, i) => ({
             title: labelFromStreamUrl(u.url, i),
-            streamUrl: u.url,
+            streamUrl: wrapWithProxy(u.url),
           }));
           setServers(newServers);
           setCurrentServerIdx(0);
@@ -609,9 +625,10 @@ export function PlayerModal() {
             throw new Error("Stream URL tidak tersedia untuk film ini.");
           }
 
+          // === WRAP dengan proxy supaya Safari/iPhone juga work ===
           const newServers: ServerOption[] = data.stream_urls.map((u, i) => ({
             title: labelFromStreamUrl(u.url, i),
-            streamUrl: u.url,
+            streamUrl: wrapWithProxy(u.url),
           }));
           setServers(newServers);
           setCurrentServerIdx(0);
@@ -806,6 +823,7 @@ export function PlayerModal() {
     video.addEventListener("loadedmetadata", onLoadedMetadata);
     return () => video.removeEventListener("loadedmetadata", onLoadedMetadata);
   }, [playerMedia, streamUrl, history]);
+
   // ============================================================
   // EPISODE CHANGE (TV only) - fetch stream URL on-demand
   // ============================================================
@@ -839,9 +857,10 @@ export function PlayerModal() {
         throw new Error("Stream URL tidak tersedia untuk episode ini.");
       }
 
+      // === WRAP dengan proxy supaya Safari/iPhone juga work ===
       const newServers: ServerOption[] = data.stream_urls.map((u, i) => ({
         title: labelFromStreamUrl(u.url, i),
-        streamUrl: u.url,
+        streamUrl: wrapWithProxy(u.url),
       }));
       setServers(newServers);
       setCurrentServerIdx(0);
@@ -1043,7 +1062,6 @@ export function PlayerModal() {
   const hasMultipleQualities = availableQualities.length > 1;
   const hasMultipleAudio = availableAudioTracks.length > 1;
   const showControlsBar = isTV || hasMultipleServers || hasMultipleQualities || hasMultipleAudio;
-
   return (
     <Dialog open={!!playerMedia} onOpenChange={(open) => !open && closePlayer()}>
       <DialogContent className="max-w-[95vw] overflow-hidden rounded-xl border-0 bg-black p-0 md:max-w-5xl">
