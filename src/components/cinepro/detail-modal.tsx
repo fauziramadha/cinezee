@@ -80,30 +80,70 @@ export function DetailModal() {
       if (cancelled) return;
       setLoading(true); setError(null);
       try {
-        // === Coba fetch dari /api/detail/[id] dulu ===
-        let data: MovieDetail | null = null;
-        try {
-          const res = await fetch(`/api/detail/${selectedMedia.id}?type=${selectedMedia.type}`);
-          if (res.ok) {
-            data = await res.json();
+        // === Extract TMDB ID dari berbagai format ===
+        let tmdbId: number = 0;
+        if ((selectedMedia as any).tmdbId) {
+          tmdbId = (selectedMedia as any).tmdbId;
+        } else if (typeof selectedMedia.id === "number") {
+          tmdbId = selectedMedia.id;
+        } else if (typeof selectedMedia.id === "string") {
+          if (selectedMedia.id.startsWith("tmdb-")) {
+            tmdbId = parseInt(selectedMedia.id.replace("tmdb-", ""), 10);
+          } else if (/^\d+$/.test(selectedMedia.id)) {
+            tmdbId = parseInt(selectedMedia.id, 10);
           }
-        } catch (e) {
-          console.warn("[Detail] /api/detail failed, fallback to tmdb.ts:", e);
+          // Kalau format "tt1375666" (IMDB ID), tmdbId tetap 0
         }
 
-        // === Fallback: pakai tmdb.ts langsung (lewati proxy lama) ===
-        if (!data) {
-          console.log("[Detail] Using tmdb.ts fetchDetail fallback");
-          const tmdbId = typeof selectedMedia.id === "string" && selectedMedia.id.startsWith("tt")
-            ? 0  // IMDB ID, tidak bisa pakai fetchDetail (butuh TMDB id)
-            : Number(selectedMedia.id);
-          if (tmdbId > 0) {
-            data = await fetchDetail(tmdbId, selectedMedia.type as "movie" | "tv");
+        let data: MovieDetail | null = null;
+
+        // === Method 1: Coba /api/detail/[numeric-id] ===
+        if (tmdbId > 0) {
+          try {
+            const res = await fetch(`/api/detail/${tmdbId}?type=${selectedMedia.type}`);
+            if (res.ok) {
+              data = await res.json();
+            }
+          } catch (e) {
+            console.warn("[Detail] /api/detail failed, fallback to tmdb.ts:", e);
           }
+        }
+
+        // === Method 2: Fallback pakai tmdb.ts fetchDetail (via proxy) ===
+        if (!data && tmdbId > 0) {
+          console.log("[Detail] Using tmdb.ts fetchDetail fallback");
+          data = await fetchDetail(tmdbId, selectedMedia.type as "movie" | "tv");
+        }
+
+        // === Method 3: Kalau selectedMedia.id adalah IMDB ID (tt-xxx), 
+        // pakai selectedMedia apa adanya sebagai "detail" ===
+        if (!data && typeof selectedMedia.id === "string" && selectedMedia.id.startsWith("tt")) {
+          console.log("[Detail] Using selectedMedia as detail (IMDB ID mode)");
+          data = {
+            id: 0,
+            title: selectedMedia.title,
+            name: selectedMedia.type === "tv" ? selectedMedia.title : undefined,
+            overview: (selectedMedia as any).overview || "No overview available.",
+            poster_path: (selectedMedia as any).poster || null,
+            backdrop_path: (selectedMedia as any).backdrop || null,
+            vote_average: (selectedMedia as any).rating || 0,
+            vote_count: 0,
+            release_date: (selectedMedia as any).year ? `${(selectedMedia as any).year}-01-01` : undefined,
+            first_air_date: (selectedMedia as any).year ? `${(selectedMedia as any).year}-01-01` : undefined,
+            media_type: selectedMedia.type,
+            genres: [],
+            runtime: undefined,
+            status: "Released",
+            tagline: "",
+            credits: { cast: [], crew: [] },
+            videos: { results: [] },
+            similar: { results: [] },
+            recommendations: { results: [] },
+          } as MovieDetail;
         }
 
         if (cancelled) return;
-        if (!data) throw new Error("Failed to load detail from both proxy and TMDB");
+        if (!data) throw new Error("Failed to load detail. TMDB ID tidak ditemukan.");
 
         setDetail(data);
 
@@ -114,10 +154,10 @@ export function DetailModal() {
                        (typeof selectedMedia.id === "string" && selectedMedia.id.startsWith("tt") ? selectedMedia.id : null);
         if (imdbId) {
           setCachedImdbId(imdbId);
-        } else {
-          // Coba fetch imdbId terpisah kalau belum ada
+        } else if (tmdbId > 0) {
+          // Coba fetch imdbId terpisah
           try {
-            const fetched = await fetchImdbId(Number(selectedMedia.id), selectedMedia.type as "movie" | "tv");
+            const fetched = await fetchImdbId(tmdbId, selectedMedia.type as "movie" | "tv");
             if (fetched) setCachedImdbId(fetched);
           } catch {}
         }
