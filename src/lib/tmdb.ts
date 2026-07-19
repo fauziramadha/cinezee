@@ -1,6 +1,6 @@
 // ============================================================
 // TMDB Client - Langsung dari browser (no Worker proxy needed)
-// Backward-compatible: mendukung nama function lama & baru
+// Backward-compatible: mendukung nama function lama & baru.
 // ============================================================
 
 // Server-side API key (untuk API routes)
