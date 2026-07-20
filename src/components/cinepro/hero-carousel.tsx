@@ -35,6 +35,10 @@ export function HeroCarousel({
   const [progress, setProgress] = useState(0);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const progressRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  
+  // Refs untuk touch swipe
+  const touchStartX = useRef(0);
+  const touchEndX = useRef(0);
 
   const goToNext = useCallback(() => {
     setCurrentIdx((prev) => (prev + 1) % items.length);
@@ -75,15 +79,39 @@ export function HeroCarousel({
     };
   }, [isPaused, items.length, currentIdx]);
 
+  // Handlers untuk Touch Swipe (Mobile/Tablet)
+  const handleTouchStart = (e: React.TouchEvent) => {
+    touchStartX.current = e.touches[0].clientX;
+    setIsPaused(true); // Pause auto-slide saat disentuh
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    touchEndX.current = e.touches[0].clientX;
+  };
+
+  const handleTouchEnd = () => {
+    if (touchStartX.current - touchEndX.current > 50) {
+      // Swipe ke kiri (Next)
+      goToNext();
+    } else if (touchEndX.current - touchStartX.current > 50) {
+      // Swipe ke kanan (Prev)
+      goToPrev();
+    }
+    setIsPaused(false); // Lanjut auto-slide
+  };
+
   if (items.length === 0) return null;
 
   const current = items[currentIdx];
 
   return (
     <div
-      className="relative h-[60vh] min-h-[400px] w-full overflow-hidden sm:h-[70vh] sm:min-h-[500px]"
+      className="relative h-[60vh] min-h-[400px] w-full overflow-hidden sm:h-[70vh] sm:min-h-[500px] touch-pan-y"
       onMouseEnter={() => setIsPaused(true)}
       onMouseLeave={() => setIsPaused(false)}
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={handleTouchEnd}
     >
       {/* Background images */}
       {items.map((item, idx) => (
@@ -95,7 +123,7 @@ export function HeroCarousel({
           <img
             src={item.backdrop}
             alt={item.title}
-            className="h-full w-full object-cover"
+            className="h-full w-full object-cover pointer-events-none"
             onError={(e) => {
               (e.target as HTMLImageElement).src = item.poster;
             }}
@@ -106,7 +134,8 @@ export function HeroCarousel({
       ))}
 
       {/* Content */}
-      <div className="relative z-10 flex h-full flex-col justify-end p-4 sm:p-10 md:p-14 lg:p-16">
+      {/* Tambah pb-12 sm:pb-14 agar konten tidak ketutup dots indicator di bawah */}
+      <div className="relative z-10 flex h-full flex-col justify-end p-4 pb-12 sm:p-10 sm:pb-14 md:p-14 md:pb-10 lg:p-16">
         <div className="max-w-2xl">
           <span className="mb-2 inline-flex w-fit items-center gap-1.5 rounded-full bg-red-600 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-white sm:mb-3 sm:px-3 sm:py-1 sm:text-xs">
             <Flame className="h-3 w-3" /> Trending
@@ -117,7 +146,7 @@ export function HeroCarousel({
             <img
               src={current.logo}
               alt={current.title}
-              className="mb-2 h-10 w-auto max-w-[70%] object-contain object-left drop-shadow-2xl sm:mb-3 sm:h-16 md:h-20 md:max-w-[60%] lg:h-28"
+              className="mb-2 h-10 w-auto max-w-[70%] object-contain object-left drop-shadow-2xl sm:mb-3 sm:h-16 md:h-20 md:max-w-[60%] lg:h-28 pointer-events-none"
             />
           ) : (
             <h1 className="mb-2 text-2xl font-black leading-tight text-white drop-shadow-2xl sm:mb-3 sm:text-4xl md:text-5xl lg:text-7xl">
@@ -147,13 +176,13 @@ export function HeroCarousel({
             </p>
           )}
 
-          {/* CTA buttons - responsive, selalu sejajar kiri */}
+          {/* CTA buttons - Tombol Putar Sekarang diubah jadi Merah */}
           <div className="flex flex-row gap-2 sm:gap-3">
             <button
               onClick={() => onPlay(current)}
-              className="flex items-center justify-center gap-1.5 rounded-md bg-white px-4 py-2 text-xs font-bold text-black transition hover:bg-white/90 active:scale-95 sm:px-6 sm:py-2.5 sm:text-sm md:px-7 md:py-3 md:text-base"
+              className="flex items-center justify-center gap-1.5 rounded-md bg-red-600 px-4 py-2 text-xs font-bold text-white transition hover:bg-red-700 active:scale-95 sm:px-6 sm:py-2.5 sm:text-sm md:px-7 md:py-3 md:text-base"
             >
-              <Play className="h-3.5 w-3.5 fill-black sm:h-4 sm:w-4 md:h-5 md:w-5" />
+              <Play className="h-3.5 w-3.5 fill-white sm:h-4 sm:w-4 md:h-5 md:w-5" />
               <span className="whitespace-nowrap">Putar Sekarang</span>
             </button>
             <button
@@ -166,8 +195,8 @@ export function HeroCarousel({
         </div>
       </div>
 
-      {/* Dots indicator + Progress bar */}
-      <div className="absolute bottom-3 left-1/2 z-20 -translate-x-1/2 sm:bottom-4">
+      {/* Dots indicator + Progress bar (Posisi diatur lebih turun untuk mobile) */}
+      <div className="absolute bottom-3 left-1/2 z-20 -translate-x-1/2 sm:bottom-4 md:bottom-6">
         <div className="flex gap-1.5 sm:gap-2">
           {items.map((_, idx) => (
             <button
