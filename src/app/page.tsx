@@ -11,8 +11,6 @@ import { Footer } from "@/components/cinepro/footer";
 import { HeroCarousel } from "@/components/cinepro/hero-carousel";
 import { MovieCard } from "@/components/cinepro/movie-card";
 
-// PENTING: Pakai proxy /api/tmdb/* (bukan direct TMDB call)
-// Proxy route baca TMDB_API_KEY dari server env (sudah confirmed work)
 const TMDB_PROXY = "/api/tmdb";
 const TMDB_IMG = "https://image.tmdb.org/t/p";
 
@@ -51,127 +49,124 @@ function imgUrl(path?: string | null, size: string = "w342"): string {
   return `${TMDB_IMG}/${size}${path}`;
 }
 
-// ============================================================
-// Fetch VidAPI raw (multiple pages paralel)
-// ============================================================
-async function fetchVidapiRaw(type: "movie" | "tv", pages = 5): Promise<any[]> {
-  const endpoint = type === "movie" ? "movies" : "tvshows";
-  const allItems: any[] = [];
-  await Promise.all(
-    Array.from({ length: pages }, (_, i) => i + 1).map(async (page) => {
-      try {
-        const r = await fetch(`https://vidapi.ru/${endpoint}/latest/page-${page}.json`);
-        if (!r.ok) return;
-        const data = await r.json();
-        allItems.push(...(data.items || []));
-      } catch (e) {
-        console.warn(`[VidAPI] Failed page ${page}:`, e);
-      }
-    })
-  );
-  return allItems;
-}
-
-// ============================================================
-// TMDB fetch via proxy (bukan direct call)
-// ============================================================
 async function tmdbFetch(path: string): Promise<any | null> {
   try {
     const r = await fetch(`${TMDB_PROXY}${path}`);
     if (!r.ok) return null;
     return await r.json();
-  } catch (e) {
-    console.warn(`[TMDB proxy] failed: ${path}`, e);
-    return null;
-  }
+  } catch { return null; }
 }
 
 // ============================================================
-// Enrich dengan TMDB detail (via proxy)
+// Fetch TMDB trending (untuk hero)
 // ============================================================
-async function enrichItemWithTMDB(tmdbId: number, type: "movie" | "tv"): Promise<any | null> {
-  if (!tmdbId) return null;
-  return await tmdbFetch(
-    `/${type}/${tmdbId}?append_to_response=external_ids,images&include_image_language=en,null`
+async function fetchTrending(): Promise<MediaItem[]> {
+  const data = await tmdbFetch("/trending/all/week");
+  if (!data?.results) return [];
+
+  const top = data.results
+    .filter((m: any) => m.backdrop_path && (m.media_type === "movie" || m.media_type === "tv"))
+    .slice(0, 10);
+
+  const enriched = await Promise.all(
+    top.map(async (m: any) => {
+      const type = m.media_type as "movie" | "tv";
+      const detail = await tmdbFetch(
+        `/${type}/${m.id}?append_to_response=external_ids,images&include_image_language=en,null`
+      );
+      const logo = detail?.images?.logos?.find((l: any) => l.iso_639_1 === "en")
+                || detail?.images?.logos?.[0];
+      return {
+        id: detail?.external_ids?.imdb_id || `tmdb-${m.id}`,
+        tmdbId: m.id,
+        imdbId: detail?.external_ids?.imdb_id,
+        title: m.title || m.name || "Untitled",
+        type,
+        poster: imgUrl(m.poster_path, "w342"),
+        backdrop: imgUrl(m.backdrop_path, "w1280"),
+        logo: logo ? imgUrl(logo.file_path, "w500") : undefined,
+        overview: m.overview || "",
+        year: (m.release_date || m.first_air_date || "").slice(0, 4),
+        rating: m.vote_average || 0,
+        genre: m.genre_ids?.length ? String(m.genre_ids[0]) : undefined,
+        seasons: type === "tv" && detail?.seasons
+          ? detail.seasons.filter((s: any) => s.season_number > 0).map((s: any) => ({
+              seasonNumber: s.season_number,
+              episodeCount: s.episode_count,
+              name: s.name,
+            }))
+          : undefined,
+      } as MediaItem;
+    })
   );
+  return enriched;
 }
 
 // ============================================================
-// MAIN: VidAPI primary + TMDB enrich + sort by TMDB popularity
+// Fetch VidAPI latest (max 15)
 // ============================================================
-async function fetchFilteredMedia(type: "movie" | "tv"): Promise<MediaItem[]> {
-  // 1. Fetch VidAPI raw (5 pages paralel = ~120 items)
-  const vidapiItems = await fetchVidapiRaw(type, 5);
-  console.log(`[Home] VidAPI ${type} raw: ${vidapiItems.length} items`);
+async function fetchVidapiLatest(type: "movie" | "tv", maxItems = 15): Promise<MediaItem[]> {
+  const endpoint = type === "movie" ? "movies" : "tvshows";
+  try {
+    const r = await fetch(`https://vidapi.ru/${endpoint}/latest/page-1.json`);
+    if (!r.ok) return [];
+    const data = await r.json();
+    const items = (data.items || [])
+      .filter((item: any) => item.tmdb_id && item.poster_url)
+      .slice(0, maxItems);
 
-  // 2. Filter longgar: ada tmdb_id + ada poster (tidak filter year/rating ketat)
-  const filtered = vidapiItems.filter(item =>
-    item.tmdb_id && item.poster_url
-  );
-  console.log(`[Home] VidAPI ${type} after basic filter: ${filtered.length} items`);
-
-  // 3. Enrich dengan TMDB (batch 10 paralel)
-  const batchSize = 10;
-  const enriched: (MediaItem & { _popularity: number })[] = [];
-
-  for (let i = 0; i < filtered.length; i += batchSize) {
-    const batch = filtered.slice(i, i + batchSize);
-    const batchResults = await Promise.all(
-      batch.map(async (item) => {
-        const tmdbId = parseInt(item.tmdb_id, 10) || 0;
-        const detail = await enrichItemWithTMDB(tmdbId, type);
-
-        const logo = detail?.images?.logos?.find((l: any) => l.iso_639_1 === "en")
-                  || detail?.images?.logos?.[0];
-
-        return {
-          id: detail?.external_ids?.imdb_id || item.imdb_id || `tmdb-${item.tmdb_id}`,
-          tmdbId,
-          imdbId: detail?.external_ids?.imdb_id || item.imdb_id,
-          title: detail?.title || detail?.name || item.title || "Untitled",
-          type,
-          poster: detail?.poster_path ? imgUrl(detail.poster_path, "w342") : item.poster_url,
-          backdrop: detail?.backdrop_path ? imgUrl(detail.backdrop_path, "w1280") : item.poster_url,
-          logo: logo ? imgUrl(logo.file_path, "w500") : undefined,
-          overview: detail?.overview || "",
-          year: detail?.release_date?.slice(0, 4) || detail?.first_air_date?.slice(0, 4) || item.year || "",
-          rating: detail?.vote_average || parseFloat(item.rating) || 0,
-          genre: detail?.genres?.length ? detail.genres.map((g: any) => g.name).join(", ") : item.genre,
-          seasons: type === "tv" && detail?.seasons
-            ? detail.seasons
-                .filter((s: any) => s.season_number > 0)
-                .map((s: any) => ({
+    const batchSize = 10;
+    const enriched: MediaItem[] = [];
+    for (let i = 0; i < items.length; i += batchSize) {
+      const batch = items.slice(i, i + batchSize);
+      const results = await Promise.all(
+        batch.map(async (item: any) => {
+          const tmdbId = parseInt(item.tmdb_id, 10) || 0;
+          const detail = await tmdbFetch(
+            `/${type}/${tmdbId}?append_to_response=external_ids,images&include_image_language=en,null`
+          );
+          const logo = detail?.images?.logos?.find((l: any) => l.iso_639_1 === "en")
+                    || detail?.images?.logos?.[0];
+          return {
+            id: detail?.external_ids?.imdb_id || item.imdb_id || `tmdb-${item.tmdb_id}`,
+            tmdbId,
+            imdbId: detail?.external_ids?.imdb_id || item.imdb_id,
+            title: detail?.title || detail?.name || item.title || "Untitled",
+            type,
+            poster: detail?.poster_path ? imgUrl(detail.poster_path, "w342") : item.poster_url,
+            backdrop: detail?.backdrop_path ? imgUrl(detail.backdrop_path, "w1280") : item.poster_url,
+            logo: logo ? imgUrl(logo.file_path, "w500") : undefined,
+            overview: detail?.overview || "",
+            year: detail?.release_date?.slice(0, 4) || detail?.first_air_date?.slice(0, 4) || item.year || "",
+            rating: detail?.vote_average || parseFloat(item.rating) || 0,
+            genre: detail?.genres?.length ? detail.genres.map((g: any) => g.name).join(", ") : item.genre,
+            seasons: type === "tv" && detail?.seasons
+              ? detail.seasons.filter((s: any) => s.season_number > 0).map((s: any) => ({
                   seasonNumber: s.season_number,
                   episodeCount: s.episode_count,
                   name: s.name,
                 }))
-            : undefined,
-          _popularity: detail?.popularity || 0,
-        } as MediaItem & { _popularity: number };
-      })
-    );
-    enriched.push(...batchResults);
-  }
-  console.log(`[Home] ${type} enriched: ${enriched.length} items`);
-
-  // 4. Sort by TMDB popularity descending
-  const sorted = enriched.sort((a, b) => (b._popularity || 0) - (a._popularity || 0));
-
-  // 5. Strip _popularity, return top 30
-  return sorted.slice(0, 30).map(({ _popularity, ...rest }) => rest);
+              : undefined,
+          } as MediaItem;
+        })
+      );
+      enriched.push(...results);
+    }
+    return enriched;
+  } catch { return []; }
 }
 
 // ============================================================
-// Fetch latest episodes dengan TMDB stills (via proxy)
+// Fetch latest episodes dengan TMDB stills (max 15)
 // ============================================================
-async function fetchLatestEpisodesWithStills(): Promise<EpisodeItem[]> {
+async function fetchLatestEpisodesWithStills(maxItems = 15): Promise<EpisodeItem[]> {
   try {
     const r = await fetch("https://vidapi.ru/episodes/latest/page-1.json");
     if (!r.ok) return [];
     const data = await r.json();
     const eps = (data.items || [])
       .filter((e: any) => e.show_imdb_id && e.show_tmdb_id)
-      .slice(0, 24);
+      .slice(0, maxItems);
 
     const batchSize = 10;
     const result: EpisodeItem[] = [];
@@ -190,15 +185,13 @@ async function fetchLatestEpisodesWithStills(): Promise<EpisodeItem[]> {
             embedUrl: ep.embed_url,
           };
           if (item.showTmdbId > 0) {
-            try {
-              const data = await tmdbFetch(
-                `/tv/${item.showTmdbId}/season/${item.season}/episode/${item.episode}`
-              );
-              if (data) {
-                if (data.still_path) item.still = imgUrl(data.still_path, "w300");
-                if (data.overview) item.overview = data.overview;
-              }
-            } catch {}
+            const data = await tmdbFetch(
+              `/tv/${item.showTmdbId}/season/${item.season}/episode/${item.episode}`
+            );
+            if (data) {
+              if (data.still_path) item.still = imgUrl(data.still_path, "w300");
+              if (data.overview) item.overview = data.overview;
+            }
           }
           return item;
         })
@@ -212,6 +205,7 @@ async function fetchLatestEpisodesWithStills(): Promise<EpisodeItem[]> {
 export default function HomePage() {
   const { setPlayerMedia, setDetailMedia } = useAppStore();
 
+  const [heroItems, setHeroItems] = useState<MediaItem[]>([]);
   const [movies, setMovies] = useState<MediaItem[]>([]);
   const [tvShows, setTvShows] = useState<MediaItem[]>([]);
   const [episodes, setEpisodes] = useState<EpisodeItem[]>([]);
@@ -222,11 +216,13 @@ export default function HomePage() {
     const load = async () => {
       try {
         setLoading(true);
-        const [m, t, eps] = await Promise.all([
-          fetchFilteredMedia("movie"),
-          fetchFilteredMedia("tv"),
-          fetchLatestEpisodesWithStills(),
+        const [hero, m, t, eps] = await Promise.all([
+          fetchTrending(),
+          fetchVidapiLatest("movie", 15),
+          fetchVidapiLatest("tv", 15),
+          fetchLatestEpisodesWithStills(15),
         ]);
+        setHeroItems(hero);
         setMovies(m);
         setTvShows(t);
         setEpisodes(eps);
@@ -333,8 +329,6 @@ export default function HomePage() {
     );
   }
 
-  const heroItems = movies.slice(0, 10);
-
   return (
     <div className="min-h-screen bg-black">
       <Header />
@@ -359,21 +353,7 @@ export default function HomePage() {
         />
 
         {episodes.length > 0 && (
-          <section className="mt-8">
-            <h2 className="mb-3 flex items-center gap-2 text-lg font-bold text-white sm:text-xl">
-              <Clock className="h-5 w-5 text-blue-500" />
-              Episode Terbaru
-            </h2>
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
-              {episodes.map((e, i) => (
-                <EpisodeCard
-                  key={`${e.showTmdbId}-${e.season}-${e.episode}-${i}`}
-                  episode={e}
-                  onClick={() => handlePlayEpisode(e)}
-                />
-              ))}
-            </div>
-          </section>
+          <EpisodeSection episodes={episodes} onPlay={handlePlayEpisode} />
         )}
       </div>
 
@@ -383,7 +363,7 @@ export default function HomePage() {
 }
 
 // ============================================================
-// SECTION (horizontal scroll, tanpa pagination)
+// SECTION (horizontal scroll)
 // ============================================================
 function Section({ title, icon, items, onItemClick }: {
   title: string;
@@ -436,13 +416,66 @@ function Section({ title, icon, items, onItemClick }: {
 }
 
 // ============================================================
+// EPISODE SECTION (horizontal scroll)
+// ============================================================
+function EpisodeSection({ episodes, onPlay }: {
+  episodes: EpisodeItem[];
+  onPlay: (ep: EpisodeItem) => void;
+}) {
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  const scroll = (dir: "left" | "right") => {
+    if (!scrollRef.current) return;
+    const amount = scrollRef.current.clientWidth * 0.8;
+    scrollRef.current.scrollBy({ left: dir === "left" ? -amount : amount, behavior: "smooth" });
+  };
+
+  return (
+    <section className="mb-8">
+      <div className="mb-3 flex items-center justify-between px-1">
+        <h2 className="flex items-center gap-2 text-lg font-bold text-white sm:text-xl md:text-2xl">
+          <Clock className="h-5 w-5 text-blue-500" />
+          Episode Terbaru
+        </h2>
+        <div className="hidden gap-1 sm:flex">
+          <button
+            onClick={() => scroll("left")}
+            className="flex h-8 w-8 items-center justify-center rounded-full bg-white/10 text-white transition hover:bg-white/20"
+          >
+            <ChevronLeft className="h-4 w-4" />
+          </button>
+          <button
+            onClick={() => scroll("right")}
+            className="flex h-8 w-8 items-center justify-center rounded-full bg-white/10 text-white transition hover:bg-white/20"
+          >
+            <ChevronRight className="h-4 w-4" />
+          </button>
+        </div>
+      </div>
+      <div
+        ref={scrollRef}
+        className="flex gap-3 overflow-x-auto scroll-smooth pb-2 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
+      >
+        {episodes.map((e, i) => (
+          <EpisodeCard
+            key={`${e.showTmdbId}-${e.season}-${e.episode}-${i}`}
+            episode={e}
+            onClick={() => onPlay(e)}
+          />
+        ))}
+      </div>
+    </section>
+  );
+}
+
+// ============================================================
 // EPISODE CARD
 // ============================================================
 function EpisodeCard({ episode, onClick }: { episode: EpisodeItem; onClick: () => void }) {
   return (
     <button
       onClick={onClick}
-      className="group flex flex-col gap-2 rounded-md bg-zinc-900 p-2 text-left transition hover:bg-zinc-800"
+      className="group flex w-[200px] shrink-0 flex-col gap-2 rounded-md bg-zinc-900 p-2 text-left transition hover:bg-zinc-800 sm:w-[240px]"
     >
       <div className="relative aspect-video overflow-hidden rounded bg-zinc-800">
         {episode.still ? (
