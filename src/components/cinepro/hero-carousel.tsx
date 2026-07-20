@@ -147,20 +147,20 @@ export function HeroCarousel({
             </p>
           )}
 
-          {/* CTA buttons - responsive mobile */}
-          <div className="flex flex-col gap-2 sm:flex-row sm:gap-3">
+          {/* CTA buttons - responsive, selalu sejajar kiri */}
+          <div className="flex flex-row gap-2 sm:gap-3">
             <button
               onClick={() => onPlay(current)}
-              className="flex items-center justify-center gap-1.5 rounded-md bg-white px-4 py-2 text-xs font-bold text-black transition hover:bg-white/90 active:scale-95 sm:px-7 sm:py-3 sm:text-base"
+              className="flex items-center justify-center gap-1.5 rounded-md bg-white px-4 py-2 text-xs font-bold text-black transition hover:bg-white/90 active:scale-95 sm:px-6 sm:py-2.5 sm:text-sm md:px-7 md:py-3 md:text-base"
             >
-              <Play className="h-3.5 w-3.5 fill-black sm:h-5 sm:w-5" />
-              Putar Sekarang
+              <Play className="h-3.5 w-3.5 fill-black sm:h-4 sm:w-4 md:h-5 md:w-5" />
+              <span className="whitespace-nowrap">Putar Sekarang</span>
             </button>
             <button
               onClick={() => onMoreInfo(current)}
-              className="flex items-center justify-center gap-1.5 rounded-md bg-white/20 px-4 py-2 text-xs font-semibold text-white backdrop-blur-sm transition hover:bg-white/30 active:scale-95 sm:px-6 sm:py-3 sm:text-base"
+              className="flex items-center justify-center gap-1.5 rounded-md bg-white/20 px-4 py-2 text-xs font-semibold text-white backdrop-blur-sm transition hover:bg-white/30 active:scale-95 sm:px-5 sm:py-2.5 sm:text-sm md:px-6 md:py-3 md:text-base"
             >
-              Info Selengkapnya
+              <span className="whitespace-nowrap">Info Selengkapnya</span>
             </button>
           </div>
         </div>
