@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
-const CACHE_TTL = 30 * 60; // 30 menit (sesuai update VidAPI)
+const CACHE_TTL = 30 * 60; // 30 menit
 
 export async function GET(
   request: NextRequest,
@@ -23,10 +23,11 @@ export async function GET(
       return cachedResponse;
     }
 
-    // === 2. Download dari VidAPI (Cache MISS) ===
-    const filename = type === "movie" ? "movie_list_imdb.txt" 
-                   : type === "tv" ? "tv_list_imdb.txt" 
-                   : "eps_list_imdb.txt";
+    // === 2. Download dari VidAPI (PAKAI TMDB IDS) ===
+    // PENTING: Pakai _tmdb.txt supaya bisa filter langsung dengan TMDB API
+    const filename = type === "movie" ? "movie_list_tmdb.txt" 
+                   : type === "tv" ? "tv_list_tmdb.txt" 
+                   : "eps_list_tmdb.txt";
     
     console.log(`[VidAPI] Downloading ${filename}...`);
     const r = await fetch(`https://vidapi.ru/ids/${filename}`, {
@@ -45,7 +46,6 @@ export async function GET(
     const response = NextResponse.json({ ids, count: ids.length });
     response.headers.set("Cache-Control", `public, s-maxage=${CACHE_TTL}, stale-while-revalidate=60`);
     
-    // Save to cache
     try {
       await cache.put(cacheUrl, response.clone());
       console.log(`[VidAPI Cache] Stored ${type} IDs in edge cache (30 min)`);
