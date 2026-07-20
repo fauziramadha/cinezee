@@ -58,43 +58,18 @@ async function tmdbFetch(path: string): Promise<any | null> {
 }
 
 // ============================================================
-// VIDAPI TMDB ID CACHE (numeric IDs - filter langsung!)
+// D1 CACHED VidAPI IDs (fetch dari /api/vidapi/ids/[type])
 // ============================================================
-const MOVIE_TMDB_IDS_KEY = "cinestream_vidapi_movie_tmdb_ids";
-const TV_TMDB_IDS_KEY = "cinestream_vidapi_tv_tmdb_ids";
-const CACHE_DURATION = 24 * 60 * 60 * 1000;
-
-async function getVidapiTmdbIds(type: "movie" | "tv"): Promise<Set<string>> {
-  const storageKey = type === "movie" ? MOVIE_TMDB_IDS_KEY : TV_TMDB_IDS_KEY;
-  const timestampKey = storageKey + "_ts";
-
-  if (typeof window !== "undefined") {
-    try {
-      const ts = parseInt(localStorage.getItem(timestampKey) || "0", 10);
-      if (ts > 0 && Date.now() - ts < CACHE_DURATION) {
-        const cached = localStorage.getItem(storageKey);
-        if (cached) return new Set(JSON.parse(cached));
-      }
-    } catch {}
-  }
-
-  const filename = type === "movie" ? "movie_list_tmdb.txt" : "tv_list_tmdb.txt";
+async function getVidapiIds(type: "movie" | "tv"): Promise<Set<string>> {
   try {
-    console.log(`[VidAPI] Downloading ${type} TMDB IDs...`);
-    const r = await fetch(`https://vidapi.ru/ids/${filename}`);
+    const r = await fetch(`/api/vidapi/ids/${type}`);
     if (!r.ok) return new Set();
-    const text = await r.text();
-    const ids = new Set(text.split("\n").map(s => s.trim()).filter(Boolean));
-    console.log(`[VidAPI] Downloaded ${ids.size} ${type} TMDB IDs`);
-
-    if (typeof window !== "undefined") {
-      try {
-        localStorage.setItem(storageKey, JSON.stringify(Array.from(ids)));
-        localStorage.setItem(timestampKey, Date.now().toString());
-      } catch {}
-    }
-    return ids;
-  } catch {
+    const data = await r.json();
+    const ids = data?.ids || [];
+    console.log(`[D1 Cache] Got ${ids.length} ${type} IDs (cached: ${data?.cached})`);
+    return new Set(ids);
+  } catch (e) {
+    console.error(`[D1 Cache] Failed to get ${type} IDs:`, e);
     return new Set();
   }
 }
@@ -140,7 +115,6 @@ async function fetchLatestEpisodes(maxItems = 15): Promise<EpisodeItem[]> {
       .filter((e: any) => e.show_tmdb_id)
       .slice(0, maxItems);
 
-    // Cache show backdrops (1 call per unique show)
     const showBackdropCache = new Map<number, string>();
     const batchSize = 5;
     const result: EpisodeItem[] = [];
@@ -161,7 +135,6 @@ async function fetchLatestEpisodes(maxItems = 15): Promise<EpisodeItem[]> {
             embedUrl: ep.embed_url,
           };
 
-          // 1. Coba fetch episode still
           if (showTmdbId > 0) {
             try {
               const detail = await tmdbFetch(
@@ -174,7 +147,6 @@ async function fetchLatestEpisodes(maxItems = 15): Promise<EpisodeItem[]> {
             } catch {}
           }
 
-          // 2. Fallback: pakai show backdrop kalau still tidak ada
           if (!item.still && showTmdbId > 0) {
             if (showBackdropCache.has(showTmdbId)) {
               item.still = showBackdropCache.get(showTmdbId);
@@ -200,26 +172,24 @@ async function fetchLatestEpisodes(maxItems = 15): Promise<EpisodeItem[]> {
 }
 
 // ============================================================
-// Fetch TMDB trending + filter by VidAPI TMDB IDs (LANGSUNG, no detail call)
+// Fetch TMDB trending + filter by VidAPI IDs (langsung, no detail call for filter)
 // ============================================================
 async function fetchTrendingFiltered(
-  movieTmdbIds: Set<string>,
-  tvTmdbIds: Set<string>,
+  movieIds: Set<string>,
+  tvIds: Set<string>,
   maxItems: number
 ): Promise<MediaItem[]> {
   const data = await tmdbFetch("/trending/all/week");
   if (!data?.results) return [];
 
-  // Filter LANGSUNG by TMDB ID (instant, no detail call!)
   const filtered = data.results.filter((m: any) => {
     const type = m.media_type as "movie" | "tv";
     if (type !== "movie" && type !== "tv") return false;
     if (!m.backdrop_path) return false;
-    const ids = type === "movie" ? movieTmdbIds : tvTmdbIds;
+    const ids = type === "movie" ? movieIds : tvIds;
     return ids.has(String(m.id));
   }).slice(0, maxItems);
 
-  // Map ke MediaItem (pakai data trending langsung)
   const items: MediaItem[] = filtered.map((m: any) => ({
     id: `tmdb-${m.id}`,
     tmdbId: m.id,
@@ -234,7 +204,7 @@ async function fetchTrendingFiltered(
     genre: m.genre_ids?.length ? String(m.genre_ids[0]) : undefined,
   }));
 
-  // Enrich HANYA 10 hero items dengan detail (logo + imdb_id + seasons)
+  // Enrich 10 hero items dengan detail (logo + imdb_id)
   const batchSize = 5;
   const enriched: MediaItem[] = [];
   for (let i = 0; i < items.length; i += batchSize) {
@@ -270,21 +240,19 @@ async function fetchTrendingFiltered(
 }
 
 // ============================================================
-// Fetch TMDB popular + filter by VidAPI TMDB IDs (LANGSUNG, no detail call)
+// Fetch TMDB popular + filter by VidAPI IDs (langsung, no detail call)
 // ============================================================
 async function fetchPopularFiltered(
-  movieTmdbIds: Set<string>,
+  movieIds: Set<string>,
   maxItems: number
 ): Promise<MediaItem[]> {
   const data = await tmdbFetch("/movie/popular");
   if (!data?.results) return [];
 
-  // Filter LANGSUNG by TMDB ID (instant!)
   const filtered = data.results.filter((m: any) =>
-    movieTmdbIds.has(String(m.id)) && m.poster_path
+    movieIds.has(String(m.id)) && m.poster_path
   ).slice(0, maxItems);
 
-  // Map ke MediaItem (pakai data popular langsung, NO enrich)
   return filtered.map((m: any) => ({
     id: `tmdb-${m.id}`,
     tmdbId: m.id,
@@ -319,7 +287,7 @@ export default function HomePage() {
       try {
         setLoading(true);
 
-        // === PHASE 1: VidAPI (instant) ===
+        // === PHASE 1: VidAPI latest (instant) ===
         const [vidapiMovies, vidapiTV, vidapiEps] = await Promise.all([
           fetchVidapiLatest("movie", 15),
           fetchVidapiLatest("tv", 15),
@@ -330,16 +298,16 @@ export default function HomePage() {
         setEpisodes(vidapiEps);
         setLoading(false);
 
-        // === PHASE 2: Download VidAPI TMDB IDs (cached 24h) ===
-        const [movieTmdbIds, tvTmdbIds] = await Promise.all([
-          getVidapiTmdbIds("movie"),
-          getVidapiTmdbIds("tv"),
+        // === PHASE 2: D1 Cached VidAPI IDs ===
+        const [movieIds, tvIds] = await Promise.all([
+          getVidapiIds("movie"),
+          getVidapiIds("tv"),
         ]);
 
-        // === PHASE 3: TMDB trending + popular (filter LANGSUNG by TMDB IDs) ===
+        // === PHASE 3: TMDB trending + popular (cached di D1, filter by VidAPI IDs) ===
         const [hero, popMovies] = await Promise.all([
-          fetchTrendingFiltered(movieTmdbIds, tvTmdbIds, 10),
-          fetchPopularFiltered(movieTmdbIds, 15),
+          fetchTrendingFiltered(movieIds, tvIds, 10),
+          fetchPopularFiltered(movieIds, 15),
         ]);
 
         setHeroItems(hero);
