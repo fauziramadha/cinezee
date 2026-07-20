@@ -58,7 +58,7 @@ async function tmdbFetch(path: string): Promise<any | null> {
 }
 
 // ============================================================
-// D1 CACHED VidAPI IDs (fetch dari /api/vidapi/ids/[type])
+// CACHED VidAPI IDs (fetch dari /api/vidapi/ids/[type] - Edge Cache 30 menit)
 // ============================================================
 async function getVidapiIds(type: "movie" | "tv"): Promise<Set<string>> {
   try {
@@ -66,10 +66,10 @@ async function getVidapiIds(type: "movie" | "tv"): Promise<Set<string>> {
     if (!r.ok) return new Set();
     const data = await r.json();
     const ids = data?.ids || [];
-    console.log(`[D1 Cache] Got ${ids.length} ${type} IDs (cached: ${data?.cached})`);
+    console.log(`[Edge Cache] Got ${ids.length} ${type} IDs`);
     return new Set(ids);
   } catch (e) {
-    console.error(`[D1 Cache] Failed to get ${type} IDs:`, e);
+    console.error(`[Edge Cache] Failed to get ${type} IDs:`, e);
     return new Set();
   }
 }
