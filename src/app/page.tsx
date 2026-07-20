@@ -2,8 +2,8 @@
 
 import { useEffect, useState, useCallback, useRef } from "react";
 import {
-  Play, Star, Film, Tv, Clock,
-  ChevronLeft, ChevronRight, Flame,
+  Play, Star, Film, Tv, Clock, Flame,
+  ChevronLeft, ChevronRight,
 } from "lucide-react";
 import { useAppStore } from "@/lib/store";
 import { Header } from "@/components/cinepro/header";
@@ -58,102 +58,91 @@ async function tmdbFetch(path: string): Promise<any | null> {
 }
 
 // ============================================================
-// Fetch TMDB trending (untuk hero)
+// Cache VidAPI ID lists (download 1x, dipakai berulang)
 // ============================================================
-async function fetchTrending(): Promise<MediaItem[]> {
-  const data = await tmdbFetch("/trending/all/week");
-  if (!data?.results) return [];
+let movieIdsCache: Set<string> | null = null;
+let tvIdsCache: Set<string> | null = null;
 
-  const top = data.results
-    .filter((m: any) => m.backdrop_path && (m.media_type === "movie" || m.media_type === "tv"))
-    .slice(0, 10);
+async function getVidapiIds(type: "movie" | "tv"): Promise<Set<string>> {
+  if (type === "movie" && movieIdsCache) return movieIdsCache;
+  if (type === "tv" && tvIdsCache) return tvIdsCache;
 
-  const enriched = await Promise.all(
-    top.map(async (m: any) => {
-      const type = m.media_type as "movie" | "tv";
-      const detail = await tmdbFetch(
-        `/${type}/${m.id}?append_to_response=external_ids,images&include_image_language=en,null`
-      );
-      const logo = detail?.images?.logos?.find((l: any) => l.iso_639_1 === "en")
-                || detail?.images?.logos?.[0];
-      return {
-        id: detail?.external_ids?.imdb_id || `tmdb-${m.id}`,
-        tmdbId: m.id,
-        imdbId: detail?.external_ids?.imdb_id,
-        title: m.title || m.name || "Untitled",
-        type,
-        poster: imgUrl(m.poster_path, "w342"),
-        backdrop: imgUrl(m.backdrop_path, "w1280"),
-        logo: logo ? imgUrl(logo.file_path, "w500") : undefined,
-        overview: m.overview || "",
-        year: (m.release_date || m.first_air_date || "").slice(0, 4),
-        rating: m.vote_average || 0,
-        genre: m.genre_ids?.length ? String(m.genre_ids[0]) : undefined,
-        seasons: type === "tv" && detail?.seasons
-          ? detail.seasons.filter((s: any) => s.season_number > 0).map((s: any) => ({
-              seasonNumber: s.season_number,
-              episodeCount: s.episode_count,
-              name: s.name,
-            }))
-          : undefined,
-      } as MediaItem;
-    })
-  );
-  return enriched;
+  const filename = type === "movie" ? "movie_list_imdb.txt" : "tv_list_imdb.txt";
+  try {
+    const r = await fetch(`https://vidapi.ru/ids/${filename}`);
+    if (!r.ok) return new Set();
+    const text = await r.text();
+    const ids = new Set(text.split("\n").map(s => s.trim()).filter(Boolean));
+    if (type === "movie") movieIdsCache = ids;
+    else tvIdsCache = ids;
+    console.log(`[VidAPI] Cached ${ids.size} ${type} IDs`);
+    return ids;
+  } catch {
+    return new Set();
+  }
 }
 
 // ============================================================
-// Fetch VidAPI latest (max 15)
+// Fetch TMDB trending, filter by VidAPI availability
 // ============================================================
-async function fetchVidapiLatest(type: "movie" | "tv", maxItems = 15): Promise<MediaItem[]> {
-  const endpoint = type === "movie" ? "movies" : "tvshows";
-  try {
-    const r = await fetch(`https://vidapi.ru/${endpoint}/latest/page-1.json`);
-    if (!r.ok) return [];
-    const data = await r.json();
-    const items = (data.items || [])
-      .filter((item: any) => item.tmdb_id && item.poster_url)
-      .slice(0, maxItems);
+async function fetchTMDBListFiltered(
+  endpoint: string,
+  type: "movie" | "tv",
+  vidapiIds: Set<string>,
+  maxItems: number
+): Promise<MediaItem[]> {
+  const data = await tmdbFetch(endpoint);
+  if (!data?.results) return [];
 
-    const batchSize = 10;
-    const enriched: MediaItem[] = [];
-    for (let i = 0; i < items.length; i += batchSize) {
-      const batch = items.slice(i, i + batchSize);
-      const results = await Promise.all(
-        batch.map(async (item: any) => {
-          const tmdbId = parseInt(item.tmdb_id, 10) || 0;
-          const detail = await tmdbFetch(
-            `/${type}/${tmdbId}?append_to_response=external_ids,images&include_image_language=en,null`
-          );
-          const logo = detail?.images?.logos?.find((l: any) => l.iso_639_1 === "en")
-                    || detail?.images?.logos?.[0];
-          return {
-            id: detail?.external_ids?.imdb_id || item.imdb_id || `tmdb-${item.tmdb_id}`,
-            tmdbId,
-            imdbId: detail?.external_ids?.imdb_id || item.imdb_id,
-            title: detail?.title || detail?.name || item.title || "Untitled",
-            type,
-            poster: detail?.poster_path ? imgUrl(detail.poster_path, "w342") : item.poster_url,
-            backdrop: detail?.backdrop_path ? imgUrl(detail.backdrop_path, "w1280") : item.poster_url,
-            logo: logo ? imgUrl(logo.file_path, "w500") : undefined,
-            overview: detail?.overview || "",
-            year: detail?.release_date?.slice(0, 4) || detail?.first_air_date?.slice(0, 4) || item.year || "",
-            rating: detail?.vote_average || parseFloat(item.rating) || 0,
-            genre: detail?.genres?.length ? detail.genres.map((g: any) => g.name).join(", ") : item.genre,
-            seasons: type === "tv" && detail?.seasons
-              ? detail.seasons.filter((s: any) => s.season_number > 0).map((s: any) => ({
-                  seasonNumber: s.season_number,
-                  episodeCount: s.episode_count,
-                  name: s.name,
-                }))
-              : undefined,
-          } as MediaItem;
-        })
-      );
-      enriched.push(...results);
+  // Ambil TMDB detail untuk dapat imdb_id, lalu filter
+  // Batch 5 paralel untuk hemat rate limit
+  const batchSize = 5;
+  const results: MediaItem[] = [];
+
+  for (let i = 0; i < data.results.length && results.length < maxItems; i += batchSize) {
+    const batch = data.results.slice(i, i + batchSize);
+    const enriched = await Promise.all(
+      batch.map(async (m: any) => {
+        const detail = await tmdbFetch(
+          `/${type}/${m.id}?append_to_response=external_ids,images&include_image_language=en,null`
+        );
+        if (!detail) return null;
+        const imdbId = detail.external_ids?.imdb_id;
+        if (!imdbId || !vidapiIds.has(imdbId)) return null;
+
+        const logo = detail.images?.logos?.find((l: any) => l.iso_639_1 === "en")
+                  || detail.images?.logos?.[0];
+        return {
+          id: imdbId,
+          tmdbId: m.id,
+          imdbId,
+          title: detail.title || detail.name || m.title || m.name || "Untitled",
+          type,
+          poster: imgUrl(detail.poster_path, "w342"),
+          backdrop: imgUrl(detail.backdrop_path, "w1280"),
+          logo: logo ? imgUrl(logo.file_path, "w500") : undefined,
+          overview: detail.overview || "",
+          year: (detail.release_date || detail.first_air_date || "").slice(0, 4),
+          rating: detail.vote_average || 0,
+          genre: detail.genres?.length ? detail.genres.map((g: any) => g.name).join(", ") : undefined,
+          seasons: type === "tv" && detail.seasons
+            ? detail.seasons.filter((s: any) => s.season_number > 0).map((s: any) => ({
+                seasonNumber: s.season_number,
+                episodeCount: s.episode_count,
+                name: s.name,
+              }))
+            : undefined,
+        } as MediaItem;
+      })
+    );
+    for (const item of enriched) {
+      if (item) {
+        results.push(item);
+        if (results.length >= maxItems) break;
+      }
     }
-    return enriched;
-  } catch { return []; }
+  }
+  return results;
 }
 
 // ============================================================
@@ -168,7 +157,7 @@ async function fetchLatestEpisodesWithStills(maxItems = 15): Promise<EpisodeItem
       .filter((e: any) => e.show_imdb_id && e.show_tmdb_id)
       .slice(0, maxItems);
 
-    const batchSize = 10;
+    const batchSize = 5;
     const result: EpisodeItem[] = [];
     for (let i = 0; i < eps.length; i += batchSize) {
       const batch = eps.slice(i, i + batchSize);
@@ -207,6 +196,7 @@ export default function HomePage() {
 
   const [heroItems, setHeroItems] = useState<MediaItem[]>([]);
   const [movies, setMovies] = useState<MediaItem[]>([]);
+  const [popularMovies, setPopularMovies] = useState<MediaItem[]>([]);
   const [tvShows, setTvShows] = useState<MediaItem[]>([]);
   const [episodes, setEpisodes] = useState<EpisodeItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -216,16 +206,34 @@ export default function HomePage() {
     const load = async () => {
       try {
         setLoading(true);
-        const [hero, m, t, eps] = await Promise.all([
-          fetchTrending(),
-          fetchVidapiLatest("movie", 15),
-          fetchVidapiLatest("tv", 15),
+
+        // 1. Download VidAPI ID lists (1x, di-cache)
+        const [movieIds, tvIds] = await Promise.all([
+          getVidapiIds("movie"),
+          getVidapiIds("tv"),
+        ]);
+
+        // 2. Fetch paralel: trending (hero) + popular movies + popular TV + episodes
+        const [hero, popMovies, popTV, eps] = await Promise.all([
+          fetchTMDBListFiltered("/trending/all/week", "movie", movieIds, 10).then(movies => {
+            // Untuk hero, ambil dari trending "all" (campur movie+tv)
+            // Karena /trending/all pakai media_type, kita handle terpisah
+            return fetchTMDBListFilteredAll(movieIds, tvIds, 10);
+          }),
+          fetchTMDBListFiltered("/movie/popular", "movie", movieIds, 15),
+          fetchTMDBListFiltered("/tv/popular", "tv", tvIds, 15),
           fetchLatestEpisodesWithStills(15),
         ]);
+
         setHeroItems(hero);
-        setMovies(m);
-        setTvShows(t);
+        setPopularMovies(popMovies);
+        setTvShows(popTV);
         setEpisodes(eps);
+
+        // 3. Film Terbaru = dari VidAPI page 1 (langsung pakai, sudah pasti available)
+        const vidapiMovies = await fetchVidapiLatestMovies(15);
+        setMovies(vidapiMovies);
+
       } catch (err: any) {
         console.error("[Home] Load error:", err);
         setError(err?.message || "Failed to load");
@@ -235,6 +243,114 @@ export default function HomePage() {
     };
     load();
   }, []);
+
+  // Helper khusus untuk trending "all" (campur movie + tv)
+  async function fetchTMDBListFilteredAll(
+    movieIds: Set<string>,
+    tvIds: Set<string>,
+    maxItems: number
+  ): Promise<MediaItem[]> {
+    const data = await tmdbFetch("/trending/all/week");
+    if (!data?.results) return [];
+
+    const batchSize = 5;
+    const results: MediaItem[] = [];
+
+    for (let i = 0; i < data.results.length && results.length < maxItems; i += batchSize) {
+      const batch = data.results.slice(i, i + batchSize);
+      const enriched = await Promise.all(
+        batch.map(async (m: any) => {
+          const type = m.media_type as "movie" | "tv";
+          if (type !== "movie" && type !== "tv") return null;
+
+          const detail = await tmdbFetch(
+            `/${type}/${m.id}?append_to_response=external_ids,images&include_image_language=en,null`
+          );
+          if (!detail) return null;
+          const imdbId = detail.external_ids?.imdb_id;
+          if (!imdbId) return null;
+
+          const ids = type === "movie" ? movieIds : tvIds;
+          if (!ids.has(imdbId)) return null;
+
+          const logo = detail.images?.logos?.find((l: any) => l.iso_639_1 === "en")
+                    || detail.images?.logos?.[0];
+          return {
+            id: imdbId,
+            tmdbId: m.id,
+            imdbId,
+            title: detail.title || detail.name || "Untitled",
+            type,
+            poster: imgUrl(detail.poster_path, "w342"),
+            backdrop: imgUrl(detail.backdrop_path, "w1280"),
+            logo: logo ? imgUrl(logo.file_path, "w500") : undefined,
+            overview: detail.overview || "",
+            year: (detail.release_date || detail.first_air_date || "").slice(0, 4),
+            rating: detail.vote_average || 0,
+            genre: detail.genres?.length ? detail.genres.map((g: any) => g.name).join(", ") : undefined,
+            seasons: type === "tv" && detail.seasons
+              ? detail.seasons.filter((s: any) => s.season_number > 0).map((s: any) => ({
+                  seasonNumber: s.season_number,
+                  episodeCount: s.episode_count,
+                  name: s.name,
+                }))
+              : undefined,
+          } as MediaItem;
+        })
+      );
+      for (const item of enriched) {
+        if (item) {
+          results.push(item);
+          if (results.length >= maxItems) break;
+        }
+      }
+    }
+    return results;
+  }
+
+  // Fetch VidAPI latest movies (langsung pakai, sudah available)
+  async function fetchVidapiLatestMovies(maxItems = 15): Promise<MediaItem[]> {
+    try {
+      const r = await fetch("https://vidapi.ru/movies/latest/page-1.json");
+      if (!r.ok) return [];
+      const data = await r.json();
+      const items = (data.items || [])
+        .filter((item: any) => item.tmdb_id && item.poster_url)
+        .slice(0, maxItems);
+
+      const batchSize = 5;
+      const enriched: MediaItem[] = [];
+      for (let i = 0; i < items.length; i += batchSize) {
+        const batch = items.slice(i, i + batchSize);
+        const results = await Promise.all(
+          batch.map(async (item: any) => {
+            const tmdbId = parseInt(item.tmdb_id, 10) || 0;
+            const detail = await tmdbFetch(
+              `/movie/${tmdbId}?append_to_response=external_ids,images&include_image_language=en,null`
+            );
+            const logo = detail?.images?.logos?.find((l: any) => l.iso_639_1 === "en")
+                      || detail?.images?.logos?.[0];
+            return {
+              id: detail?.external_ids?.imdb_id || item.imdb_id || `tmdb-${item.tmdb_id}`,
+              tmdbId,
+              imdbId: detail?.external_ids?.imdb_id || item.imdb_id,
+              title: detail?.title || item.title || "Untitled",
+              type: "movie" as const,
+              poster: detail?.poster_path ? imgUrl(detail.poster_path, "w342") : item.poster_url,
+              backdrop: detail?.backdrop_path ? imgUrl(detail.backdrop_path, "w1280") : item.poster_url,
+              logo: logo ? imgUrl(logo.file_path, "w500") : undefined,
+              overview: detail?.overview || "",
+              year: detail?.release_date?.slice(0, 4) || item.year || "",
+              rating: detail?.vote_average || parseFloat(item.rating) || 0,
+              genre: detail?.genres?.length ? detail.genres.map((g: any) => g.name).join(", ") : item.genre,
+            } as MediaItem;
+          })
+        );
+        enriched.push(...results);
+      }
+      return enriched;
+    } catch { return []; }
+  }
 
   const handlePlay = useCallback((item: MediaItem) => {
     if (!item.imdbId) {
@@ -342,6 +458,13 @@ export default function HomePage() {
           title="Film Terbaru"
           icon={<Film className="h-5 w-5 text-red-500" />}
           items={movies}
+          onItemClick={handleDetail}
+        />
+
+        <Section
+          title="Film Populer"
+          icon={<Flame className="h-5 w-5 text-orange-500" />}
+          items={popularMovies}
           onItemClick={handleDetail}
         />
 
