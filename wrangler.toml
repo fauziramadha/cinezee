@@ -44,6 +44,12 @@ database_id = "b10ed6c8-9d1e-46f9-aea3-23eaf47094f0"
 [triggers]
 crons = ["0 7 * * *"]
 
+# ... konfigurasi yang sudah ada ...
+
+[[kv_namespaces]]
+binding = "VIDAPI_KV"
+id = "c428f81b264e44efabaa697f6cc95571"
+
 # =====================================================
 # Build Settings
 # =====================================================
