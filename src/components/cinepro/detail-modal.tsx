@@ -62,7 +62,7 @@ export function DetailModal() {
   const [episode, setEpisode] = useState(1);
   const [episodes, setEpisodes] = useState<Episode[]>([]);
   const [episodesLoading, setEpisodesLoading] = useState(false);
-  const [vidapiEps, setVidapiEps] = useState<{ season: number; episodes: number[] }[]>([]);
+  const [vidapiEps, setVidapiEps] = useState<{ season: number; episodes: number[] }[] | null>(null);
 
   const [cachedImdbId, setCachedImdbId] = useState<string | null>(null);
   const [trailerOpen, setTrailerOpen] = useState(false);
@@ -84,7 +84,7 @@ export function DetailModal() {
         setReplyTo(null); setReplyText(""); setCommentText("");
         setSeason(1); setEpisode(1); setEpisodes([]);
         setCachedImdbId(null);
-        setVidapiEps([]);
+        setVidapiEps(null);
       });
       return;
     }
@@ -153,10 +153,13 @@ export function DetailModal() {
   // Fetch VidAPI available episodes for TV
   useEffect(() => {
     if (selectedMedia?.type === "tv" && cachedImdbId) {
+      setVidapiEps(null); // Reset ke loading state
       fetch(`/api/vidapi/show-episodes?imdb=${cachedImdbId}`)
         .then(res => res.json())
         .then(data => setVidapiEps(data.seasons || []))
         .catch(() => setVidapiEps([]));
+    } else {
+      setVidapiEps(null);
     }
   }, [selectedMedia, cachedImdbId]);
 
@@ -367,9 +370,9 @@ export function DetailModal() {
   // Kalau VidAPI belum load → tampilkan loading (array kosong)
   // Kalau VidAPI sudah load tapi season ini tidak ada → tampilkan "belum tersedia" (array kosong)
   // Kalau VidAPI sudah load dan season ada → tampilkan hanya episode yang available
-  const currentSeasonVidapi = vidapiEps.find(s => s.season === season);
+  const currentSeasonVidapi = vidapiEps?.find(s => s.season === season);
   const availableEps = currentSeasonVidapi?.episodes || [];
-  const isVidapiLoaded = vidapiEps.length > 0;
+  const isVidapiLoaded = vidapiEps !== null;
   const filteredEpisodes = isVidapiLoaded 
     ? episodes.filter(ep => availableEps.includes(ep.episodeNumber))
     : [];
