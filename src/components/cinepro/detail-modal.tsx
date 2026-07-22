@@ -6,7 +6,7 @@ import { useSafeSession } from "@/lib/use-safe-session";
 import {
   Play, X, Star, Calendar, Clock, Loader2, Bookmark, Check, Share2,
   MessageSquare, Send, Trash2, CornerDownRight, ChevronLeft, ChevronRight,
-  User as UserIcon, Film,
+  User as UserIcon, Film, Building2,
 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -18,6 +18,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useAppStore } from "@/lib/store";
 import { getImageUrl, fetchDetail, fetchImdbId, type MovieDetail } from "@/lib/tmdb";
 import { MovieCard } from "./movie-card";
+import { TrailerModal } from "./trailer-modal";
+import { CastList } from "./cast-list";
+import { SimilarList } from "./similar-list";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
@@ -26,7 +29,6 @@ interface RatingItem { id: string; rating: number; review: string | null; create
 interface CommentItem { id: string; userId: string; mediaId: number; mediaType: string; content: string; parentId: string | null; createdAt: string; updatedAt: string; userName: string | null; userImage: string | null; replies: CommentItem[]; }
 interface Episode { episodeNumber: number; name: string; overview: string; stillPath: string | null; airDate: string; runtime: number | null; }
 
-// Helper: extract TMDB ID dari selectedMedia
 function extractTmdbId(media: any): number {
   if (media?.tmdbId) return Number(media.tmdbId);
   if (typeof media?.id === "number") return media.id;
@@ -35,17 +37,6 @@ function extractTmdbId(media: any): number {
     if (/^\d+$/.test(media.id)) return parseInt(media.id, 10);
   }
   return 0;
-}
-
-// Helper: dapatkan URL image backdrop dengan fallback
-function getHeroImageUrl(detail: any, selectedMedia: any): string | null {
-  if (detail?.backdrop_path) return getImageUrl(detail.backdrop_path, "original");
-  if (selectedMedia?.backdrop) return selectedMedia.backdrop;
-  if (selectedMedia?.backdropPath) return selectedMedia.backdropPath;
-  if (detail?.poster_path) return getImageUrl(detail.poster_path, "original");
-  if (selectedMedia?.poster) return selectedMedia.poster;
-  if (selectedMedia?.posterPath) return selectedMedia.posterPath;
-  return null;
 }
 
 export function DetailModal() {
@@ -71,8 +62,10 @@ export function DetailModal() {
   const [episode, setEpisode] = useState(1);
   const [episodes, setEpisodes] = useState<Episode[]>([]);
   const [episodesLoading, setEpisodesLoading] = useState(false);
+  const [vidapiEps, setVidapiEps] = useState<{ season: number; episodes: number[] }[]>([]);
 
   const [cachedImdbId, setCachedImdbId] = useState<string | null>(null);
+  const [trailerOpen, setTrailerOpen] = useState(false);
 
   const handlePersonClick = (personId: number) => {
     if (selectedMedia) {
@@ -91,6 +84,7 @@ export function DetailModal() {
         setReplyTo(null); setReplyText(""); setCommentText("");
         setSeason(1); setEpisode(1); setEpisodes([]);
         setCachedImdbId(null);
+        setVidapiEps([]);
       });
       return;
     }
@@ -103,89 +97,31 @@ export function DetailModal() {
 
       try {
         const tmdbId = extractTmdbId(selectedMedia);
-        console.log("[Detail] Loading detail for:", { id: selectedMedia.id, tmdbId, type: selectedMedia.type });
+        let data: MovieDetail | null = null;
 
-        const fallbackDetail: any = {
-          id: tmdbId || 0,
-          title: selectedMedia.title,
-          name: selectedMedia.type === "tv" ? selectedMedia.title : undefined,
-          overview: (selectedMedia as any).overview || "No overview available.",
-          poster_path: (selectedMedia as any).poster || (selectedMedia as any).posterPath || null,
-          backdrop_path: (selectedMedia as any).backdrop || (selectedMedia as any).backdropPath || null,
-          vote_average: (selectedMedia as any).rating || 0,
-          vote_count: 0,
-          release_date: (selectedMedia as any).year ? `${(selectedMedia as any).year}-01-01` : undefined,
-          first_air_date: (selectedMedia as any).year ? `${(selectedMedia as any).year}-01-01` : undefined,
-          media_type: selectedMedia.type,
-          genres: [],
-          runtime: undefined,
-          status: "Released",
-          tagline: "",
-          credits: { cast: [], crew: [] },
-          videos: { results: [] },
-          similar: { results: [] },
-          recommendations: { results: [] },
-        };
-
-        // Method 1: /api/detail/[id]
         if (tmdbId > 0) {
           try {
-            const res = await fetch(`/api/detail/${tmdbId}?type=${selectedMedia.type}`);
-            if (res.ok) {
-              const data = await res.json();
-              if (data && (data.title || data.name)) {
-                if (!cancelled) setDetail(data as MovieDetail);
-                const imdbId = (data as any).imdb_id || (data as any).external_ids?.imdb_id || (selectedMedia as any).imdbId || null;
-                if (imdbId) setCachedImdbId(imdbId);
-                return;
-              }
-            }
-          } catch (e) { console.warn("[Detail] /api/detail failed:", e); }
-        }
-
-        // Method 2: proxy /api/tmdb/*
-        if (tmdbId > 0) {
-          try {
-            const proxyUrl = `/api/tmdb/${selectedMedia.type}/${tmdbId}?append_to_response=external_ids,credits,videos,similar,recommendations,images`;
-            console.log("[Detail] Trying proxy:", proxyUrl);
+            const proxyUrl = `/api/tmdb/${selectedMedia.type}/${tmdbId}?append_to_response=external_ids,credits,videos,similar,recommendations,images&include_image_language=en,null`;
             const res = await fetch(proxyUrl);
             if (res.ok) {
-              const data = await res.json();
-              if (data && (data.title || data.name)) {
-                console.log("[Detail] Got data from proxy");
-                if (!cancelled) setDetail(data as MovieDetail);
-                const imdbId = data.external_ids?.imdb_id || data.imdb_id || (selectedMedia as any).imdbId || null;
-                if (imdbId) setCachedImdbId(imdbId);
-                return;
-              }
+              data = await res.json();
             }
           } catch (e) { console.warn("[Detail] Proxy failed:", e); }
         }
 
-        // Method 3: tmdb.ts fetchDetail
-        if (tmdbId > 0) {
-          try {
-            console.log("[Detail] Trying tmdb.ts fetchDetail");
-            const data = await fetchDetail(tmdbId, selectedMedia.type as "movie" | "tv");
-            if (data) {
-              if (!cancelled) setDetail(data);
-              const imdbId = (data as any).imdb_id || (data as any).external_ids?.imdb_id || (selectedMedia as any).imdbId || null;
-              if (imdbId) setCachedImdbId(imdbId);
-              return;
-            }
-          } catch (e) { console.warn("[Detail] fetchDetail failed:", e); }
+        if (!data && tmdbId > 0) {
+          data = await fetchDetail(tmdbId, selectedMedia.type as "movie" | "tv");
         }
 
-        // Method 4: Fallback ke selectedMedia data
-        console.log("[Detail] Using fallback (selectedMedia data only)");
-        if (!cancelled) setDetail(fallbackDetail as MovieDetail);
+        if (cancelled) return;
+        if (!data) throw new Error("Failed to load detail");
+        setDetail(data);
 
-        const imdbId = (selectedMedia as any).imdbId ||
-                       (typeof selectedMedia.id === "string" && selectedMedia.id.startsWith("tt") ? selectedMedia.id : null);
+        const imdbId = (data as any).external_ids?.imdb_id || (selectedMedia as any).imdbId;
         if (imdbId) setCachedImdbId(imdbId);
+
       } catch (err) {
         if (cancelled) return;
-        console.error("[Detail] Fatal error:", err);
         setError(err instanceof Error ? err.message : "Unknown error");
       } finally {
         if (!cancelled) setLoading(false);
@@ -214,7 +150,17 @@ export function DetailModal() {
     return () => { cancelled = true; };
   }, [selectedMedia, session, status]);
 
-  // Episodes: fetch saat season berubah (TV only)
+  // Fetch VidAPI available episodes for TV
+  useEffect(() => {
+    if (selectedMedia?.type === "tv" && cachedImdbId) {
+      fetch(`/api/vidapi/show-episodes?imdb=${cachedImdbId}`)
+        .then(res => res.json())
+        .then(data => setVidapiEps(data.seasons || []))
+        .catch(() => setVidapiEps([]));
+    }
+  }, [selectedMedia, cachedImdbId]);
+
+  // Fetch TMDB season details
   useEffect(() => {
     if (!selectedMedia || selectedMedia.type !== "tv" || !detail) return;
     let cancelled = false;
@@ -244,16 +190,12 @@ export function DetailModal() {
     return () => { cancelled = true; };
   }, [selectedMedia, detail, season]);
 
-  // handlePlay - enrich dengan imdbId + seasons
   const handlePlay = async (epNum?: number) => {
     if (!selectedMedia) return;
     const ep = epNum || episode;
     if (epNum) setEpisode(epNum);
 
-    let finalImdbId = cachedImdbId ||
-                      (selectedMedia as any).imdbId ||
-                      (typeof selectedMedia.id === "string" && selectedMedia.id.startsWith("tt") ? selectedMedia.id : null);
-
+    let finalImdbId = cachedImdbId || (selectedMedia as any).imdbId;
     if (!finalImdbId) {
       try {
         const tmdbId = extractTmdbId(selectedMedia);
@@ -264,7 +206,7 @@ export function DetailModal() {
             setCachedImdbId(fetched);
           }
         }
-      } catch (e) { console.warn("[Detail] Failed to fetch imdbId on-demand:", e); }
+      } catch (e) { console.warn("[Detail] Failed to fetch imdbId:", e); }
     }
 
     let seasonsMeta: any[] | undefined;
@@ -412,7 +354,7 @@ export function DetailModal() {
   const creator = detail?.created_by?.[0]?.name;
   const cast = detail?.credits?.cast?.slice(0, 12) || [];
   const trailer = detail?.videos?.results?.find((v) => v.site === "YouTube" && v.type === "Trailer");
-  const similar = detail?.recommendations?.results?.slice(0, 12) || [];
+  const similar = detail?.recommendations?.results?.slice(0, 12) || detail?.similar?.results?.slice(0, 12) || [];
   const avgUserRating = ratings.length > 0 ? (ratings.reduce((sum, r) => sum + r.rating, 0) / ratings.length).toFixed(1) : null;
   const isTV = selectedMedia.type === "tv";
 
@@ -420,376 +362,349 @@ export function DetailModal() {
     || (detail as any)?.images?.logos?.[0]
     || null;
 
-  const heroImageUrl = getHeroImageUrl(detail, selectedMedia);
+  // Filter episodes by VidAPI availability
+  const currentSeasonVidapi = vidapiEps.find(s => s.season === season);
+  const availableEps = currentSeasonVidapi?.episodes || [];
+  const filteredEpisodes = episodes.filter(ep => availableEps.includes(ep.episodeNumber));
+
   return (
-    <Dialog open={!!selectedMedia} onOpenChange={(open) => { if (!open) setSelectedMedia(null); }}>
-      <DialogContent
-        className="flex flex-col gap-0 overflow-hidden p-0 max-w-[95vw] sm:max-w-2xl md:max-w-4xl lg:max-w-6xl"
-        style={{
-          height: "calc(100dvh - 2rem)",
-          maxHeight: "calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 1rem)",
-          marginTop: "env(safe-area-inset-top)",
-          marginBottom: "env(safe-area-inset-bottom)",
-          borderRadius: "12px",
-        }}
-      >
-        <DialogHeader className="sr-only"><DialogTitle>{title}</DialogTitle></DialogHeader>
-
-        <button
-          onClick={() => setSelectedMedia(null)}
-          className="absolute right-3 top-3 z-50 flex h-9 w-9 items-center justify-center rounded-full bg-black/80 text-white backdrop-blur-sm transition-colors hover:bg-primary"
-          aria-label="Close"
+    <>
+      <Dialog open={!!selectedMedia} onOpenChange={(open) => { if (!open) setSelectedMedia(null); }}>
+        <DialogContent
+          className="flex flex-col gap-0 overflow-hidden p-0 max-w-[95vw] sm:max-w-2xl md:max-w-4xl lg:max-w-6xl"
+          style={{
+            height: "calc(100dvh - 2rem)",
+            maxHeight: "calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 1rem)",
+            marginTop: "env(safe-area-inset-top)",
+            marginBottom: "env(safe-area-inset-bottom)",
+            borderRadius: "12px",
+          }}
         >
-          <X className="h-4 w-4" />
-        </button>
+          <DialogHeader className="sr-only"><DialogTitle>{title}</DialogTitle></DialogHeader>
 
-        <div className="flex-1 overflow-y-auto overflow-x-hidden">
-          {loading ? (
-            <div className="flex h-96 items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
-          ) : error ? (
-            <div className="flex h-96 flex-col items-center justify-center gap-3 p-6 text-center">
-              <p className="text-sm text-destructive">{error}</p>
-              <Button variant="secondary" size="sm" onClick={() => setSelectedMedia(null)}>Go back</Button>
-            </div>
-          ) : detail ? (
-            <div className="fade-in pb-16">
-              {/* === Hero Section (pakai <img> biasa, bukan next/image) === */}
-              <div className="relative h-[22vh] min-h-[140px] w-full overflow-hidden bg-muted sm:h-[30vh] md:aspect-video md:h-auto">
-                {heroImageUrl ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={heroImageUrl}
-                    alt={title}
-                    className="h-full w-full object-cover"
-                    onError={(e) => {
-                      console.error("[Detail] Hero image failed:", heroImageUrl);
-                      (e.target as HTMLImageElement).style.display = "none";
-                    }}
-                  />
-                ) : (
-                  <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-zinc-800 to-zinc-900">
-                    <Film className="h-12 w-12 text-white/30" />
-                  </div>
-                )}
-                <div className="absolute inset-0 bg-gradient-to-t from-card via-card/30 to-transparent" />
-                <div className="absolute inset-0 bg-gradient-to-r from-card/80 via-transparent to-transparent" />
-                <div className="absolute bottom-0 left-0 right-0 p-3 pr-12 sm:p-6 md:p-8">
-                  <Badge className="mb-1 bg-primary text-primary-foreground sm:mb-2">{isTV ? "TV Series" : "Movie"}</Badge>
-                  {logo ? (
-                    <div className="relative h-10 w-auto max-w-[75%] sm:h-14 md:h-20 md:max-w-[60%]">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src={getImageUrl(logo.file_path, "w500")}
-                        alt={title}
-                        className="h-full w-full object-contain object-left-bottom drop-shadow-lg"
-                        onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
-                      />
-                    </div>
-                  ) : (
-                    <h2 className="text-lg font-extrabold tracking-tight text-white drop-shadow-lg sm:text-2xl md:text-4xl">
-                      {title}
-                    </h2>
-                  )}
-                  {detail.tagline && (
-                    <p className="mt-0.5 truncate text-[10px] italic text-white/80 sm:text-sm">
-                      &quot;{detail.tagline}&quot;
-                    </p>
-                  )}
-                </div>
+          <button
+            onClick={() => setSelectedMedia(null)}
+            className="absolute right-3 top-3 z-50 flex h-9 w-9 items-center justify-center rounded-full bg-black/80 text-white backdrop-blur-sm transition-colors hover:bg-primary"
+            aria-label="Close"
+          >
+            <X className="h-4 w-4" />
+          </button>
+
+          <div className="flex-1 overflow-y-auto overflow-x-hidden">
+            {loading ? (
+              <div className="flex h-96 items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
+            ) : error ? (
+              <div className="flex h-96 flex-col items-center justify-center gap-3 p-6 text-center">
+                <p className="text-sm text-destructive">{error}</p>
+                <Button variant="secondary" size="sm" onClick={() => setSelectedMedia(null)}>Go back</Button>
               </div>
+            ) : detail ? (
+              <div className="fade-in pb-16">
+                {/* === Hero Section === */}
+                <div className="relative h-[22vh] min-h-[140px] w-full overflow-hidden bg-muted sm:h-[30vh] md:aspect-video md:h-auto">
+                  {detail.backdrop_path && (
+                    <img
+                      src={getImageUrl(detail.backdrop_path, "original")}
+                      alt={title}
+                      className="h-full w-full object-cover"
+                    />
+                  )}
+                  <div className="absolute inset-0 bg-gradient-to-t from-card via-card/30 to-transparent" />
+                  <div className="absolute inset-0 bg-gradient-to-r from-card/80 via-transparent to-transparent" />
+                  <div className="absolute bottom-0 left-0 right-0 p-3 pr-12 sm:p-6 md:p-8">
+                    <Badge className="mb-1 bg-primary text-primary-foreground sm:mb-2">{isTV ? "TV Series" : "Movie"}</Badge>
+                    {logo ? (
+                      <div className="relative h-10 w-auto max-w-[75%] sm:h-14 md:h-20 md:max-w-[60%]">
+                        <img
+                          src={getImageUrl(logo.file_path, "w500")}
+                          alt={title}
+                          className="h-full w-full object-contain object-left-bottom drop-shadow-lg"
+                          onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+                        />
+                      </div>
+                    ) : (
+                      <h2 className="text-lg font-extrabold tracking-tight text-white drop-shadow-lg sm:text-2xl md:text-4xl">
+                        {title}
+                      </h2>
+                    )}
+                    {detail.tagline && (
+                      <p className="mt-0.5 truncate text-[10px] italic text-white/80 sm:text-sm">
+                        &quot;{detail.tagline}&quot;
+                      </p>
+                    )}
+                  </div>
+                </div>
 
-              {/* === Action bar === */}
-              <div className="flex flex-wrap items-center gap-2 border-b border-border bg-card/50 px-4 py-3 sm:gap-3 sm:px-6 md:px-8">
-                <Button size="sm" onClick={() => handlePlay()} className="gap-2 bg-primary text-primary-foreground hover:bg-primary/90 sm:size-lg">
-                  <Play className="h-4 w-4 fill-current" /><span className="text-xs sm:text-sm">Play</span>
-                </Button>
-                {trailer && (
-                  <a href={`https://www.youtube.com/watch?v=${trailer.key}`} target="_blank" rel="noopener noreferrer">
-                    <Button size="sm" variant="secondary" className="gap-2 sm:size-lg">
+                {/* === Action bar === */}
+                <div className="flex flex-wrap items-center gap-2 border-b border-border bg-card/50 px-4 py-3 sm:gap-3 sm:px-6 md:px-8">
+                  <Button size="sm" onClick={() => handlePlay()} className="gap-2 bg-red-600 text-white hover:bg-red-700 sm:size-lg">
+                    <Play className="h-4 w-4 fill-current" /><span className="text-xs sm:text-sm">Play</span>
+                  </Button>
+                  {trailer && (
+                    <Button size="sm" variant="secondary" className="gap-2 sm:size-lg" onClick={() => setTrailerOpen(true)}>
                       <Film className="h-3 w-3 sm:h-4 sm:w-4" /><span className="text-xs sm:text-sm">Trailer</span>
                     </Button>
-                  </a>
-                )}
-                <Button size="icon" variant="outline" onClick={handleToggleWatchlist} disabled={watchlistLoading} className={inWatchlist ? "border-primary text-primary" : ""}>
-                  {watchlistLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : inWatchlist ? <Check className="h-4 w-4" /> : <Bookmark className="h-4 w-4" />}
-                </Button>
-                <Button size="icon" variant="outline" aria-label="Share" onClick={handleShare}>
-                  <Share2 className="h-4 w-4" />
-                </Button>
-              </div>
+                  )}
+                  <Button size="icon" variant="outline" onClick={handleToggleWatchlist} disabled={watchlistLoading} className={inWatchlist ? "border-primary text-primary" : ""}>
+                    {watchlistLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : inWatchlist ? <Check className="h-4 w-4" /> : <Bookmark className="h-4 w-4" />}
+                  </Button>
+                  <Button size="icon" variant="outline" aria-label="Share" onClick={handleShare}>
+                    <Share2 className="h-4 w-4" />
+                  </Button>
+                </div>
 
-              {/* === Season/Episode selector + Episode thumbnails (TV only) === */}
-              {isTV && detail?.seasons && (
-                <div className="border-b border-border bg-card/30 px-4 py-3 sm:px-6 md:px-8">
-                  <div className="mb-3 flex items-center gap-2">
-                    <Select value={String(season)} onValueChange={(v) => { setSeason(parseInt(v, 10)); setEpisode(1); }}>
-                      <SelectTrigger className="h-8 w-28 shrink-0 text-xs"><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        {detail.seasons.filter((s) => s.season_number > 0).map((s) => (
-                          <SelectItem key={s.id} value={String(s.season_number)}>S{s.season_number}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <span className="ml-auto text-[10px] text-muted-foreground">EP {episode}</span>
-                    <div className="flex gap-1">
-                      <Button size="icon" variant="ghost" className="h-8 w-8" disabled={episode <= 1} onClick={() => setEpisode(Math.max(1, episode - 1))}>
-                        <ChevronLeft className="h-4 w-4" />
-                      </Button>
-                      <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => setEpisode(episode + 1)}>
-                        <ChevronRight className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </div>
-                  {episodesLoading ? (
-                    <div className="flex h-24 items-center justify-center"><Loader2 className="h-5 w-5 animate-spin text-primary" /></div>
-                  ) : episodes.length > 0 ? (
-                    <div className="overflow-x-auto pb-1" style={{ scrollbarWidth: "none", WebkitOverflowScrolling: "touch" }}>
-                      <div className="flex gap-2">
-                        {episodes.map((ep) => (
-                          <button
-                            key={ep.episodeNumber}
-                            onClick={() => handlePlay(ep.episodeNumber)}
-                            className={`relative aspect-video w-28 shrink-0 overflow-hidden rounded-lg border-2 transition-all sm:w-36 ${episode === ep.episodeNumber ? "border-primary" : "border-transparent hover:border-border"}`}
-                          >
-                            {ep.stillPath ? (
-                              // eslint-disable-next-line @next/next/no-img-element
-                              <img
-                                src={getImageUrl(ep.stillPath, "w300")}
-                                alt={`Ep ${ep.episodeNumber}`}
-                                className="h-full w-full object-cover"
-                                loading="lazy"
-                              />
-                            ) : (
-                              <div className="flex h-full items-center justify-center bg-muted"><span className="text-[10px] text-muted-foreground">No Img</span></div>
-                            )}
-                            <div className="absolute inset-0 bg-gradient-to-t from-black/90 to-transparent" />
-                            <div className="absolute bottom-1 left-1 right-1">
-                              <p className="truncate text-[9px] font-bold text-white">EP {ep.episodeNumber}</p>
-                              <p className="truncate text-[8px] text-white/70">{ep.name}</p>
-                            </div>
-                            <div className="absolute inset-0 flex items-center justify-center bg-black/30 opacity-0 transition-opacity hover:opacity-100">
-                              <div className="flex h-7 w-7 items-center justify-center rounded-full bg-primary"><Play className="h-3 w-3 fill-white text-white" /></div>
-                            </div>
-                          </button>
-                        ))}
+                {/* === Season/Episode selector (TV only) === */}
+                {isTV && detail?.seasons && (
+                  <div className="border-b border-border bg-card/30 px-4 py-3 sm:px-6 md:px-8">
+                    <div className="mb-3 flex items-center gap-2">
+                      <Select value={String(season)} onValueChange={(v) => { setSeason(parseInt(v, 10)); setEpisode(1); }}>
+                        <SelectTrigger className="h-8 w-28 shrink-0 text-xs"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          {detail.seasons.filter((s) => s.season_number > 0).map((s) => (
+                            <SelectItem key={s.id} value={String(s.season_number)}>S{s.season_number}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <span className="ml-auto text-[10px] text-muted-foreground">EP {episode}</span>
+                      <div className="flex gap-1">
+                        <Button size="icon" variant="ghost" className="h-8 w-8" disabled={episode <= 1} onClick={() => setEpisode(Math.max(1, episode - 1))}>
+                          <ChevronLeft className="h-4 w-4" />
+                        </Button>
+                        <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => setEpisode(episode + 1)}>
+                          <ChevronRight className="h-4 w-4" />
+                        </Button>
                       </div>
                     </div>
-                  ) : null}
-                </div>
-              )}
-
-              {/* === Content grid === */}
-              <div className="grid gap-4 p-4 sm:gap-6 sm:p-6 md:grid-cols-3 md:p-8">
-                <div className="min-w-0 md:col-span-2">
-                  {/* Meta info */}
-                  <div className="mb-3 flex flex-wrap items-center gap-2 text-xs sm:mb-4 sm:gap-3 sm:text-sm">
-                    <span className="flex items-center gap-1">
-                      <Star className="h-3.5 w-3.5 fill-yellow-400 text-yellow-400 sm:h-4 sm:w-4" />
-                      <span className="font-semibold">{tmdbRating}</span>
-                      <span className="text-muted-foreground">TMDB</span>
-                    </span>
-                    {avgUserRating && (
-                      <span className="flex items-center gap-1 text-primary">
-                        <Star className="h-3.5 w-3.5 fill-primary text-primary sm:h-4 sm:w-4" />
-                        <span className="font-semibold">{avgUserRating}</span>
-                        <span className="text-muted-foreground">User</span>
-                      </span>
-                    )}
-                    {year && (
-                      <span className="flex items-center gap-1 text-muted-foreground">
-                        <Calendar className="h-3.5 w-3.5 sm:h-4 sm:w-4" />{year}
-                      </span>
-                    )}
-                    {runtime && (
-                      <span className="flex items-center gap-1 text-muted-foreground">
-                        <Clock className="h-3.5 w-3.5 sm:h-4 sm:w-4" />{runtime}m
-                      </span>
-                    )}
-                    {detail.status && <Badge variant="secondary" className="text-xs">{detail.status}</Badge>}
-                  </div>
-
-                  {/* Genres */}
-                  {detail.genres && detail.genres.length > 0 && (
-                    <div className="mb-3 flex flex-wrap gap-1.5 sm:mb-4">
-                      {detail.genres.map((g) => <Badge key={g.id} variant="outline" className="text-xs">{g.name}</Badge>)}
-                    </div>
-                  )}
-
-                  {/* Overview */}
-                  <h3 className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground sm:mb-2 sm:text-sm">Overview</h3>
-                  <p className="break-words text-xs leading-relaxed text-foreground/90 sm:text-sm md:text-base">
-                    {detail.overview || "No overview available."}
-                  </p>
-
-                  {/* Top Cast */}
-                  {cast.length > 0 && (
-                    <div className="mt-4 sm:mt-6">
-                      <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground sm:mb-3 sm:text-sm">
-                        Top Cast
-                      </h3>
-                      <div className="overflow-x-auto pb-2" style={{ scrollbarWidth: "none", WebkitOverflowScrolling: "touch" }}>
-                        <style>{`div::-webkit-scrollbar { display: none; }`}</style>
-                        <div className="flex gap-3">
-                          {cast.map((p) => (
+                    {episodesLoading ? (
+                      <div className="flex h-24 items-center justify-center"><Loader2 className="h-5 w-5 animate-spin text-primary" /></div>
+                    ) : filteredEpisodes.length > 0 ? (
+                      <div className="overflow-x-auto pb-1" style={{ scrollbarWidth: "none", WebkitOverflowScrolling: "touch" }}>
+                        <div className="flex gap-2">
+                          {filteredEpisodes.map((ep) => (
                             <button
-                              key={p.id}
-                              onClick={() => handlePersonClick(p.id)}
-                              className="shrink-0 w-20 text-center sm:w-24 group"
+                              key={ep.episodeNumber}
+                              onClick={() => handlePlay(ep.episodeNumber)}
+                              className={`relative aspect-video w-28 shrink-0 overflow-hidden rounded-lg border-2 transition-all sm:w-36 ${episode === ep.episodeNumber ? "border-primary" : "border-transparent hover:border-border"}`}
                             >
-                              <div className="relative mx-auto mb-2 h-20 w-20 overflow-hidden rounded-full bg-muted sm:h-24 sm:w-24 ring-2 ring-transparent transition-all group-hover:ring-primary">
-                                {p.profile_path ? (
-                                  // eslint-disable-next-line @next/next/no-img-element
-                                  <img
-                                    src={getImageUrl(p.profile_path, "w185")}
-                                    alt={p.name}
-                                    className="h-full w-full object-cover"
-                                    loading="lazy"
-                                  />
-                                ) : (
-                                  <div className="flex h-full items-center justify-center text-muted-foreground">
-                                    <UserIcon className="h-8 w-8" />
-                                  </div>
-                                )}
+                              {ep.stillPath ? (
+                                <img src={getImageUrl(ep.stillPath, "w300")} alt={`Ep ${ep.episodeNumber}`} className="h-full w-full object-cover" />
+                              ) : (
+                                <div className="flex h-full items-center justify-center bg-muted"><span className="text-[10px] text-muted-foreground">No Img</span></div>
+                              )}
+                              <div className="absolute inset-0 bg-gradient-to-t from-black/90 to-transparent" />
+                              <div className="absolute bottom-1 left-1 right-1">
+                                <p className="truncate text-[9px] font-bold text-white">EP {ep.episodeNumber}</p>
+                                <p className="truncate text-[8px] text-white/70">{ep.name}</p>
                               </div>
-                              <p className="truncate text-[11px] font-medium text-foreground group-hover:text-primary sm:text-xs">{p.name}</p>
-                              <p className="truncate text-[9px] text-muted-foreground sm:text-[10px]">{p.character}</p>
+                              <div className="absolute inset-0 flex items-center justify-center bg-black/30 opacity-0 transition-opacity hover:opacity-100">
+                                <div className="flex h-7 w-7 items-center justify-center rounded-full bg-primary"><Play className="h-3 w-3 fill-white text-white" /></div>
+                              </div>
                             </button>
                           ))}
                         </div>
                       </div>
-                    </div>
-                  )}
+                    ) : (
+                      <div className="flex h-24 items-center justify-center text-xs text-muted-foreground">
+                        Episode belum tersedia di VidAPI
+                      </div>
+                    )}
+                  </div>
+                )}
 
-                  {/* Rate This */}
-                  <div className="mt-6 border-t border-border pt-4">
-                    <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground sm:text-sm">
-                      Rate This {isTV ? "Series" : "Movie"}
-                    </h3>
-                    <div className="flex items-center gap-1">
-                      {[1,2,3,4,5].map((star) => {
-                        const value = star * 2;
-                        const isActive = (hoverRating || userRating?.rating || 0) >= value;
-                        return (
-                          <button
-                            key={star}
-                            onClick={() => handleRate(value)}
-                            onMouseEnter={() => setHoverRating(value)}
-                            onMouseLeave={() => setHoverRating(0)}
-                            disabled={ratingLoading}
-                            className="transition-transform hover:scale-110 disabled:opacity-50"
-                          >
-                            <Star className={isActive ? "h-6 w-6 fill-yellow-400 text-yellow-400 sm:h-7 sm:w-7" : "h-6 w-6 text-muted-foreground sm:h-7 sm:w-7"} />
-                          </button>
-                        );
-                      })}
-                      <span className="ml-3 text-sm font-medium">
-                        {ratingLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : userRating ? <span className="text-primary">{userRating.rating}/10</span> : <span className="text-muted-foreground">Click to rate</span>}
+                {/* === Content grid === */}
+                <div className="grid gap-4 p-4 sm:gap-6 sm:p-6 md:grid-cols-3 md:p-8">
+                  <div className="min-w-0 md:col-span-2">
+                    {/* Meta info */}
+                    <div className="mb-3 flex flex-wrap items-center gap-2 text-xs sm:mb-4 sm:gap-3 sm:text-sm">
+                      <span className="flex items-center gap-1">
+                        <Star className="h-3.5 w-3.5 fill-yellow-400 text-yellow-400 sm:h-4 sm:w-4" />
+                        <span className="font-semibold">{tmdbRating}</span>
+                        <span className="text-muted-foreground">TMDB</span>
                       </span>
+                      {avgUserRating && (
+                        <span className="flex items-center gap-1 text-primary">
+                          <Star className="h-3.5 w-3.5 fill-primary text-primary sm:h-4 sm:w-4" />
+                          <span className="font-semibold">{avgUserRating}</span>
+                          <span className="text-muted-foreground">User</span>
+                        </span>
+                      )}
+                      {year && (
+                        <span className="flex items-center gap-1 text-muted-foreground">
+                          <Calendar className="h-3.5 w-3.5 sm:h-4 sm:w-4" />{year}
+                        </span>
+                      )}
+                      {runtime && (
+                        <span className="flex items-center gap-1 text-muted-foreground">
+                          <Clock className="h-3.5 w-3.5 sm:h-4 sm:w-4" />{runtime}m
+                        </span>
+                      )}
+                      {detail.status && <Badge variant="secondary" className="text-xs">{detail.status}</Badge>}
                     </div>
-                    {userRating && <Button variant="ghost" size="sm" onClick={() => handleRate(0)} className="mt-2 text-xs text-muted-foreground hover:text-destructive">Hapus rating</Button>}
-                  </div>
-                </div>
 
-                {/* Right sidebar info */}
-                <div className="min-w-0 space-y-3 sm:space-y-4">
-                  {(director || creator) && (
-                    <div className="overflow-hidden">
-                      <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{isTV ? "Creator" : "Director"}</h4>
-                      <p className="mt-0.5 break-words text-xs sm:text-sm">{director || creator}</p>
-                    </div>
-                  )}
-                  {isTV && detail.number_of_seasons && (
-                    <div className="flex gap-4">
-                      <div>
-                        <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Seasons</h4>
-                        <p className="mt-0.5 text-xs sm:text-sm">{detail.number_of_seasons}</p>
+                    {/* Genres */}
+                    {detail.genres && detail.genres.length > 0 && (
+                      <div className="mb-3 flex flex-wrap gap-1.5 sm:mb-4">
+                        {detail.genres.map((g) => <Badge key={g.id} variant="outline" className="text-xs">{g.name}</Badge>)}
                       </div>
-                      <div>
-                        <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Episodes</h4>
-                        <p className="mt-0.5 text-xs sm:text-sm">{detail.number_of_episodes}</p>
+                    )}
+
+                    {/* Overview */}
+                    <h3 className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground sm:mb-2 sm:text-sm">Overview</h3>
+                    <p className="break-words text-xs leading-relaxed text-foreground/90 sm:text-sm md:text-base">
+                      {detail.overview || "No overview available."}
+                    </p>
+
+                    {/* Studio Logos */}
+                    {detail.production_companies && detail.production_companies.length > 0 && (
+                      <div className="mt-4 flex flex-wrap items-center gap-4 border-t border-border pt-4">
+                        <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                          <Building2 className="h-3.5 w-3.5" /> Studios:
+                        </span>
+                        {detail.production_companies.filter(c => c.logo_path).map(c => (
+                          <img 
+                            key={c.id} 
+                            src={getImageUrl(c.logo_path, "w92")} 
+                            alt={c.name} 
+                            className="h-6 object-contain opacity-70 sm:h-8" 
+                            title={c.name}
+                          />
+                        ))}
                       </div>
-                    </div>
-                  )}
-                  {detail.spoken_languages && detail.spoken_languages.length > 0 && (
-                    <div className="overflow-hidden">
-                      <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Languages</h4>
-                      <p className="mt-0.5 break-words text-xs sm:text-sm">{detail.spoken_languages.map((l) => l.english_name).join(", ")}</p>
-                    </div>
-                  )}
-                  {detail.production_companies && detail.production_companies.length > 0 && (
-                    <div className="overflow-hidden">
-                      <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Production</h4>
-                      <p className="mt-0.5 break-words text-xs sm:text-sm">{detail.production_companies.map((c) => c.name).join(", ")}</p>
-                    </div>
-                  )}
-                </div>
-              </div>
-              {/* More Like This */}
-              {similar.length > 0 && (
-                <div className="border-t border-border py-4 sm:py-6">
-                  <h3 className="mb-3 px-4 text-sm font-bold sm:mb-4 sm:px-6 sm:text-base md:px-8">More Like This</h3>
-                  <div className="overflow-x-auto px-4 pb-2 sm:px-6 lg:px-8" style={{ scrollbarWidth: "none", WebkitOverflowScrolling: "touch" }}>
-                    <div className="flex gap-3">
-                      {similar.map((m) => <div key={`sim-${m.id}`} className="shrink-0"><MovieCard movie={m} size="sm" /></div>)}
+                    )}
+
+                    {/* Cast List */}
+                    <CastList cast={cast} />
+
+                    {/* Rate This */}
+                    <div className="mt-6 border-t border-border pt-4">
+                      <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground sm:text-sm">
+                        Rate This {isTV ? "Series" : "Movie"}
+                      </h3>
+                      <div className="flex items-center gap-1">
+                        {[1,2,3,4,5].map((star) => {
+                          const value = star * 2;
+                          const isActive = (hoverRating || userRating?.rating || 0) >= value;
+                          return (
+                            <button
+                              key={star}
+                              onClick={() => handleRate(value)}
+                              onMouseEnter={() => setHoverRating(value)}
+                              onMouseLeave={() => setHoverRating(0)}
+                              disabled={ratingLoading}
+                              className="transition-transform hover:scale-110 disabled:opacity-50"
+                            >
+                              <Star className={isActive ? "h-6 w-6 fill-yellow-400 text-yellow-400 sm:h-7 sm:w-7" : "h-6 w-6 text-muted-foreground sm:h-7 sm:w-7"} />
+                            </button>
+                          );
+                        })}
+                        <span className="ml-3 text-sm font-medium">
+                          {ratingLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : userRating ? <span className="text-primary">{userRating.rating}/10</span> : <span className="text-muted-foreground">Click to rate</span>}
+                        </span>
+                      </div>
+                      {userRating && <Button variant="ghost" size="sm" onClick={() => handleRate(0)} className="mt-2 text-xs text-muted-foreground hover:text-destructive">Hapus rating</Button>}
                     </div>
                   </div>
-                </div>
-              )}
 
-              {/* Comments */}
-              <div className="border-t border-border px-4 py-4 pb-12 sm:px-6 sm:py-6 md:px-8">
-                <h3 className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground sm:text-sm">
-                  <MessageSquare className="h-4 w-4" />Comments ({comments.length})
-                </h3>
-                <div className="mb-4 flex gap-2">
-                  <Avatar className="h-8 w-8 shrink-0">
-                    <AvatarImage src={session?.user?.image || undefined} />
-                    <AvatarFallback className="bg-primary/20 text-xs text-primary">{session?.user?.name?.[0]?.toUpperCase() || "U"}</AvatarFallback>
-                  </Avatar>
-                  <div className="min-w-0 flex-1">
-                    <textarea
-                      value={commentText}
-                      onChange={(e) => setCommentText(e.target.value)}
-                      placeholder={status === "authenticated" ? "Tulis komentar..." : "Login untuk berkomentar"}
-                      disabled={status !== "authenticated"}
-                      className="w-full resize-none rounded-lg border border-border bg-transparent px-3 py-2 text-sm outline-none placeholder:text-muted-foreground focus:border-primary disabled:opacity-50"
-                      rows={2}
-                      maxLength={2000}
-                    />
-                    {status === "authenticated" && (
-                      <Button size="sm" onClick={handlePostComment} disabled={!commentText.trim() || commentLoading} className="mt-2 gap-1.5">
-                        {commentLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}Post
-                      </Button>
+                  {/* Right sidebar info */}
+                  <div className="min-w-0 space-y-3 sm:space-y-4">
+                    {(director || creator) && (
+                      <div className="overflow-hidden">
+                        <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{isTV ? "Creator" : "Director"}</h4>
+                        <p className="mt-0.5 break-words text-xs sm:text-sm">{director || creator}</p>
+                      </div>
+                    )}
+                    {isTV && detail.number_of_seasons && (
+                      <div className="flex gap-4">
+                        <div>
+                          <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Seasons</h4>
+                          <p className="mt-0.5 text-xs sm:text-sm">{detail.number_of_seasons}</p>
+                        </div>
+                        <div>
+                          <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Episodes</h4>
+                          <p className="mt-0.5 text-xs sm:text-sm">{detail.number_of_episodes}</p>
+                        </div>
+                      </div>
+                    )}
+                    {detail.spoken_languages && detail.spoken_languages.length > 0 && (
+                      <div className="overflow-hidden">
+                        <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Languages</h4>
+                        <p className="mt-0.5 break-words text-xs sm:text-sm">{detail.spoken_languages.map((l) => l.english_name).join(", ")}</p>
+                      </div>
                     )}
                   </div>
                 </div>
-                <div className="max-h-[300px] space-y-3 overflow-y-auto pr-1" style={{ scrollbarWidth: "thin", WebkitOverflowScrolling: "touch" }}>
-                  {comments.length === 0 ? (
-                    <p className="py-4 text-center text-xs text-muted-foreground">Belum ada komentar. Jadilah yang pertama!</p>
-                  ) : (
-                    comments.map((c) => (
-                      <CommentNode
-                        key={c.id}
-                        comment={c}
-                        currentUserId={session?.user?.id}
-                        onReply={(id: string) => { setReplyTo(id); setReplyText(""); }}
-                        replyTo={replyTo}
-                        replyText={replyText}
-                        setReplyText={setReplyText}
-                        onPostReply={handlePostReply}
-                        onDelete={handleDeleteComment}
-                        commentLoading={commentLoading}
-                        level={0}
+
+                {/* Similar List */}
+                <div className="px-4 sm:px-6 md:px-8">
+                  <SimilarList 
+                    items={similar} 
+                    onItemClick={(m) => {
+                      setSelectedMedia({
+                        id: m.id,
+                        type: m.media_type || (m.title ? "movie" : "tv"),
+                        title: m.title || m.name,
+                      } as any);
+                    }} 
+                  />
+                </div>
+
+                {/* Comments */}
+                <div className="border-t border-border px-4 py-4 pb-12 sm:px-6 sm:py-6 md:px-8">
+                  <h3 className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground sm:text-sm">
+                    <MessageSquare className="h-4 w-4" />Comments ({comments.length})
+                  </h3>
+                  <div className="mb-4 flex gap-2">
+                    <Avatar className="h-8 w-8 shrink-0">
+                      <AvatarImage src={session?.user?.image || undefined} />
+                      <AvatarFallback className="bg-primary/20 text-xs text-primary">{session?.user?.name?.[0]?.toUpperCase() || "U"}</AvatarFallback>
+                    </Avatar>
+                    <div className="min-w-0 flex-1">
+                      <textarea
+                        value={commentText}
+                        onChange={(e) => setCommentText(e.target.value)}
+                        placeholder={status === "authenticated" ? "Tulis komentar..." : "Login untuk berkomentar"}
+                        disabled={status !== "authenticated"}
+                        className="w-full resize-none rounded-lg border border-border bg-transparent px-3 py-2 text-sm outline-none placeholder:text-muted-foreground focus:border-primary disabled:opacity-50"
+                        rows={2}
+                        maxLength={2000}
                       />
-                    ))
-                  )}
+                      {status === "authenticated" && (
+                        <Button size="sm" onClick={handlePostComment} disabled={!commentText.trim() || commentLoading} className="mt-2 gap-1.5">
+                          {commentLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}Post
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                  <div className="max-h-[300px] space-y-3 overflow-y-auto pr-1" style={{ scrollbarWidth: "thin", WebkitOverflowScrolling: "touch" }}>
+                    {comments.length === 0 ? (
+                      <p className="py-4 text-center text-xs text-muted-foreground">Belum ada komentar. Jadilah yang pertama!</p>
+                    ) : (
+                      comments.map((c) => (
+                        <CommentNode
+                          key={c.id}
+                          comment={c}
+                          currentUserId={session?.user?.id}
+                          onReply={(id: string) => { setReplyTo(id); setReplyText(""); }}
+                          replyTo={replyTo}
+                          replyText={replyText}
+                          setReplyText={setReplyText}
+                          onPostReply={handlePostReply}
+                          onDelete={handleDeleteComment}
+                          commentLoading={commentLoading}
+                          level={0}
+                        />
+                      ))
+                    )}
+                  </div>
                 </div>
               </div>
-            </div>
-          ) : null}
-        </div>
-      </DialogContent>
-    </Dialog>
+            ) : null}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <TrailerModal trailerKey={trailer?.key || null} open={trailerOpen} onClose={() => setTrailerOpen(false)} />
+    </>
   );
 }
 
