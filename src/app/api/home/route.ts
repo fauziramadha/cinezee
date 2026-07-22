@@ -18,7 +18,10 @@ async function getDB() {
 async function tmdbFetch(path: string): Promise<any | null> {
   if (!TMDB_KEY) return null;
   try {
-    const r = await fetch(`${TMDB_BASE}${path}?api_key=${TMDB_KEY}&language=en-US`, {
+    const url = new URL(`${TMDB_BASE}${path}`);
+    url.searchParams.set("api_key", TMDB_KEY);
+    url.searchParams.set("language", "en-US");
+    const r = await fetch(url.toString(), {
       headers: { "User-Agent": UA, "Accept": "application/json" },
     });
     if (!r.ok) return null;
