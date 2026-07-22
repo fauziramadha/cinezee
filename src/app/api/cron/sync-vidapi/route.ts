@@ -20,19 +20,14 @@ async function getKV() {
 async function sendTelegramNotification(message: string) {
   const botToken = process.env.TELEGRAM_API_KEY;
   const chatId = process.env.TELEGRAM_CHAT_ID;
-  console.log("[Telegram] Bot token exists:", !!botToken);
-  console.log("[Telegram] Chat ID exists:", !!chatId);
   if (!botToken || !chatId) return;
   try {
-    const response = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+    await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ chat_id: chatId, text: message, parse_mode: "HTML" }),
     });
-    const result = await response.json();
-    if (!response.ok) console.error("[Telegram] API Error:", JSON.stringify(result));
-    else console.log("[Telegram] Notification sent successfully!");
-  } catch (e) { console.error("[Telegram] Send error:", e); }
+  } catch (e) { console.warn("[Telegram] Send error:", e); }
 }
 
 export async function GET(request: NextRequest) {
@@ -46,11 +41,11 @@ export async function GET(request: NextRequest) {
 
   const db = await getDB();
   const kv = await getKV();
-  if (!db) return NextResponse.json({ error: "DB not connected" }, { status: 500 });
+  if (!db || !kv) return NextResponse.json({ error: "DB or KV not connected" }, { status: 500 });
 
   try {
-    console.log("[Cron] Mulai sinkronisasi VidAPI (Raw Text Mode)...");
-    let moviesCount = 0, tvCount = 0, episodesCount = 0;
+    console.log("[Cron] Mulai sinkronisasi VidAPI...");
+    let moviesCount = 0, tvCount = 0, episodesCount = 0, showsCount = 0;
 
     // 1. Sync Movies Raw Text ke D1
     const movRes = await fetch("https://vidapi.ru/ids/movie_list_tmdb.txt", { headers: { "User-Agent": UA } });
@@ -70,14 +65,50 @@ export async function GET(request: NextRequest) {
         .bind("tv_ids_raw", text, Date.now()).run();
     }
 
-    // 3. Sync Episodes Raw Text (7MB) ke KV
-    if (kv) {
-      const epsRes = await fetch("https://vidapi.ru/ids/eps_list_imdb.txt", { headers: { "User-Agent": UA } });
-      if (epsRes.ok) {
-        const text = await epsRes.text();
-        episodesCount = text.split("\n").length;
-        await kv.put("eps_list_raw", text, { expirationTtl: 86400 });
+    // 3. Sync Episodes (7MB) ke KV (Dipecah per IMDB ID)
+    const epsRes = await fetch("https://vidapi.ru/ids/eps_list_imdb.txt", { headers: { "User-Agent": UA } });
+    if (epsRes.ok) {
+      const text = await epsRes.text();
+      const lines = text.split("\n");
+      episodesCount = lines.length;
+
+      const showsMap = new Map<string, Map<number, number[]>>();
+
+      for (const line of lines) {
+        const trimLine = line.trim();
+        if (!trimLine) continue;
+        const idx = trimLine.indexOf("_");
+        if (idx === -1) continue;
+
+        const imdbId = trimLine.substring(0, idx);
+        const parts = trimLine.substring(idx + 1).split("x");
+        if (parts.length === 2) {
+          const season = parseInt(parts[0], 10);
+          const episode = parseInt(parts[1], 10);
+          if (!isNaN(season) && !isNaN(episode)) {
+            if (!showsMap.has(imdbId)) showsMap.set(imdbId, new Map());
+            const seasonMap = showsMap.get(imdbId)!;
+            if (!seasonMap.has(season)) seasonMap.set(season, []);
+            seasonMap.get(season)!.push(episode);
+          }
+        }
       }
+
+      showsCount = showsMap.size;
+      console.log(`[Cron] Parsed ${showsCount} shows. Saving to KV...`);
+
+      // Simpan per IMDB ID ke KV
+      let savedCount = 0;
+      for (const [imdbId, seasonMap] of showsMap) {
+        const seasonsArray = Array.from(seasonMap.entries()).map(([season, episodes]) => ({
+          season,
+          episodes: episodes.sort((a, b) => a - b),
+        }));
+        await kv.put(`eps_${imdbId}`, JSON.stringify(seasonsArray), { expirationTtl: 86400 });
+        savedCount++;
+        if (savedCount % 1000 === 0) console.log(`[Cron] Saved ${savedCount}/${showsCount} to KV...`);
+      }
+      console.log(`[Cron] Finished saving episodes to KV.`);
     }
 
     // 4. Kirim Notifikasi Telegram
@@ -85,12 +116,13 @@ export async function GET(request: NextRequest) {
       `📅 ${new Date().toLocaleString("id-ID", { timeZone: "Asia/Jakarta" })}\n\n` +
       `🎥 Movies: <b>${moviesCount.toLocaleString()}</b>\n` +
       `📺 TV Shows: <b>${tvCount.toLocaleString()}</b>\n` +
-      `🎬 Episodes: <b>${episodesCount.toLocaleString()}</b>\n\n` +
-      `✅ Data tersimpan (Raw Text).`;
+      `🎬 Episodes: <b>${episodesCount.toLocaleString()}</b>\n` +
+      `🎭 Shows Parsed: <b>${showsCount.toLocaleString()}</b>\n\n` +
+      `✅ Data tersimpan (D1 + KV Split).`;
     
     await sendTelegramNotification(message);
 
-    return NextResponse.json({ success: true, moviesCount, tvCount, episodesCount });
+    return NextResponse.json({ success: true, moviesCount, tvCount, episodesCount, showsCount });
 
   } catch (err: any) {
     console.error("[Cron] Error:", err);
