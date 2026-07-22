@@ -37,20 +37,14 @@ function imgUrl(path?: string | null, size: string = "w342"): string {
 // ============================================================
 // Baca VidAPI IDs dari D1 SQLite (Disinkronisasi via Cron Job)
 // ============================================================
-async function getVidapiIds(type: "movie" | "tv", db: any): Promise<Set<string>> {
-  if (!db) return new Set();
+async function getVidapiIdsRaw(type: "movie" | "tv", db: any): Promise<string> {
+  if (!db) return "";
   try {
-    const key = type === "movie" ? "movie_ids" : "tv_ids";
+    const key = type === "movie" ? "movie_ids_raw" : "tv_ids_raw";
     const row = await db.prepare("SELECT value FROM vidapi_sync_data WHERE key = ?").bind(key).first();
-    if (row?.value) {
-      const ids = JSON.parse(row.value as string);
-      console.log(`[Home API] Got ${ids.length} ${type} IDs from D1`);
-      return new Set(ids);
-    }
-  } catch (e) {
-    console.warn(`[Home API] D1 read error for ${type} ids:`, e);
-  }
-  return new Set();
+    if (row?.value) return row.value as string;
+  } catch (e) {}
+  return "";
 }
 
 // ============================================================
@@ -178,7 +172,7 @@ async function fetchLatestEpisodes(maxItems = 15) {
   } catch { return []; }
 }
 
-async function fetchHero(movieIds: Set<string>, tvIds: Set<string>, maxItems = 10) {
+async function fetchHero(movieIdsText: string, tvIdsText: string, maxItems = 10) {
   const data = await tmdbFetch("/trending/all/week");
   if (!data?.results) return [];
 
@@ -186,8 +180,8 @@ async function fetchHero(movieIds: Set<string>, tvIds: Set<string>, maxItems = 1
     const type = m.media_type;
     if (type !== "movie" && type !== "tv") return false;
     if (!m.backdrop_path) return false;
-    const ids = type === "movie" ? movieIds : tvIds;
-    return ids.has(String(m.id));
+    const text = type === "movie" ? movieIdsText : tvIdsText;
+    return text.includes("\n" + m.id + "\n");
   }).slice(0, maxItems);
 
   const batchSize = 5;
@@ -225,12 +219,12 @@ async function fetchHero(movieIds: Set<string>, tvIds: Set<string>, maxItems = 1
   return enriched;
 }
 
-async function fetchPopular(movieIds: Set<string>, maxItems = 15) {
+async function fetchPopular(movieIdsText: string, maxItems = 15) {
   const data = await tmdbFetch("/movie/popular");
   if (!data?.results) return [];
 
   return data.results
-    .filter((m: any) => movieIds.has(String(m.id)) && m.poster_path)
+    .filter((m: any) => movieIdsText.includes("\n" + m.id + "\n") && m.poster_path)
     .slice(0, maxItems)
     .map((m: any) => ({
       id: `tmdb-${m.id}`,
