@@ -273,7 +273,15 @@ export async function GET() {
           });
         }
       } catch (e) {
-        console.warn("[Home API] D1 read error:", e);
+        console.warn("[Home API] D1 read error, trying Edge Cache fallback...", e);
+        // Fallback ke Edge Cache kalau D1 lagi lock
+        const cache = (caches as any).default;
+        const edgeCacheKey = new Request(`https://internal/home-data-cache`);
+        const edgeCached = await cache.match(edgeCacheKey);
+        if (edgeCached) {
+          console.log("[Home API] EDGE CACHE HIT (Fallback)");
+          return edgeCached;
+        }
       }
     }
 
@@ -300,7 +308,11 @@ export async function GET() {
       episodes: vidapiEps,
     };
 
-    // 3. Simpan ke D1 cache (5 menit)
+    // 3. Simpan ke D1 cache (5 menit) & Edge Cache (5 menit)
+    const response = NextResponse.json(result, {
+      headers: { "Cache-Control": "public, s-maxage=300" },
+    });
+
     if (db) {
       try {
         await db.prepare(
@@ -312,9 +324,14 @@ export async function GET() {
       }
     }
 
-    return NextResponse.json(result, {
-      headers: { "Cache-Control": "public, max-age=60" },
-    });
+    // Simpan juga di Edge Cache untuk fallback
+    try {
+      const cache = (caches as any).default;
+      const edgeCacheKey = new Request(`https://internal/home-data-cache`);
+      await cache.put(edgeCacheKey, response.clone());
+    } catch (e) {}
+
+    return response;
 
   } catch (err: any) {
     console.error("[Home API] Error:", err);
