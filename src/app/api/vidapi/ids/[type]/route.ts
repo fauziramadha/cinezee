@@ -1,7 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getCloudflareContext } from "@opennextjs/cloudflare";
 
-const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
-const CACHE_TTL = 30 * 60; // 30 menit
+async function getDB() {
+  try {
+    const ctx = await getCloudflareContext();
+    return (ctx.env as any)?.DB || null;
+  } catch { return null; }
+}
 
 export async function GET(
   request: NextRequest,
@@ -9,64 +14,29 @@ export async function GET(
 ) {
   try {
     const { type } = await context.params;
-    if (!["movie", "tv", "eps"].includes(type)) {
+    if (!["movie", "tv"].includes(type)) {
       return NextResponse.json({ error: "Invalid type" }, { status: 400 });
     }
 
-    // === 1. Cek Cloudflare Edge Cache ===
-    const cache = (caches as any).default;
-    const cacheUrl = new URL(request.url);
-    let cachedResponse = await cache.match(cacheUrl);
-
-    if (cachedResponse) {
-      console.log(`[VidAPI Cache] EDGE HIT: ${type} IDs`);
-      return cachedResponse;
+    const db = await getDB();
+    if (!db) {
+      return NextResponse.json({ error: "DB not connected" }, { status: 500 });
     }
 
-    // === 2. Download dari VidAPI (PAKAI TMDB IDS) ===
-    // PENTING: Pakai _tmdb.txt supaya bisa filter langsung dengan TMDB API
-    const filename = type === "movie" ? "movie_list_tmdb.txt" 
-                   : type === "tv" ? "tv_list_tmdb.txt" 
-                   : "eps_list_tmdb.txt";
-    
-    console.log(`[VidAPI] Downloading ${filename}...`);
-    const r = await fetch(`https://vidapi.ru/ids/${filename}`, {
-      headers: { "User-Agent": UA },
-    });
+    const key = type === "movie" ? "movie_ids" : "tv_ids";
+    const row = await db.prepare(
+      "SELECT value FROM vidapi_sync_data WHERE key = ?"
+    ).bind(key).first();
 
-    if (!r.ok) {
-      return NextResponse.json({ error: `VidAPI ${r.status}` }, { status: 502 });
+    if (row?.value) {
+      const ids = JSON.parse(row.value as string);
+      console.log(`[D1] Got ${ids.length} ${type} IDs from DB`);
+      return NextResponse.json({ ids, count: ids.length });
     }
 
-    const text = await r.text();
-    const ids = text.split("\n").map(s => s.trim()).filter(Boolean);
-    console.log(`[VidAPI] Fetched ${ids.length} ${type} IDs`);
-
-    // === 3. Simpan ke Edge Cache (TTL 30 menit) ===
-    const response = NextResponse.json({ ids, count: ids.length });
-    response.headers.set("Cache-Control", `public, s-maxage=${CACHE_TTL}, stale-while-revalidate=60`);
-    
-    try {
-      await cache.put(cacheUrl, response.clone());
-      console.log(`[VidAPI Cache] Stored ${type} IDs in edge cache (30 min)`);
-    } catch (e) {
-      console.warn("[VidAPI Cache] Put error:", e);
-    }
-
-    return response;
+    return NextResponse.json({ ids: [], count: 0 });
 
   } catch (err: any) {
-    return NextResponse.json({ error: "VidAPI fetch failed", message: err?.message }, { status: 500 });
+    return NextResponse.json({ error: "Failed", message: err?.message }, { status: 500 });
   }
-}
-
-export async function OPTIONS() {
-  return new NextResponse(null, {
-    status: 204,
-    headers: {
-      "Access-Control-Allow-Origin": "*",
-      "Access-Control-Allow-Methods": "GET, HEAD, OPTIONS",
-      "Access-Control-Allow-Headers": "*",
-    },
-  });
 }
