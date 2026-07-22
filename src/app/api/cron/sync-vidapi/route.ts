@@ -51,8 +51,8 @@ export async function GET(request: NextRequest) {
     let moviesCount = 0, tvCount = 0, episodesCount = 0;
     let showsCount = 0;
 
-    // 1. Sync Movies
-    const movRes = await fetch("https://vidapi.ru/ids/movie_list_imdb.txt", { headers: { "User-Agent": UA } });
+    // 1. Sync Movies (GUNAKAN TMDB IDs)
+    const movRes = await fetch("https://vidapi.ru/ids/movie_list_tmdb.txt", { headers: { "User-Agent": UA } });
     if (movRes.ok) {
       const text = await movRes.text();
       const ids = text.split("\n").map(s => s.trim()).filter(Boolean);
@@ -62,8 +62,8 @@ export async function GET(request: NextRequest) {
       console.log(`[Cron] Movies synced: ${moviesCount}`);
     }
 
-    // 2. Sync TV
-    const tvRes = await fetch("https://vidapi.ru/ids/tv_list_imdb.txt", { headers: { "User-Agent": UA } });
+    // 2. Sync TV (GUNAKAN TMDB IDs)
+    const tvRes = await fetch("https://vidapi.ru/ids/tv_list_tmdb.txt", { headers: { "User-Agent": UA } });
     if (tvRes.ok) {
       const text = await tvRes.text();
       const ids = text.split("\n").map(s => s.trim()).filter(Boolean);
