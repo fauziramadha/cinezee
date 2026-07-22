@@ -57,38 +57,80 @@ async function getVidapiIds(type: "movie" | "tv"): Promise<Set<string>> {
   } catch { return new Set(); }
 }
 
+// ============================================================
+// Fetch VidAPI latest (STRICTLY 2026+, fetch 5 pages to get enough items)
+// ============================================================
 async function fetchVidapiLatest(type: "movie" | "tv", maxItems = 15) {
   const endpoint = type === "movie" ? "movies" : "tvshows";
-  try {
-    const r = await fetch(`https://vidapi.ru/${endpoint}/latest/page-1.json`);
-    if (!r.ok) return [];
-    const data = await r.json();
-    return (data.items || [])
-      .filter((item: any) => item.tmdb_id && item.poster_url)
-      .slice(0, maxItems)
-      .map((item: any) => ({
-        id: item.imdb_id || `tmdb-${item.tmdb_id}`,
-        tmdbId: parseInt(item.tmdb_id, 10) || 0,
-        imdbId: item.imdb_id || undefined,
-        title: item.title || "Untitled",
-        type,
-        poster: item.poster_url.replace("/original/", "/w342/").replace("/w500/", "/w342/"),
-        backdrop: item.poster_url.replace("/original/", "/w1280/").replace("/w500/", "/w1280/"),
-        overview: "",
-        year: item.year || "",
-        rating: parseFloat(item.rating) || 0,
-        genre: item.genre || undefined,
-      }));
-  } catch { return []; }
+  const allItems: any[] = [];
+  
+  // Fetch 5 pages paralel untuk mengumpulkan kandidat
+  const pages = [1, 2, 3, 4, 5];
+  const results = await Promise.all(
+    pages.map(async (page) => {
+      try {
+        const r = await fetch(`https://vidapi.ru/${endpoint}/latest/page-${page}.json`);
+        if (!r.ok) return [];
+        const data = await r.json();
+        return data.items || [];
+      } catch { return []; }
+    })
+  );
+  results.forEach(items => allItems.push(...items));
+
+  // Filter KETAT: tahun HARUS 2026 ke atas
+  return allItems
+    .filter((item: any) => 
+      item.tmdb_id && 
+      item.poster_url && 
+      parseInt(item.year || "0", 10) >= 2026
+    )
+    .slice(0, maxItems)
+    .map((item: any) => ({
+      id: item.imdb_id || `tmdb-${item.tmdb_id}`,
+      tmdbId: parseInt(item.tmdb_id, 10) || 0,
+      imdbId: item.imdb_id || undefined,
+      title: item.title || "Untitled",
+      type,
+      poster: item.poster_url.replace("/original/", "/w342/").replace("/w500/", "/w342/"),
+      backdrop: item.poster_url.replace("/original/", "/w1280/").replace("/w500/", "/w1280/"),
+      overview: "",
+      year: item.year || "",
+      rating: parseFloat(item.rating) || 0,
+      genre: item.genre || undefined,
+    }));
 }
 
+// ============================================================
+// Fetch latest episodes (STRICTLY 2026+, SORT BY DATE DESCENDING)
+// ============================================================
 async function fetchLatestEpisodes(maxItems = 15) {
   try {
-    const r = await fetch("https://vidapi.ru/episodes/latest/page-1.json");
-    if (!r.ok) return [];
-    const data = await r.json();
-    const eps = (data.items || [])
-      .filter((e: any) => e.show_tmdb_id)
+    const allEps: any[] = [];
+    
+    // Fetch 5 pages paralel
+    const pages = [1, 2, 3, 4, 5];
+    const results = await Promise.all(
+      pages.map(async (page) => {
+        try {
+          const r = await fetch(`https://vidapi.ru/episodes/latest/page-${page}.json`);
+          if (!r.ok) return [];
+          const data = await r.json();
+          return data.items || [];
+        } catch { return []; }
+      })
+    );
+    results.forEach(items => allEps.push(...items));
+
+    // Filter: hanya 2026+ dan ada show_tmdb_id
+    const eps = allEps
+      .filter((e: any) => e.show_tmdb_id && (e.air_date || "").startsWith("2026-"))
+      .sort((a, b) => {
+        // Sort descending: tanggal terbaru di atas
+        const dateA = new Date(a.air_date).getTime();
+        const dateB = new Date(b.air_date).getTime();
+        return dateB - dateA;
+      })
       .slice(0, maxItems);
 
     const showCache = new Map<number, string>();
