@@ -35,26 +35,30 @@ function imgUrl(path?: string | null, size: string = "w342"): string {
 }
 
 // ============================================================
-// Baca VidAPI IDs dari D1 SQLite (Disinkronisasi via Cron Job)
+// Baca VidAPI IDs Raw Text dari D1 (Disinkronisasi via Cron Job)
 // ============================================================
 async function getVidapiIdsRaw(type: "movie" | "tv", db: any): Promise<string> {
   if (!db) return "";
   try {
     const key = type === "movie" ? "movie_ids_raw" : "tv_ids_raw";
     const row = await db.prepare("SELECT value FROM vidapi_sync_data WHERE key = ?").bind(key).first();
-    if (row?.value) return row.value as string;
-  } catch (e) {}
+    if (row?.value) {
+      console.log(`[Home API] Got ${type} raw IDs from D1`);
+      return row.value as string;
+    }
+  } catch (e) {
+    console.warn(`[Home API] D1 read error for ${type} raw ids:`, e);
+  }
   return "";
 }
 
 // ============================================================
-// Fetch VidAPI latest (STRICTLY 2026+, fetch 5 pages to get enough items)
+// Fetch VidAPI latest (STRICTLY 2026+)
 // ============================================================
 async function fetchVidapiLatest(type: "movie" | "tv", maxItems = 15) {
   const endpoint = type === "movie" ? "movies" : "tvshows";
   const allItems: any[] = [];
   
-  // Fetch 5 pages paralel untuk mengumpulkan kandidat
   const pages = [1, 2, 3, 4, 5];
   const results = await Promise.all(
     pages.map(async (page) => {
@@ -68,7 +72,6 @@ async function fetchVidapiLatest(type: "movie" | "tv", maxItems = 15) {
   );
   results.forEach(items => allItems.push(...items));
 
-  // Filter KETAT: tahun HARUS 2026 ke atas
   return allItems
     .filter((item: any) => 
       item.tmdb_id && 
@@ -98,7 +101,6 @@ async function fetchLatestEpisodes(maxItems = 15) {
   try {
     const allEps: any[] = [];
     
-    // Fetch 5 pages paralel
     const pages = [1, 2, 3, 4, 5];
     const results = await Promise.all(
       pages.map(async (page) => {
@@ -112,11 +114,9 @@ async function fetchLatestEpisodes(maxItems = 15) {
     );
     results.forEach(items => allEps.push(...items));
 
-    // Filter: hanya 2026+ dan ada show_tmdb_id
     const eps = allEps
       .filter((e: any) => e.show_tmdb_id && (e.air_date || "").startsWith("2026-"))
       .sort((a, b) => {
-        // Sort descending: tanggal terbaru di atas
         const dateA = new Date(a.air_date).getTime();
         const dateB = new Date(b.air_date).getTime();
         return dateB - dateA;
@@ -172,6 +172,9 @@ async function fetchLatestEpisodes(maxItems = 15) {
   } catch { return []; }
 }
 
+// ============================================================
+// Fetch TMDB trending + filter by VidAPI Raw Text (Super Cepat)
+// ============================================================
 async function fetchHero(movieIdsText: string, tvIdsText: string, maxItems = 10) {
   const data = await tmdbFetch("/trending/all/week");
   if (!data?.results) return [];
@@ -219,6 +222,9 @@ async function fetchHero(movieIdsText: string, tvIdsText: string, maxItems = 10)
   return enriched;
 }
 
+// ============================================================
+// Fetch TMDB popular + filter by VidAPI Raw Text
+// ============================================================
 async function fetchPopular(movieIdsText: string, maxItems = 15) {
   const data = await tmdbFetch("/movie/popular");
   if (!data?.results) return [];
@@ -261,7 +267,6 @@ export async function GET() {
         }
       } catch (e) {
         console.warn("[Home API] D1 read error, trying Edge Cache fallback...", e);
-        // Fallback ke Edge Cache kalau D1 lagi lock
         const cache = (caches as any).default;
         const edgeCacheKey = new Request(`https://internal/home-data-cache`);
         const edgeCached = await cache.match(edgeCacheKey);
@@ -274,17 +279,17 @@ export async function GET() {
 
     // 2. Fetch semua data paralel
     console.log("[Home API] Cache MISS, fetching fresh data...");
-    const [movieIds, tvIds, vidapiMovies, vidapiTV, vidapiEps] = await Promise.all([
-      getVidapiIds("movie", db),
-      getVidapiIds("tv", db),
+    const [movieIdsText, tvIdsText, vidapiMovies, vidapiTV, vidapiEps] = await Promise.all([
+      getVidapiIdsRaw("movie", db),
+      getVidapiIdsRaw("tv", db),
       fetchVidapiLatest("movie", 15),
       fetchVidapiLatest("tv", 15),
       fetchLatestEpisodes(15),
     ]);
 
     const [hero, popular] = await Promise.all([
-      fetchHero(movieIds, tvIds, 10),
-      fetchPopular(movieIds, 15),
+      fetchHero(movieIdsText, tvIdsText, 10),
+      fetchPopular(movieIdsText, 15),
     ]);
 
     const result = {
@@ -311,7 +316,6 @@ export async function GET() {
       }
     }
 
-    // Simpan juga di Edge Cache untuk fallback
     try {
       const cache = (caches as any).default;
       const edgeCacheKey = new Request(`https://internal/home-data-cache`);
