@@ -32,7 +32,6 @@ async function sendTelegramNotification(message: string) {
 }
 
 export async function GET(request: NextRequest) {
-  // Security check: bisa via Header (untuk Cron) atau Query URL (untuk test manual)
   const authHeader = request.headers.get("authorization");
   const { searchParams } = new URL(request.url);
   const querySecret = searchParams.get("secret");
@@ -49,9 +48,8 @@ export async function GET(request: NextRequest) {
   try {
     console.log("[Cron] Mulai sinkronisasi VidAPI...");
     let moviesCount = 0, tvCount = 0, episodesCount = 0;
-    let showsCount = 0;
 
-    // 1. Sync Movies (GUNAKAN TMDB IDs)
+    // 1. Sync Movies (TMDB IDs)
     const movRes = await fetch("https://vidapi.ru/ids/movie_list_tmdb.txt", { headers: { "User-Agent": UA } });
     if (movRes.ok) {
       const text = await movRes.text();
@@ -62,7 +60,7 @@ export async function GET(request: NextRequest) {
       console.log(`[Cron] Movies synced: ${moviesCount}`);
     }
 
-    // 2. Sync TV (GUNAKAN TMDB IDs)
+    // 2. Sync TV (TMDB IDs)
     const tvRes = await fetch("https://vidapi.ru/ids/tv_list_tmdb.txt", { headers: { "User-Agent": UA } });
     if (tvRes.ok) {
       const text = await tvRes.text();
@@ -73,59 +71,14 @@ export async function GET(request: NextRequest) {
       console.log(`[Cron] TV synced: ${tvCount}`);
     }
 
-    // 3. Sync Episodes (7MB - butuh parsing)
+    // 3. Sync Episodes (Simpan raw text ke D1, TIDAK DIPARSE di sini agar tidak CPU limit)
     const epsRes = await fetch("https://vidapi.ru/ids/eps_list_imdb.txt", { headers: { "User-Agent": UA } });
     if (epsRes.ok) {
       const text = await epsRes.text();
       episodesCount = text.split("\n").filter(Boolean).length;
-      
-      const showsMap = new Map<string, Map<number, number[]>>();
-      const lines = text.split("\n");
-      
-      for (const line of lines) {
-        const trimLine = line.trim();
-        if (!trimLine) continue;
-        const idx = trimLine.indexOf("_");
-        if (idx === -1) continue;
-        
-        const imdbId = trimLine.substring(0, idx);
-        const parts = trimLine.substring(idx + 1).split("x");
-        if (parts.length === 2) {
-          const season = parseInt(parts[0], 10);
-          const episode = parseInt(parts[1], 10);
-          if (!isNaN(season) && !isNaN(episode)) {
-            if (!showsMap.has(imdbId)) {
-              showsMap.set(imdbId, new Map());
-            }
-            const seasonMap = showsMap.get(imdbId)!;
-            if (!seasonMap.has(season)) {
-              seasonMap.set(season, []);
-            }
-            seasonMap.get(season)!.push(episode);
-          }
-        }
-      }
-
-      showsCount = showsMap.size;
-      console.log(`[Cron] Parsing episodes done. Shows: ${showsCount}`);
-      
-      // Batch insert ke D1 (Cloudflare D1 support batch)
-      const stmt = db.prepare("INSERT OR REPLACE INTO vidapi_show_episodes (imdb_id, seasons_json, updated_at) VALUES (?, ?, ?)");
-      const batch: any[] = [];
-      
-      for (const [imdbId, seasonMap] of showsMap) {
-        const seasonsArray = Array.from(seasonMap.entries()).map(([season, episodes]) => ({
-          season,
-          episodes: episodes.sort((a, b) => a - b),
-        }));
-        batch.push(stmt.bind(imdbId, JSON.stringify(seasonsArray), Date.now()));
-      }
-      
-      // Eksekusi batch (100 per batch untuk aman)
-      for (let i = 0; i < batch.length; i += 100) {
-        await db.batch(batch.slice(i, i + 100));
-      }
-      console.log(`[Cron] Episodes DB inserted: ${showsCount} shows`);
+      await db.prepare("INSERT OR REPLACE INTO vidapi_sync_data (key, value, updated_at) VALUES (?, ?, ?)")
+        .bind("eps_list_raw", text, Date.now()).run();
+      console.log(`[Cron] Episodes raw text synced: ${episodesCount} episodes`);
     }
 
     // 4. Kirim Notifikasi Telegram
@@ -133,8 +86,7 @@ export async function GET(request: NextRequest) {
                     `📅 ${new Date().toLocaleString("id-ID", { timeZone: "Asia/Jakarta" })}\n\n` +
                     `🎥 Total Movies: <b>${moviesCount.toLocaleString()}</b>\n` +
                     `📺 Total TV Shows: <b>${tvCount.toLocaleString()}</b>\n` +
-                    `🎬 Total Episodes: <b>${episodesCount.toLocaleString()}</b>\n` +
-                    `🎭 Shows with Episodes: <b>${showsCount.toLocaleString()}</b>\n\n` +
+                    `🎬 Total Episodes: <b>${episodesCount.toLocaleString()}</b>\n\n` +
                     `✅ Semua data tersimpan di D1 SQLite.`;
     
     await sendTelegramNotification(message);
@@ -143,8 +95,7 @@ export async function GET(request: NextRequest) {
       success: true, 
       moviesCount, 
       tvCount, 
-      episodesCount,
-      showsCount 
+      episodesCount
     });
 
   } catch (err: any) {
