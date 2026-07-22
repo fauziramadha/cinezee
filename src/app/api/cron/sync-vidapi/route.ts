@@ -32,9 +32,12 @@ async function sendTelegramNotification(message: string) {
 }
 
 export async function GET(request: NextRequest) {
-  // Security check: hanya bisa diakses oleh Cloudflare Cron atau admin
+  // Security check: bisa via Header (untuk Cron) atau Query URL (untuk test manual)
   const authHeader = request.headers.get("authorization");
-  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+  const { searchParams } = new URL(request.url);
+  const querySecret = searchParams.get("secret");
+  
+  if (authHeader !== `Bearer ${process.env.CRON_SECRET}` && querySecret !== process.env.CRON_SECRET) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
