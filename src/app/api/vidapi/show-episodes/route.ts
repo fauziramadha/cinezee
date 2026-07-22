@@ -22,17 +22,47 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    // Cek apakah show ini ada di database VidAPI
+    // Ambil raw text dari D1
     const row = await db.prepare(
-      "SELECT seasons_json FROM vidapi_show_episodes WHERE imdb_id = ?"
-    ).bind(imdbId).first();
+      "SELECT value FROM vidapi_sync_data WHERE key = ?"
+    ).bind("eps_list_raw").first();
 
-    if (row?.seasons_json) {
-      const seasons = JSON.parse(row.seasons_json as string);
-      return NextResponse.json({ seasons });
+    if (row?.value) {
+      const text = row.value as string;
+      const seasonsMap = new Map<number, number[]>();
+      
+      // Pakai indexOf (Native C++) agar super cepat dan tidak kena CPU limit
+      const searchStr = imdbId + "_";
+      let idx = text.indexOf(searchStr);
+
+      while (idx !== -1) {
+        let end = text.indexOf("\n", idx);
+        if (end === -1) end = text.length;
+        
+        const line = text.substring(idx, end);
+        const parts = line.replace(searchStr, "").trim().split("x");
+        
+        if (parts.length === 2) {
+          const season = parseInt(parts[0], 10);
+          const episode = parseInt(parts[1], 10);
+          if (!isNaN(season) && !isNaN(episode)) {
+            if (!seasonsMap.has(season)) {
+              seasonsMap.set(season, []);
+            }
+            seasonsMap.get(season)!.push(episode);
+          }
+        }
+        idx = text.indexOf(searchStr, idx + 1);
+      }
+
+      const result = Array.from(seasonsMap.entries()).map(([season, episodes]) => ({
+        season,
+        episodes: episodes.sort((a, b) => a - b),
+      }));
+
+      return NextResponse.json({ seasons: result });
     }
 
-    // Kalau tidak ada, return kosong (berarti show ini belum ada episodenya di VidAPI)
     return NextResponse.json({ seasons: [] });
 
   } catch (err: any) {
