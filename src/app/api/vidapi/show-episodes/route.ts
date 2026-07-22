@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
-const CACHE_TTL = 30 * 60; // 30 menit
+const CACHE_TTL = 7 * 24 * 60 * 60; // 7 hari
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
@@ -11,17 +11,18 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Invalid IMDB ID" }, { status: 400 });
   }
 
-  // Pakai Cloudflare Edge Cache
+  // Pakai Cloudflare Edge Cache per IMDB ID
   const cache = (caches as any).default;
   const cacheKey = new Request(`https://internal/vidapi-eps-${imdbId}`);
   const cachedResponse = await cache.match(cacheKey);
 
   if (cachedResponse) {
+    console.log(`[VidAPI Eps] EDGE HIT: ${imdbId}`);
     return cachedResponse;
   }
 
   try {
-    // Fetch daftar episode lengkap dari VidAPI (7MB, tapi di-cache 30 menit)
+    console.log(`[VidAPI Eps] Fetching 7MB list for ${imdbId}...`);
     const r = await fetch(`https://vidapi.ru/ids/eps_list_imdb.txt`, {
       headers: { "User-Agent": UA },
     });
@@ -31,26 +32,34 @@ export async function GET(request: NextRequest) {
     }
 
     const text = await r.text();
-    const lines = text.split("\n");
-    
     const seasonsMap = new Map<number, number[]>();
+    
+    // PENTING: Pakai indexOf (Native C++) agar cepat dan tidak kena CPU limit 10ms
+    const searchStr = imdbId + "_";
+    let idx = text.indexOf(searchStr);
 
-    // Cari baris yang cocok dengan imdbId
-    for (const line of lines) {
-      if (line.startsWith(imdbId + "_")) {
-        // Format: tt123456_1x1
-        const parts = line.replace(imdbId + "_", "").trim().split("x");
-        if (parts.length === 2) {
-          const season = parseInt(parts[0], 10);
-          const episode = parseInt(parts[1], 10);
-          if (!isNaN(season) && !isNaN(episode)) {
-            if (!seasonsMap.has(season)) {
-              seasonsMap.set(season, []);
-            }
-            seasonsMap.get(season)!.push(episode);
+    while (idx !== -1) {
+      // Cari akhir baris (newline)
+      let end = text.indexOf("\n", idx);
+      if (end === -1) end = text.length;
+      
+      // Ambil baris lengkap, misal: tt123456_1x1
+      const line = text.substring(idx, end);
+      const parts = line.replace(searchStr, "").trim().split("x");
+      
+      if (parts.length === 2) {
+        const season = parseInt(parts[0], 10);
+        const episode = parseInt(parts[1], 10);
+        if (!isNaN(season) && !isNaN(episode)) {
+          if (!seasonsMap.has(season)) {
+            seasonsMap.set(season, []);
           }
+          seasonsMap.get(season)!.push(episode);
         }
       }
+      
+      // Lanjut cari kejadian selanjutnya
+      idx = text.indexOf(searchStr, idx + 1);
     }
 
     // Susun hasilnya
@@ -64,11 +73,13 @@ export async function GET(request: NextRequest) {
     
     try {
       await cache.put(cacheKey, response.clone());
+      console.log(`[VidAPI Eps] Cached ${imdbId} with ${result.length} seasons`);
     } catch (e) {}
 
     return response;
 
   } catch (err: any) {
+    console.error("[VidAPI Eps] Error:", err);
     return NextResponse.json({ error: "Failed to parse episodes" }, { status: 500 });
   }
 }
