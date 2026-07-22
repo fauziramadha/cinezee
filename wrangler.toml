@@ -32,6 +32,17 @@ database_id = "b10ed6c8-9d1e-46f9-aea3-23eaf47094f0"
 # - GOOGLE_CLIENT_SECRET
 # - DATABASE_URL
 # - NEXT_PUBLIC_APP_NAME
+# - CRON_SECRET          <-- TAMBAHKAN INI DI DASHBOARD CLOUDFLARE KAMU (bebas kata apa aja, misal: cron-rahasia-123)
+# - TELEGRAM_API_KEY     <-- Jika belum ada, tambahkan untuk notifikasi update
+# - TELEGRAM_CHAT_ID     <-- Jika belum ada, tambahkan untuk notifikasi update
+
+# =====================================================
+# Cron Triggers (Scheduled Jobs)
+# =====================================================
+# Menjalankan sinkronisasi VidAPI setiap hari jam 07:00 UTC (14:00 WIB)
+# Format: Menit Jam Hari Bulan HariDalamSeminggu
+[triggers]
+crons = ["0 7 * * *"]
 
 # =====================================================
 # Build Settings
