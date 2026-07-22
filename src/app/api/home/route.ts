@@ -34,30 +34,23 @@ function imgUrl(path?: string | null, size: string = "w342"): string {
   return `${TMDB_IMG}/${size}${path}`;
 }
 
-async function getVidapiIds(type: "movie" | "tv"): Promise<Set<string>> {
-  const cache = (caches as any).default;
-  const cacheKey = new Request(`https://internal/vidapi-ids-${type}`);
-  const cached = await cache.match(cacheKey);
-  if (cached) {
-    const data = await cached.json();
-    return new Set(data.ids);
-  }
-
-  const filename = type === "movie" ? "movie_list_tmdb.txt" : "tv_list_tmdb.txt";
+// ============================================================
+// Baca VidAPI IDs dari D1 SQLite (Disinkronisasi via Cron Job)
+// ============================================================
+async function getVidapiIds(type: "movie" | "tv", db: any): Promise<Set<string>> {
+  if (!db) return new Set();
   try {
-    const r = await fetch(`https://vidapi.ru/ids/${filename}`, {
-      headers: { "User-Agent": UA },
-    });
-    if (!r.ok) return new Set();
-    const text = await r.text();
-    const ids = new Set(text.split("\n").map(s => s.trim()).filter(Boolean));
-    
-    const response = new Response(JSON.stringify({ ids: Array.from(ids) }), {
-      headers: { "Content-Type": "application/json", "Cache-Control": `public, s-maxage=1800` },
-    });
-    await cache.put(cacheKey, response.clone());
-    return ids;
-  } catch { return new Set(); }
+    const key = type === "movie" ? "movie_ids" : "tv_ids";
+    const row = await db.prepare("SELECT value FROM vidapi_sync_data WHERE key = ?").bind(key).first();
+    if (row?.value) {
+      const ids = JSON.parse(row.value as string);
+      console.log(`[Home API] Got ${ids.length} ${type} IDs from D1`);
+      return new Set(ids);
+    }
+  } catch (e) {
+    console.warn(`[Home API] D1 read error for ${type} ids:`, e);
+  }
+  return new Set();
 }
 
 // ============================================================
@@ -288,8 +281,8 @@ export async function GET() {
     // 2. Fetch semua data paralel
     console.log("[Home API] Cache MISS, fetching fresh data...");
     const [movieIds, tvIds, vidapiMovies, vidapiTV, vidapiEps] = await Promise.all([
-      getVidapiIds("movie"),
-      getVidapiIds("tv"),
+      getVidapiIds("movie", db),
+      getVidapiIds("tv", db),
       fetchVidapiLatest("movie", 15),
       fetchVidapiLatest("tv", 15),
       fetchLatestEpisodes(15),
