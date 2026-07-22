@@ -363,9 +363,16 @@ export function DetailModal() {
     || null;
 
   // Filter episodes by VidAPI availability
+  // Jika vidapiEps belum ter-load (masih loading/error), tampilkan semua episode TMDB
   const currentSeasonVidapi = vidapiEps.find(s => s.season === season);
   const availableEps = currentSeasonVidapi?.episodes || [];
-  const filteredEpisodes = episodes.filter(ep => availableEps.includes(ep.episodeNumber));
+  
+  // Jika availableEps kosong tapi vidapiEps BELUM di-load (array kosong), fallback ke semua episode
+  // Jika vidapiEps SUDAH di-load (length > 0) tapi season ini tidak ada, tampilkan array kosong
+  const isVidapiLoaded = vidapiEps.length > 0;
+  const filteredEpisodes = (!isVidapiLoaded || availableEps.length > 0) 
+    ? episodes.filter(ep => !isVidapiLoaded || availableEps.includes(ep.episodeNumber))
+    : [];
 
   return (
     <>
@@ -478,6 +485,7 @@ export function DetailModal() {
                     {episodesLoading ? (
                       <div className="flex h-24 items-center justify-center"><Loader2 className="h-5 w-5 animate-spin text-primary" /></div>
                     ) : filteredEpisodes.length > 0 ? (
+                      // (kode map episode tetap sama)
                       <div className="overflow-x-auto pb-1" style={{ scrollbarWidth: "none", WebkitOverflowScrolling: "touch" }}>
                         <div className="flex gap-2">
                           {filteredEpisodes.map((ep) => (
@@ -504,8 +512,15 @@ export function DetailModal() {
                         </div>
                       </div>
                     ) : (
-                      <div className="flex h-24 items-center justify-center text-xs text-muted-foreground">
-                        Episode belum tersedia di VidAPI
+                      <div className="flex h-24 items-center justify-center gap-2 text-xs text-muted-foreground">
+                        {isVidapiLoaded ? (
+                          "Episode belum tersedia"
+                        ) : (
+                          <>
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                            Mengecek ketersediaan episode...
+                          </>
+                        )}
                       </div>
                     )}
                   </div>
