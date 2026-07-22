@@ -363,15 +363,15 @@ export function DetailModal() {
     || null;
 
   // Filter episodes by VidAPI availability
-  // Jika vidapiEps belum ter-load (masih loading/error), tampilkan semua episode TMDB
+  // PENTING: Jangan tampilkan episode apapun sampai VidAPI data ter-load!
+  // Kalau VidAPI belum load → tampilkan loading (array kosong)
+  // Kalau VidAPI sudah load tapi season ini tidak ada → tampilkan "belum tersedia" (array kosong)
+  // Kalau VidAPI sudah load dan season ada → tampilkan hanya episode yang available
   const currentSeasonVidapi = vidapiEps.find(s => s.season === season);
   const availableEps = currentSeasonVidapi?.episodes || [];
-  
-  // Jika availableEps kosong tapi vidapiEps BELUM di-load (array kosong), fallback ke semua episode
-  // Jika vidapiEps SUDAH di-load (length > 0) tapi season ini tidak ada, tampilkan array kosong
   const isVidapiLoaded = vidapiEps.length > 0;
-  const filteredEpisodes = (!isVidapiLoaded || availableEps.length > 0) 
-    ? episodes.filter(ep => !isVidapiLoaded || availableEps.includes(ep.episodeNumber))
+  const filteredEpisodes = isVidapiLoaded 
+    ? episodes.filter(ep => availableEps.includes(ep.episodeNumber))
     : [];
 
   return (
