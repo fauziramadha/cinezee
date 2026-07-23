@@ -21,30 +21,45 @@ export async function GET(request: NextRequest) {
   if (!db) return NextResponse.json({ error: "DB not connected" }, { status: 500 });
 
   try {
-    // 1. Cek D1 Cache (Lazy Cache per Show)
+    // 1. Cek D1 Cache
     const row = await db.prepare("SELECT seasons_json FROM vidapi_show_episodes WHERE imdb_id = ?").bind(imdbId).first();
     if (row?.seasons_json) {
       return NextResponse.json({ seasons: JSON.parse(row.seasons_json as string) });
     }
 
-    // 2. MISS: Baca 7MB dari KV
+    // 2. Baca raw text dari KV
     const kv = env?.VIDAPI_KV;
     if (!kv) return NextResponse.json({ seasons: [] });
 
     const text = await kv.get("eps_list_raw");
     if (!text) return NextResponse.json({ seasons: [] });
 
-    // 3. Parse pakai Regex Native C++ (Super cepat, 0 CPU limit)
-    // Contoh match: tt0944947_1x1
-    const regex = new RegExp(`^${imdbId}_(\\d+)x(\\d+)`, "gm");
+    // 3. Parse dengan indexOf
     const seasonsMap = new Map<number, number[]>();
-    let match;
+    const searchStr = imdbId + "_";
+    let idx = text.indexOf(searchStr);
 
-    while ((match = regex.exec(text)) !== null) {
-      const season = parseInt(match[1], 10);
-      const episode = parseInt(match[2], 10);
+    while (idx !== -1) {
+      let end = text.indexOf("\n", idx);
+      if (end === -1) end = text.length;
+
+      let i = idx + searchStr.length;
+      let season = 0;
+      while (i < end && text[i] !== 'x') {
+        season = season * 10 + (text.charCodeAt(i) - 48);
+        i++;
+      }
+      i++;
+      let episode = 0;
+      while (i < end && text.charCodeAt(i) >= 48 && text.charCodeAt(i) <= 57) {
+        episode = episode * 10 + (text.charCodeAt(i) - 48);
+        i++;
+      }
+
       if (!seasonsMap.has(season)) seasonsMap.set(season, []);
       seasonsMap.get(season)!.push(episode);
+
+      idx = text.indexOf(searchStr, end);
     }
 
     const result = Array.from(seasonsMap.entries()).map(([season, episodes]) => ({
@@ -52,7 +67,21 @@ export async function GET(request: NextRequest) {
       episodes: episodes.sort((a, b) => a - b),
     }));
 
-    // 4. Simpan ke D1 agar request berikutnya instant
+    // 4. FALLBACK: Kalau episode list kosong, cek apakah show ada di TV list
+    if (result.length === 0) {
+      // Cek D1 TV IDs
+      const tvRow = await db.prepare("SELECT value FROM vidapi_sync_data WHERE key = 'tv_ids_raw'").first();
+      if (tvRow?.value) {
+        const tvText = tvRow.value as string;
+        if (tvText.includes("\n" + imdbId + "\n")) {
+          // Show ada di TV list tapi episode list belum update
+          // Return null agar frontend tampilkan semua episode TMDB
+          return NextResponse.json({ seasons: null, fallback: true });
+        }
+      }
+    }
+
+    // 5. Simpan ke D1
     if (result.length > 0) {
       try {
         await db.prepare("INSERT OR REPLACE INTO vidapi_show_episodes (imdb_id, seasons_json, updated_at) VALUES (?, ?, ?)")
