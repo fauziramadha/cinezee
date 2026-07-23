@@ -173,10 +173,9 @@ export function DetailModal() {
         .then(res => res.json())
         .then(data => setVidapiEps(data.seasons || []))
         .catch(() => setVidapiEps([]));
-    } else if (selectedMedia?.type === "tv") {
-      // Kalau gak ada imdbId sama sekali, anggap tidak ada episode
-      setVidapiEps([]);
     }
+    // HAPUS BLOCK ELSE DI SINI! Biarkan vidapiEps tetap null (loading) 
+    // sampai cachedImdbId didapat dari loadDetail.
   }, [selectedMedia, cachedImdbId]);
 
   // Fetch TMDB season details
