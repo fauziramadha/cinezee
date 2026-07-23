@@ -24,7 +24,12 @@ export async function GET(request: NextRequest) {
     // 1. Cek D1 Cache
     const row = await db.prepare("SELECT seasons_json FROM vidapi_show_episodes WHERE imdb_id = ?").bind(imdbId).first();
     if (row?.seasons_json) {
-      return NextResponse.json({ seasons: JSON.parse(row.seasons_json as string) });
+      const cached = JSON.parse(row.seasons_json as string);
+      // Jika cache adalah "fallback", return fallback mode
+      if (cached === "fallback") {
+        return NextResponse.json({ seasons: null, fallback: true });
+      }
+      return NextResponse.json({ seasons: cached });
     }
 
     // 2. Baca raw text dari KV
@@ -67,15 +72,18 @@ export async function GET(request: NextRequest) {
       episodes: episodes.sort((a, b) => a - b),
     }));
 
-    // 4. FALLBACK: Kalau episode list kosong, cek apakah show ada di TV list
+    // 4. FALLBACK: Kalau episode list kosong, cek TV list
     if (result.length === 0) {
-      // Cek D1 TV IDs
       const tvRow = await db.prepare("SELECT value FROM vidapi_sync_data WHERE key = 'tv_ids_raw'").first();
       if (tvRow?.value) {
         const tvText = tvRow.value as string;
         if (tvText.includes("\n" + imdbId + "\n")) {
           // Show ada di TV list tapi episode list belum update
-          // Return null agar frontend tampilkan semua episode TMDB
+          // Cache sebagai "fallback" agar request berikutnya cepat
+          try {
+            await db.prepare("INSERT OR REPLACE INTO vidapi_show_episodes (imdb_id, seasons_json, updated_at) VALUES (?, ?, ?)")
+              .bind(imdbId, JSON.stringify("fallback"), Date.now()).run();
+          } catch (e) {}
           return NextResponse.json({ seasons: null, fallback: true });
         }
       }
