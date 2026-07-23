@@ -123,52 +123,19 @@ async function fetchLatestEpisodes(maxItems = 15) {
       })
       .slice(0, maxItems);
 
-    const showCache = new Map<number, string>();
-    const result = [];
-    const batchSize = 5;
-    
-    for (let i = 0; i < eps.length; i += batchSize) {
-      const batch = eps.slice(i, i + batchSize);
-      const enriched = await Promise.all(
-        batch.map(async (ep: any) => {
-          const showTmdbId = parseInt(ep.show_tmdb_id, 10) || 0;
-          const item: any = {
-            showTmdbId,
-            showImdbId: ep.show_imdb_id,
-            showTitle: ep.show_title,
-            season: ep.season_number,
-            episode: ep.episode_number,
-            episodeTitle: ep.episode_title,
-            airDate: ep.air_date,
-            embedUrl: ep.embed_url,
-          };
-          if (showTmdbId > 0) {
-            try {
-              const detail = await tmdbFetch(`/tv/${showTmdbId}/season/${item.season}/episode/${item.episode}`);
-              if (detail?.still_path) item.still = imgUrl(detail.still_path, "w300");
-              if (detail?.overview) item.overview = detail.overview;
-            } catch {}
-          }
-          if (!item.still && showTmdbId > 0) {
-            if (showCache.has(showTmdbId)) {
-              item.still = showCache.get(showTmdbId);
-            } else {
-              try {
-                const show = await tmdbFetch(`/tv/${showTmdbId}`);
-                if (show?.backdrop_path) {
-                  const bd = imgUrl(show.backdrop_path, "w300");
-                  showCache.set(showTmdbId, bd);
-                  item.still = bd;
-                }
-              } catch {}
-            }
-          }
-          return item;
-        })
-      );
-      result.push(...enriched);
-    }
-    return result;
+    // Hanya pakai data dasar dari VidAPI (Tanpa fetch TMDB still agar hemat subrequest)
+    return eps.map((ep: any) => ({
+      showTmdbId: parseInt(ep.show_tmdb_id, 10) || 0,
+      showImdbId: ep.show_imdb_id,
+      showTitle: ep.show_title,
+      season: ep.season_number,
+      episode: ep.episode_number,
+      episodeTitle: ep.episode_title,
+      airDate: ep.air_date,
+      embedUrl: ep.embed_url,
+      still: "", // Kosong, akan pakai placeholder Play icon
+      overview: "",
+    }));
   } catch { return []; }
 }
 
