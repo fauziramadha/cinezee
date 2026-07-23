@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Loader2, Upload } from "lucide-react";
-import { saveSubtitle, uploadSubtitleFile } from "@/lib/admin-api";
+import { saveSubtitle } from "@/lib/admin-api";
 import type { MediaResult } from "./subtitle-search";
 
 export function SubtitleForm({ 
@@ -67,18 +67,17 @@ export function SubtitleForm({
     setSuccess(null);
 
     try {
-      // Coba upload via FormData (lebih efisien untuk file besar)
-      const formData = new FormData();
-      formData.append("title", title.trim());
-      formData.append("type", type);
-      formData.append("subtitle_text", subtitleText);
-      if (season) formData.append("season", season);
-      if (episode) formData.append("episode", episode);
-      if (quality) formData.append("quality", quality);
-      if (releaseName) formData.append("release_name", releaseName);
-      formData.append("offset_seconds", offsetSeconds || "0");
-
-      const result = await uploadSubtitleFile(apiKey, formData);
+      // Kirim langsung sebagai JSON ke /api/admin/subtitle
+      const result = await saveSubtitle(apiKey, {
+        title: title.trim(),
+        type,
+        season: season || null,
+        episode: episode || null,
+        quality: quality || null,
+        subtitle_text: subtitleText,
+        release_name: releaseName || null,
+        offset_seconds: Number(offsetSeconds) || 0,
+      });
       
       if (result.ok) {
         setSuccess(result.message || "Subtitle saved");
@@ -87,26 +86,7 @@ export function SubtitleForm({
         setSeason(""); setEpisode(""); setQuality("");
         onSaved();
       } else {
-        // Fallback ke JSON API kalau FormData gagal
-        const jsonResult = await saveSubtitle(apiKey, {
-          title: title.trim(),
-          type,
-          season: season || null,
-          episode: episode || null,
-          quality: quality || null,
-          subtitle_text: subtitleText,
-          release_name: releaseName || null,
-          offset_seconds: Number(offsetSeconds) || 0,
-        });
-        
-        if (jsonResult.ok) {
-          setSuccess(jsonResult.message || "Subtitle saved");
-          setSubtitleText(""); setReleaseName(""); setOffsetSeconds("");
-          setSeason(""); setEpisode(""); setQuality("");
-          onSaved();
-        } else {
-          setError(jsonResult.error || "Failed to save");
-        }
+        setError(result.error || "Failed to save");
       }
     } catch {
       setError("Network error");
