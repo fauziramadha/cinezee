@@ -164,14 +164,18 @@ export function DetailModal() {
 
   // Fetch VidAPI available episodes for TV
   useEffect(() => {
-    if (selectedMedia?.type === "tv" && cachedImdbId) {
+    // Pakai imdbId langsung dari selectedMedia, atau dari cachedImdbId
+    const imdbId = (selectedMedia as any)?.imdbId || cachedImdbId;
+    
+    if (selectedMedia?.type === "tv" && imdbId) {
       setVidapiEps(null); // Reset ke loading state
-      fetch(`/api/vidapi/show-episodes?imdb=${cachedImdbId}`)
+      fetch(`/api/vidapi/show-episodes?imdb=${imdbId}`)
         .then(res => res.json())
         .then(data => setVidapiEps(data.seasons || []))
         .catch(() => setVidapiEps([]));
-    } else {
-      setVidapiEps(null);
+    } else if (selectedMedia?.type === "tv") {
+      // Kalau gak ada imdbId sama sekali, anggap tidak ada episode
+      setVidapiEps([]);
     }
   }, [selectedMedia, cachedImdbId]);
 
