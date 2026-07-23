@@ -62,8 +62,8 @@ export function DetailModal() {
   const [episode, setEpisode] = useState(1);
   const [episodes, setEpisodes] = useState<Episode[]>([]);
   const [episodesLoading, setEpisodesLoading] = useState(false);
+  
   const [vidapiEps, setVidapiEps] = useState<{ season: number; episodes: number[] }[] | null>(null);
-
   const [cachedImdbId, setCachedImdbId] = useState<string | null>(null);
   const [trailerOpen, setTrailerOpen] = useState(false);
 
@@ -164,7 +164,6 @@ export function DetailModal() {
 
   // Fetch VidAPI available episodes for TV
   useEffect(() => {
-    // Pakai imdbId langsung dari selectedMedia, atau dari cachedImdbId
     const imdbId = (selectedMedia as any)?.imdbId || cachedImdbId;
     
     if (selectedMedia?.type === "tv" && imdbId) {
@@ -174,8 +173,6 @@ export function DetailModal() {
         .then(data => setVidapiEps(data.seasons || []))
         .catch(() => setVidapiEps([]));
     }
-    // HAPUS BLOCK ELSE DI SINI! Biarkan vidapiEps tetap null (loading) 
-    // sampai cachedImdbId didapat dari loadDetail.
   }, [selectedMedia, cachedImdbId]);
 
   // Fetch TMDB season details
@@ -380,11 +377,6 @@ export function DetailModal() {
     || (detail as any)?.images?.logos?.[0]
     || null;
 
-  // Filter episodes by VidAPI availability
-  // PENTING: Jangan tampilkan episode apapun sampai VidAPI data ter-load!
-  // Kalau VidAPI belum load → tampilkan loading (array kosong)
-  // Kalau VidAPI sudah load tapi season ini tidak ada → tampilkan "belum tersedia" (array kosong)
-  // Kalau VidAPI sudah load dan season ada → tampilkan hanya episode yang available
   const currentSeasonVidapi = vidapiEps?.find(s => s.season === season);
   const availableEps = currentSeasonVidapi?.episodes || [];
   const isVidapiLoaded = vidapiEps !== null;
@@ -503,7 +495,6 @@ export function DetailModal() {
                     {episodesLoading ? (
                       <div className="flex h-24 items-center justify-center"><Loader2 className="h-5 w-5 animate-spin text-primary" /></div>
                     ) : filteredEpisodes.length > 0 ? (
-                      // (kode map episode tetap sama)
                       <div className="overflow-x-auto pb-1" style={{ scrollbarWidth: "none", WebkitOverflowScrolling: "touch" }}>
                         <div className="flex gap-2">
                           {filteredEpisodes.map((ep) => (
