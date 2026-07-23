@@ -35,7 +35,7 @@ function imgUrl(path?: string | null, size: string = "w342"): string {
 }
 
 // ============================================================
-// Baca VidAPI IDs Raw Text dari D1 (Disinkronisasi via Cron Job)
+// Baca VidAPI IDs Raw Text dari D1
 // ============================================================
 async function getVidapiIdsRaw(type: "movie" | "tv", db: any): Promise<string> {
   if (!db) return "";
@@ -43,27 +43,22 @@ async function getVidapiIdsRaw(type: "movie" | "tv", db: any): Promise<string> {
     const key = type === "movie" ? "movie_ids_raw" : "tv_ids_raw";
     const row = await db.prepare("SELECT value FROM vidapi_sync_data WHERE key = ?").bind(key).first();
     if (row?.value) {
-      console.log(`[Home API] Got ${type} raw IDs from D1`);
       return row.value as string;
     }
-  } catch (e) {
-    console.warn(`[Home API] D1 read error for ${type} raw ids:`, e);
-  }
+  } catch (e) {}
   return "";
 }
 
 // ============================================================
-// Fetch VidAPI latest (STRICTLY 2026+)
+// Fetch VidAPI latest movies (Hanya untuk Movies, tidak ada filter tahun ketat)
 // ============================================================
-async function fetchVidapiLatest(type: "movie" | "tv", maxItems = 15) {
-  const endpoint = type === "movie" ? "movies" : "tvshows";
+async function fetchVidapiLatestMovies(maxItems = 15) {
   const allItems: any[] = [];
-  
-  const pages = [1, 2, 3, 4, 5];
+  const pages = [1, 2, 3];
   const results = await Promise.all(
     pages.map(async (page) => {
       try {
-        const r = await fetch(`https://vidapi.ru/${endpoint}/latest/page-${page}.json`);
+        const r = await fetch(`https://vidapi.ru/movies/latest/page-${page}.json`);
         if (!r.ok) return [];
         const data = await r.json();
         return data.items || [];
@@ -73,18 +68,14 @@ async function fetchVidapiLatest(type: "movie" | "tv", maxItems = 15) {
   results.forEach(items => allItems.push(...items));
 
   return allItems
-    .filter((item: any) => 
-      item.tmdb_id && 
-      item.poster_url && 
-      parseInt(item.year || "0", 10) >= 2026
-    )
+    .filter((item: any) => item.tmdb_id && item.poster_url)
     .slice(0, maxItems)
     .map((item: any) => ({
       id: item.imdb_id || `tmdb-${item.tmdb_id}`,
       tmdbId: parseInt(item.tmdb_id, 10) || 0,
       imdbId: item.imdb_id || undefined,
       title: item.title || "Untitled",
-      type,
+      type: "movie",
       poster: item.poster_url.replace("/original/", "/w342/").replace("/w500/", "/w342/"),
       backdrop: item.poster_url.replace("/original/", "/w1280/").replace("/w500/", "/w1280/"),
       overview: "",
@@ -95,12 +86,11 @@ async function fetchVidapiLatest(type: "movie" | "tv", maxItems = 15) {
 }
 
 // ============================================================
-// Fetch latest episodes (STRICTLY 2026+, SORT BY DATE DESCENDING)
+// Fetch latest episodes (Urutkan dari tanggal terbaru)
 // ============================================================
 async function fetchLatestEpisodes(maxItems = 15) {
   try {
     const allEps: any[] = [];
-    
     const pages = [1, 2, 3, 4, 5];
     const results = await Promise.all(
       pages.map(async (page) => {
@@ -114,7 +104,6 @@ async function fetchLatestEpisodes(maxItems = 15) {
     );
     results.forEach(items => allEps.push(...items));
 
-    // Hapus filter tahun, ambil semua episode, urutkan dari tanggal terbaru
     const eps = allEps
       .filter((e: any) => e.show_tmdb_id)
       .sort((a, b) => {
@@ -168,7 +157,7 @@ async function fetchLatestEpisodes(maxItems = 15) {
 }
 
 // ============================================================
-// Fetch TMDB trending + filter by VidAPI Raw Text (Super Cepat)
+// Fetch TMDB trending + filter by VidAPI Raw Text
 // ============================================================
 async function fetchHero(movieIdsText: string, tvIdsText: string, maxItems = 10) {
   const data = await tmdbFetch("/trending/all/week");
@@ -218,9 +207,9 @@ async function fetchHero(movieIdsText: string, tvIdsText: string, maxItems = 10)
 }
 
 // ============================================================
-// Fetch TMDB popular + filter by VidAPI Raw Text
+// Fetch TMDB popular movies + filter by VidAPI Raw Text
 // ============================================================
-async function fetchPopular(movieIdsText: string, maxItems = 15) {
+async function fetchPopularMovies(movieIdsText: string, maxItems = 15) {
   const data = await tmdbFetch("/movie/popular");
   if (!data?.results) return [];
 
@@ -242,6 +231,31 @@ async function fetchPopular(movieIdsText: string, maxItems = 15) {
     }));
 }
 
+// ============================================================
+// Fetch TMDB popular TV + filter by VidAPI Raw Text (BARU)
+// ============================================================
+async function fetchPopularTV(tvIdsText: string, maxItems = 15) {
+  const data = await tmdbFetch("/tv/popular");
+  if (!data?.results) return [];
+
+  return data.results
+    .filter((m: any) => tvIdsText.includes("\n" + m.id + "\n") && m.poster_path)
+    .slice(0, maxItems)
+    .map((m: any) => ({
+      id: `tmdb-${m.id}`,
+      tmdbId: m.id,
+      imdbId: undefined,
+      title: m.name || "Untitled",
+      type: "tv",
+      poster: imgUrl(m.poster_path, "w342"),
+      backdrop: imgUrl(m.backdrop_path, "w1280"),
+      overview: m.overview || "",
+      year: (m.first_air_date || "").slice(0, 4),
+      rating: m.vote_average || 0,
+      genre: m.genre_ids?.length ? String(m.genre_ids[0]) : undefined,
+    }));
+}
+
 export async function GET() {
   try {
     const db = await getDB();
@@ -255,7 +269,6 @@ export async function GET() {
         ).bind(cacheKey, Date.now()).first();
         
         if (row?.cache_value) {
-          console.log("[Home API] D1 CACHE HIT");
           return NextResponse.json(JSON.parse(row.cache_value as string), {
             headers: { "Cache-Control": "public, max-age=60" },
           });
@@ -266,7 +279,6 @@ export async function GET() {
         const edgeCacheKey = new Request(`https://internal/home-data-cache`);
         const edgeCached = await cache.match(edgeCacheKey);
         if (edgeCached) {
-          console.log("[Home API] EDGE CACHE HIT (Fallback)");
           return edgeCached;
         }
       }
@@ -274,24 +286,24 @@ export async function GET() {
 
     // 2. Fetch semua data paralel
     console.log("[Home API] Cache MISS, fetching fresh data...");
-    const [movieIdsText, tvIdsText, vidapiMovies, vidapiTV, vidapiEps] = await Promise.all([
+    const [movieIdsText, tvIdsText, vidapiMovies, vidapiEps] = await Promise.all([
       getVidapiIdsRaw("movie", db),
       getVidapiIdsRaw("tv", db),
-      fetchVidapiLatest("movie", 15),
-      fetchVidapiLatest("tv", 15),
+      fetchVidapiLatestMovies(15),
       fetchLatestEpisodes(15),
     ]);
 
-    const [hero, popular] = await Promise.all([
+    const [hero, popularMovies, popularTV] = await Promise.all([
       fetchHero(movieIdsText, tvIdsText, 10),
-      fetchPopular(movieIdsText, 15),
+      fetchPopularMovies(movieIdsText, 15),
+      fetchPopularTV(tvIdsText, 15), // Pakai TMDB Popular TV yang difilter VidAPI
     ]);
 
     const result = {
       hero,
       movies: vidapiMovies,
-      popularMovies: popular,
-      tvShows: vidapiTV,
+      popularMovies: popularMovies,
+      tvShows: popularTV, // Series Terbaru diganti dengan Popular TV
       episodes: vidapiEps,
     };
 
@@ -305,10 +317,7 @@ export async function GET() {
         await db.prepare(
           "INSERT OR REPLACE INTO api_cache (cache_key, cache_value, expires_at) VALUES (?, ?, ?)"
         ).bind(cacheKey, JSON.stringify(result), Date.now() + CACHE_TTL * 1000).run();
-        console.log("[Home API] Stored in D1 cache (5 min)");
-      } catch (e) {
-        console.warn("[Home API] D1 write error:", e);
-      }
+      } catch (e) {}
     }
 
     try {
