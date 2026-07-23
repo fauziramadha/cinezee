@@ -114,28 +114,56 @@ async function fetchLatestEpisodes(maxItems = 15) {
     );
     results.forEach(items => allEps.push(...items));
 
+    // Hapus filter tahun, ambil semua episode, urutkan dari tanggal terbaru
     const eps = allEps
-      .filter((e: any) => e.show_tmdb_id && (e.air_date || "").startsWith("2026-"))
+      .filter((e: any) => e.show_tmdb_id)
       .sort((a, b) => {
-        const dateA = new Date(a.air_date).getTime();
-        const dateB = new Date(b.air_date).getTime();
+        const dateA = new Date(a.air_date || "1970-01-01").getTime();
+        const dateB = new Date(b.air_date || "1970-01-01").getTime();
         return dateB - dateA;
       })
       .slice(0, maxItems);
 
-    // Hanya pakai data dasar dari VidAPI (Tanpa fetch TMDB still agar hemat subrequest)
-    return eps.map((ep: any) => ({
-      showTmdbId: parseInt(ep.show_tmdb_id, 10) || 0,
-      showImdbId: ep.show_imdb_id,
-      showTitle: ep.show_title,
-      season: ep.season_number,
-      episode: ep.episode_number,
-      episodeTitle: ep.episode_title,
-      airDate: ep.air_date,
-      embedUrl: ep.embed_url,
-      still: "", // Kosong, akan pakai placeholder Play icon
-      overview: "",
-    }));
+    const showCache = new Map<number, string>();
+    const result = [];
+    const batchSize = 5;
+    
+    for (let i = 0; i < eps.length; i += batchSize) {
+      const batch = eps.slice(i, i + batchSize);
+      const enriched = await Promise.all(
+        batch.map(async (ep: any) => {
+          const showTmdbId = parseInt(ep.show_tmdb_id, 10) || 0;
+          const item: any = {
+            showTmdbId,
+            showImdbId: ep.show_imdb_id,
+            showTitle: ep.show_title,
+            season: ep.season_number,
+            episode: ep.episode_number,
+            episodeTitle: ep.episode_title,
+            airDate: ep.air_date,
+            embedUrl: ep.embed_url,
+            still: "",
+          };
+          if (showTmdbId > 0) {
+            if (showCache.has(showTmdbId)) {
+              item.still = showCache.get(showTmdbId);
+            } else {
+              try {
+                const show = await tmdbFetch(`/tv/${showTmdbId}`);
+                if (show?.backdrop_path) {
+                  const bd = imgUrl(show.backdrop_path, "w300");
+                  showCache.set(showTmdbId, bd);
+                  item.still = bd;
+                }
+              } catch {}
+            }
+          }
+          return item;
+        })
+      );
+      result.push(...enriched);
+    }
+    return result;
   } catch { return []; }
 }
 
