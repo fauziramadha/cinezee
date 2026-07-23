@@ -141,9 +141,14 @@ export function DetailModal() {
               if (cancelled) return;
               if (epsRes.ok) {
                 const epsData = await epsRes.json();
-                setVidapiEps(epsData.seasons || []);
+                if (epsData.fallback) {
+                  // Show ada di TV list tapi episode list belum update → tampilkan semua
+                  setVidapiEps("fallback" as any);
+                } else {
+                  setVidapiEps(epsData.seasons || []);
+                }
               } else {
-                setVidapiEps([]); // Kalau gagal, anggap kosong
+                setVidapiEps([]);
               }
             } catch {
               setVidapiEps([]);
@@ -385,12 +390,21 @@ export function DetailModal() {
     || (detail as any)?.images?.logos?.[0]
     || null;
 
+  // Filter episodes by VidAPI availability
+  // Jika vidapiEps === null → masih loading
+  // Jika vidapiEps === [] → tidak ada episode di VidAPI → tampilkan pesan
+  // Jika vidapiEps punya data → filter episode
+  // FALLBACK: Jika API return {seasons: null, fallback: true} → tampilkan semua episode TMDB
   const currentSeasonVidapi = vidapiEps?.find(s => s.season === season);
   const availableEps = currentSeasonVidapi?.episodes || [];
   const isVidapiLoaded = vidapiEps !== null;
-  const filteredEpisodes = isVidapiLoaded 
+  
+  // Cek apakah ini fallback mode (show ada di TV list tapi episode list belum update)
+  const isFallbackMode = vidapiEps === "fallback" as any;
+  
+  const filteredEpisodes = isVidapiLoaded && !isFallbackMode
     ? episodes.filter(ep => availableEps.includes(ep.episodeNumber))
-    : [];
+    : (isFallbackMode ? episodes : []); // Fallback: tampilkan semua episode
 
   return (
     <>
@@ -530,8 +544,8 @@ export function DetailModal() {
                       </div>
                     ) : (
                       <div className="flex h-24 items-center justify-center gap-2 text-xs text-muted-foreground">
-                        {isVidapiLoaded ? (
-                          "Episode belum tersedia di VidAPI"
+                        {isVidapiLoaded && !isFallbackMode ? (
+                          "Episode belum tersedia"
                         ) : (
                           <>
                             <Loader2 className="h-4 w-4 animate-spin" />
