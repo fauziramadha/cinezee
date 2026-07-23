@@ -40,7 +40,16 @@ export async function GET(
     }
 
     const tmdbPath = "/" + pathSegments.join("/");
-    const cacheKey = `tmdb:${tmdbPath}`;
+    
+    // === PENTING: Include query params di cache key ===
+    // Ini agar /tv/123 dan /tv/123?append_to_response=images tidak tertukar cache-nya
+    const { searchParams } = new URL(request.url);
+    const queryParams = Array.from(searchParams.entries())
+      .filter(([k]) => k !== "api_key")
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([k, v]) => `${k}=${v}`)
+      .join("&");
+    const cacheKey = `tmdb:${tmdbPath}?${queryParams}`;
 
     // === 1. CEK D1 CACHE ===
     const db = await getDB();
@@ -51,7 +60,7 @@ export async function GET(
         ).bind(cacheKey, Date.now()).first();
         
         if (row?.cache_value) {
-          console.log(`[TMDB Cache] HIT: ${tmdbPath}`);
+          console.log(`[TMDB Cache] HIT: ${cacheKey}`);
           return NextResponse.json(JSON.parse(row.cache_value as string), {
             headers: { "Cache-Control": "public, max-age=300" }
           });
@@ -62,7 +71,6 @@ export async function GET(
     }
 
     // === 2. FETCH DARI TMDB ===
-    const { searchParams } = new URL(request.url);
     const tmdbParams = new URLSearchParams();
     tmdbParams.set("api_key", TMDB_KEY);
     tmdbParams.set("language", searchParams.get("language") || "en-US");
@@ -87,7 +95,7 @@ export async function GET(
         await db.prepare(
           "INSERT OR REPLACE INTO api_cache (cache_key, cache_value, expires_at) VALUES (?, ?, ?)"
         ).bind(cacheKey, JSON.stringify(data), Date.now() + ttl * 1000).run();
-        console.log(`[TMDB Cache] Stored: ${tmdbPath} (TTL: ${ttl}s)`);
+        console.log(`[TMDB Cache] Stored: ${cacheKey} (TTL: ${ttl}s)`);
       } catch (e) {
         console.warn("[TMDB Cache] Write error:", e);
       }
