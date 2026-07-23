@@ -94,6 +94,7 @@ export function DetailModal() {
       await Promise.resolve();
       if (cancelled) return;
       setLoading(true); setError(null);
+      setVidapiEps(null); // Reset episode loading state
 
       try {
         const tmdbId = extractTmdbId(selectedMedia);
@@ -130,7 +131,27 @@ export function DetailModal() {
         setDetail(data);
 
         const imdbId = (data as any).external_ids?.imdb_id || (selectedMedia as any).imdbId;
-        if (imdbId) setCachedImdbId(imdbId);
+        if (imdbId) {
+          setCachedImdbId(imdbId);
+          
+          // FIX: Fetch episode langsung di sini begitu dapat IMDB ID!
+          if (selectedMedia.type === "tv") {
+            try {
+              const epsRes = await fetch(`/api/vidapi/show-episodes?imdb=${imdbId}`);
+              if (cancelled) return;
+              if (epsRes.ok) {
+                const epsData = await epsRes.json();
+                setVidapiEps(epsData.seasons || []);
+              } else {
+                setVidapiEps([]); // Kalau gagal, anggap kosong
+              }
+            } catch {
+              setVidapiEps([]);
+            }
+          }
+        } else if (selectedMedia.type === "tv") {
+          setVidapiEps([]); // Kalau gak ada IMDB ID, anggap kosong
+        }
 
       } catch (err) {
         if (cancelled) return;
@@ -161,19 +182,6 @@ export function DetailModal() {
 
     return () => { cancelled = true; };
   }, [selectedMedia, session, status]);
-
-  // Fetch VidAPI available episodes for TV
-  useEffect(() => {
-    const imdbId = (selectedMedia as any)?.imdbId || cachedImdbId;
-    
-    if (selectedMedia?.type === "tv" && imdbId) {
-      setVidapiEps(null); // Reset ke loading state
-      fetch(`/api/vidapi/show-episodes?imdb=${imdbId}`)
-        .then(res => res.json())
-        .then(data => setVidapiEps(data.seasons || []))
-        .catch(() => setVidapiEps([]));
-    }
-  }, [selectedMedia, cachedImdbId]);
 
   // Fetch TMDB season details
   useEffect(() => {
@@ -523,7 +531,7 @@ export function DetailModal() {
                     ) : (
                       <div className="flex h-24 items-center justify-center gap-2 text-xs text-muted-foreground">
                         {isVidapiLoaded ? (
-                          "Episode belum tersedia"
+                          "Episode belum tersedia di VidAPI"
                         ) : (
                           <>
                             <Loader2 className="h-4 w-4 animate-spin" />
