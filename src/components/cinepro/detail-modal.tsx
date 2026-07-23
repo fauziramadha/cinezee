@@ -115,6 +115,18 @@ export function DetailModal() {
 
         if (cancelled) return;
         if (!data) throw new Error("Failed to load detail");
+
+        // Fallback: jika external_ids tidak ada di cached response, fetch terpisah
+        if (!(data as any).external_ids && tmdbId > 0) {
+          try {
+            const extRes = await fetch(`/api/tmdb/${selectedMedia.type}/${tmdbId}/external_ids`);
+            if (extRes.ok) {
+              const extData = await extRes.json();
+              (data as any).external_ids = extData;
+            }
+          } catch {}
+        }
+
         setDetail(data);
 
         const imdbId = (data as any).external_ids?.imdb_id || (selectedMedia as any).imdbId;
