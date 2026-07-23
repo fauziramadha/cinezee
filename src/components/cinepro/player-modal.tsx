@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useMemo, useCallback, useRef } from "react";
-import { X, AlertCircle, Loader2, ChevronLeft, ChevronRight } from "lucide-react";
+import { X, AlertCircle, Loader2 } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -54,9 +54,13 @@ function buildEpisodes(seasons: PlayerMediaSeason[]) {
   return eps;
 }
 
+// ============================================================
+// Build Embed URL dengan Subtitle Indonesia
+// ============================================================
 function buildEmbedUrl(
   imdbId: string,
   type: "movie" | "tv",
+  title: string,
   season?: string,
   episode?: string
 ): string {
@@ -66,11 +70,28 @@ function buildEmbedUrl(
   } else {
     url = `https://vaplayer.ru/embed/movie/${imdbId}`;
   }
-  // Auto Indonesian subtitle + autoplay
+
   const params = new URLSearchParams({
-    ds_lang: "id",
+    ds_lang: "id",        // Auto-search OpenSubtitles Indonesia
     autoplay: "1",
+    sub_lang: "id",       // Subtitle language code
+    sub_label: "Bahasa Indonesia",
+    sub_default: "true",  // Set sebagai default track
   });
+
+  // Inject manual subtitle URL dari database kita
+  const subParams = new URLSearchParams({
+    title: title,
+    type: type,
+    format: "srt", // VidAPI support .srt
+  });
+  if (season) subParams.set("season", season);
+  if (episode) subParams.set("episode", episode);
+
+  // Pakai URL absolut untuk sub_url
+  const subUrl = `${window.location.origin}/api/subtitle/manual?${subParams.toString()}`;
+  params.set("sub_url", subUrl);
+
   return `${url}?${params.toString()}`;
 }
 
@@ -110,9 +131,9 @@ export function PlayerModal() {
     }
 
     const type: "movie" | "tv" = playerMedia.type === "tv" ? "tv" : "movie";
+    const title = playerMedia.title || "";
 
     if (type === "tv") {
-      // Build episodes dari seasons metadata
       const mediaSeasons: PlayerMediaSeason[] =
         (playerMedia as any).seasons || (playerMedia as any).tv_seasons || [];
       const validSeasons = mediaSeasons.filter(
@@ -121,19 +142,16 @@ export function PlayerModal() {
 
       let eps = validSeasons.length > 0 ? buildEpisodes(validSeasons) : [];
 
-      // Kalau ada _currentSeason/_currentEpisode (dari episode terbaru), langsung pakai
       const startSeason = (playerMedia as any)._currentSeason;
       const startEpisode = (playerMedia as any)._currentEpisode;
 
       if (startSeason && startEpisode) {
-        // Cari atau tambahkan episode ini di list
         const existing = eps.findIndex(
           (e) => e.season === startSeason && e.episode === startEpisode
         );
         if (existing >= 0) {
           setCurrentEpisodeIdx(existing);
         } else {
-          // Tambahkan di depan
           eps = [{ season: startSeason, episode: startEpisode, title: `Episode ${startEpisode}` }, ...eps];
           setCurrentEpisodeIdx(0);
         }
@@ -144,16 +162,14 @@ export function PlayerModal() {
       setEpisodes(eps);
       setCurrentSeason(startSeason || eps[0]?.season || "1");
 
-      // Build embed URL
       const season = startSeason || eps[0]?.season || "1";
       const episode = startEpisode || eps[0]?.episode || "1";
-      setEmbedUrl(buildEmbedUrl(imdbId, "tv", season, episode));
+      setEmbedUrl(buildEmbedUrl(imdbId, "tv", title, season, episode));
     } else {
       setEpisodes([]);
-      setEmbedUrl(buildEmbedUrl(imdbId, "movie"));
+      setEmbedUrl(buildEmbedUrl(imdbId, "movie", title));
     }
 
-    // Add to history
     const existing = history.find((h) => h.id === playerMedia.id);
     if (!existing) {
       addToHistory({ ...playerMedia, watchedAt: new Date().toISOString() });
@@ -175,7 +191,7 @@ export function PlayerModal() {
     if (!imdbId) return;
 
     setLoading(true);
-    setEmbedUrl(buildEmbedUrl(imdbId, "tv", ep.season, ep.episode));
+    setEmbedUrl(buildEmbedUrl(imdbId, "tv", playerMedia.title || "", ep.season, ep.episode));
     setTimeout(() => setLoading(false), 1500);
   };
 
@@ -202,9 +218,8 @@ export function PlayerModal() {
     const handleMessage = (event: MessageEvent) => {
       if (event.data?.type !== "PLAYER_EVENT") return;
 
-      const { player_status, player_progress, player_duration, player_info } = event.data.data || {};
+      const { player_status, player_progress, player_duration } = event.data.data || {};
 
-      // Save progress setiap 5 detik saat playing
       if (player_status === "playing" && player_progress && player_duration) {
         const progress = parseFloat(player_progress);
         const duration = parseFloat(player_duration);
@@ -213,7 +228,6 @@ export function PlayerModal() {
         }
       }
 
-      // Save progress saat paused
       if (player_status === "paused" && player_progress) {
         updateHistoryProgress(playerMedia.id, parseFloat(player_progress), parseFloat(player_duration) || 0);
       }
