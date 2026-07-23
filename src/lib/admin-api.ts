@@ -54,25 +54,10 @@ export async function saveSubtitle(apiKey: string, data: {
   }, apiKey);
   
   if (res.ok) {
-    const data = await res.json();
-    return { ok: true, message: data.message || "Subtitle saved" };
+    const result = await res.json();
+    return { ok: true, message: result.message || "Subtitle saved" };
   } else {
-    const err = await res.json();
+    const err = await res.json().catch(() => ({}));
     return { ok: false, error: err.error || "Failed to save" };
-  }
-}
-
-export async function uploadSubtitleFile(apiKey: string, formData: FormData): Promise<{ ok: boolean; message?: string; error?: string }> {
-  const res = await adminFetch("/api/subtitle/upload", {
-    method: "POST",
-    body: formData,
-  }, apiKey);
-  
-  if (res.ok) {
-    const data = await res.json();
-    return { ok: true, message: data.message || "Subtitle uploaded" };
-  } else {
-    const err = await res.text();
-    return { ok: false, error: err };
   }
 }
