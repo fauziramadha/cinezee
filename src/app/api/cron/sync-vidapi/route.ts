@@ -15,29 +15,14 @@ async function sendTelegramNotification(message: string) {
   const botToken = env?.TELEGRAM_API_KEY || process.env.TELEGRAM_API_KEY;
   const chatId = env?.TELEGRAM_CHAT_ID || process.env.TELEGRAM_CHAT_ID;
   
-  console.log("[Telegram] Bot token exists:", !!botToken);
-  console.log("[Telegram] Chat ID exists:", !!chatId);
-  
-  if (!botToken || !chatId) {
-    console.warn("[Telegram] MISSING bot token or chat ID!");
-    return;
-  }
-  
+  if (!botToken || !chatId) return;
   try {
-    const response = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+    await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ chat_id: chatId, text: message, parse_mode: "HTML" }),
     });
-    const result = await response.json();
-    if (!response.ok) {
-      console.error("[Telegram] API Error:", JSON.stringify(result));
-    } else {
-      console.log("[Telegram] Notification sent successfully!");
-    }
-  } catch (e) {
-    console.error("[Telegram] Send error:", e);
-  }
+  } catch (e) {}
 }
 
 export async function GET(request: NextRequest) {
@@ -54,11 +39,10 @@ export async function GET(request: NextRequest) {
 
   const db = env?.DB;
   const kv = env?.VIDAPI_KV;
-  
-  if (!db) return NextResponse.json({ error: "DB not connected" }, { status: 500 });
+  if (!db || !kv) return NextResponse.json({ error: "DB or KV not connected" }, { status: 500 });
 
   try {
-    console.log("[Cron] Mulai sinkronisasi VidAPI...");
+    console.log("[Cron] Mulai sinkronisasi VidAPI (Raw Text Mode)...");
     let moviesCount = 0, tvCount = 0, episodesCount = 0;
 
     // 1. Sync Movies Raw Text ke D1
@@ -68,7 +52,6 @@ export async function GET(request: NextRequest) {
       moviesCount = text.split("\n").length - 2;
       await db.prepare("INSERT OR REPLACE INTO vidapi_sync_data (key, value, updated_at) VALUES (?, ?, ?)")
         .bind("movie_ids_raw", text, Date.now()).run();
-      console.log(`[Cron] Movies synced: ${moviesCount}`);
     }
 
     // 2. Sync TV Raw Text ke D1
@@ -78,18 +61,14 @@ export async function GET(request: NextRequest) {
       tvCount = text.split("\n").length - 2;
       await db.prepare("INSERT OR REPLACE INTO vidapi_sync_data (key, value, updated_at) VALUES (?, ?, ?)")
         .bind("tv_ids_raw", text, Date.now()).run();
-      console.log(`[Cron] TV synced: ${tvCount}`);
     }
 
-    // 3. Sync Episodes Raw Text (7MB) ke KV
-    if (kv) {
-      const epsRes = await fetch("https://vidapi.ru/ids/eps_list_imdb.txt", { headers: { "User-Agent": UA } });
-      if (epsRes.ok) {
-        const text = await epsRes.text();
-        episodesCount = text.split("\n").length;
-        await kv.put("eps_list_raw", text, { expirationTtl: 86400 });
-        console.log(`[Cron] Episodes synced to KV: ${episodesCount}`);
-      }
+    // 3. Sync Episodes Raw Text (7MB) ke KV (TANPA PARSING, SIMPAN APA ADANYA)
+    const epsRes = await fetch("https://vidapi.ru/ids/eps_list_imdb.txt", { headers: { "User-Agent": UA } });
+    if (epsRes.ok) {
+      const text = await epsRes.text();
+      episodesCount = text.split("\n").length;
+      await kv.put("eps_list_raw", text, { expirationTtl: 86400 });
     }
 
     // 4. Kirim Notifikasi Telegram
@@ -98,7 +77,7 @@ export async function GET(request: NextRequest) {
       `🎥 Movies: <b>${moviesCount.toLocaleString()}</b>\n` +
       `📺 TV Shows: <b>${tvCount.toLocaleString()}</b>\n` +
       `🎬 Episodes: <b>${episodesCount.toLocaleString()}</b>\n\n` +
-      `✅ Data tersimpan di D1 + KV.`;
+      `✅ Data tersimpan di D1 & KV.`;
     
     await sendTelegramNotification(message);
 
