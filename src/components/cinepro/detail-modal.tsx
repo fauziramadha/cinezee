@@ -63,6 +63,7 @@ export function DetailModal() {
   const [episodes, setEpisodes] = useState<Episode[]>([]);
   const [episodesLoading, setEpisodesLoading] = useState(false);
   
+  // null = loading, [] = kosong, [{season:-1}] = fallback (tampilkan semua), [{season:1,...}] = ada data
   const [vidapiEps, setVidapiEps] = useState<{ season: number; episodes: number[] }[] | null>(null);
   const [cachedImdbId, setCachedImdbId] = useState<string | null>(null);
   const [trailerOpen, setTrailerOpen] = useState(false);
@@ -76,6 +77,9 @@ export function DetailModal() {
     setSelectedMedia(null);
   };
 
+  // ============================================================
+  // LOAD DETAIL (Tanpa fetch episode, hanya TMDB detail)
+  // ============================================================
   useEffect(() => {
     if (!selectedMedia) {
       Promise.resolve().then(() => {
@@ -94,7 +98,6 @@ export function DetailModal() {
       await Promise.resolve();
       if (cancelled) return;
       setLoading(true); setError(null);
-      setVidapiEps(null); // Reset episode loading state
 
       try {
         const tmdbId = extractTmdbId(selectedMedia);
@@ -117,7 +120,7 @@ export function DetailModal() {
         if (cancelled) return;
         if (!data) throw new Error("Failed to load detail");
 
-        // Fallback: jika external_ids tidak ada di cached response, fetch terpisah
+        // Fallback: fetch external_ids terpisah jika tidak ada
         if (!(data as any).external_ids && tmdbId > 0) {
           try {
             const extRes = await fetch(`/api/tmdb/${selectedMedia.type}/${tmdbId}/external_ids`);
@@ -131,32 +134,7 @@ export function DetailModal() {
         setDetail(data);
 
         const imdbId = (data as any).external_ids?.imdb_id || (selectedMedia as any).imdbId;
-        if (imdbId) {
-          setCachedImdbId(imdbId);
-          
-          // FIX: Fetch episode langsung di sini begitu dapat IMDB ID!
-          if (selectedMedia.type === "tv") {
-            try {
-              const epsRes = await fetch(`/api/vidapi/show-episodes?imdb=${imdbId}`);
-              if (cancelled) return;
-              if (epsRes.ok) {
-                const epsData = await epsRes.json();
-                if (epsData.fallback) {
-                  // Show ada di TV list tapi episode list belum update → tampilkan semua
-                  setVidapiEps("fallback" as any);
-                } else {
-                  setVidapiEps(epsData.seasons || []);
-                }
-              } else {
-                setVidapiEps([]);
-              }
-            } catch {
-              setVidapiEps([]);
-            }
-          }
-        } else if (selectedMedia.type === "tv") {
-          setVidapiEps([]); // Kalau gak ada IMDB ID, anggap kosong
-        }
+        if (imdbId) setCachedImdbId(imdbId);
 
       } catch (err) {
         if (cancelled) return;
@@ -188,7 +166,69 @@ export function DetailModal() {
     return () => { cancelled = true; };
   }, [selectedMedia, session, status]);
 
-  // Fetch TMDB season details
+  // ============================================================
+  // FETCH EPISODE (UseEffect terpisah, TIDAK bergantung loadDetail)
+  // ============================================================
+  useEffect(() => {
+    if (selectedMedia?.type !== "tv") return;
+    
+    let cancelled = false;
+    setVidapiEps(null); // Reset ke loading state
+
+    const fetchEpisodes = async () => {
+      // 1. Coba ambil imdbId dari selectedMedia atau cachedImdbId
+      let imdbId = (selectedMedia as any)?.imdbId || cachedImdbId;
+      
+      // 2. Kalau belum ada, fetch dari TMDB external_ids
+      if (!imdbId) {
+        const tmdbId = extractTmdbId(selectedMedia);
+        if (tmdbId > 0) {
+          try {
+            const res = await fetch(`/api/tmdb/tv/${tmdbId}/external_ids`);
+            if (res.ok) {
+              const data = await res.json();
+              imdbId = data.imdb_id;
+              if (imdbId && !cancelled) setCachedImdbId(imdbId);
+            }
+          } catch (e) {
+            console.warn("[Detail] Failed to fetch external_ids for episodes:", e);
+          }
+        }
+      }
+
+      if (!imdbId || cancelled) {
+        if (!cancelled) setVidapiEps([]);
+        return;
+      }
+
+      // 3. Fetch episode dari VidAPI
+      try {
+        const epsRes = await fetch(`/api/vidapi/show-episodes?imdb=${imdbId}`);
+        if (cancelled) return;
+        if (epsRes.ok) {
+          const epsData = await epsRes.json();
+          if (epsData.fallback) {
+            // Show ada di TV list tapi episode list kosong → tampilkan semua
+            setVidapiEps([{ season: -1, episodes: [-1] }]);
+          } else {
+            setVidapiEps(epsData.seasons || []);
+          }
+        } else {
+          setVidapiEps([]);
+        }
+      } catch (e) {
+        if (!cancelled) setVidapiEps([]);
+      }
+    };
+
+    fetchEpisodes();
+
+    return () => { cancelled = true; };
+  }, [selectedMedia, cachedImdbId]);
+
+  // ============================================================
+  // FETCH TMDB SEASON DETAILS
+  // ============================================================
   useEffect(() => {
     if (!selectedMedia || selectedMedia.type !== "tv" || !detail) return;
     let cancelled = false;
@@ -391,20 +431,16 @@ export function DetailModal() {
     || null;
 
   // Filter episodes by VidAPI availability
-  // Jika vidapiEps === null → masih loading
-  // Jika vidapiEps === [] → tidak ada episode di VidAPI → tampilkan pesan
-  // Jika vidapiEps punya data → filter episode
-  // FALLBACK: Jika API return {seasons: null, fallback: true} → tampilkan semua episode TMDB
+  const isFallbackMode = vidapiEps?.some(s => s.season === -1);
   const currentSeasonVidapi = vidapiEps?.find(s => s.season === season);
   const availableEps = currentSeasonVidapi?.episodes || [];
   const isVidapiLoaded = vidapiEps !== null;
   
-  // Cek apakah ini fallback mode (show ada di TV list tapi episode list belum update)
-  const isFallbackMode = vidapiEps === "fallback" as any;
-  
-  const filteredEpisodes = isVidapiLoaded && !isFallbackMode
-    ? episodes.filter(ep => availableEps.includes(ep.episodeNumber))
-    : (isFallbackMode ? episodes : []); // Fallback: tampilkan semua episode
+  const filteredEpisodes = isVidapiLoaded
+    ? (isFallbackMode 
+        ? episodes // Fallback: tampilkan semua episode TMDB
+        : episodes.filter(ep => availableEps.includes(ep.episodeNumber)))
+    : [];
 
   return (
     <>
@@ -545,7 +581,7 @@ export function DetailModal() {
                     ) : (
                       <div className="flex h-24 items-center justify-center gap-2 text-xs text-muted-foreground">
                         {isVidapiLoaded && !isFallbackMode ? (
-                          "Episode belum tersedia"
+                          "Episode belum tersedia di VidAPI"
                         ) : (
                           <>
                             <Loader2 className="h-4 w-4 animate-spin" />
