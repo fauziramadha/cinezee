@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState, useMemo, useCallback, useRef } from "react";
-import { X, AlertCircle, Loader2 } from "lucide-react";
+import { useEffect, useState, useMemo, useRef } from "react";
+import Hls from "hls.js";
+import { X, AlertCircle, Loader2, Settings, Volume2 } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -18,8 +19,31 @@ import {
 import { useAppStore } from "@/lib/store";
 
 // ============================================================
+// Config
+// ============================================================
+const VPS_API_BASE =
+  process.env.NEXT_PUBLIC_API_URL || "https://api.cinestream.my.id";
+
+// ============================================================
 // Types
 // ============================================================
+interface StreamInfo {
+  content: {
+    id: number;
+    cinemacity_id: string;
+    title: string;
+    type: string;
+  };
+  stream_url: string; // relative path: /api/stream/play/{id}?slug=X&type=Y
+  episodes: {
+    season: number;
+    episode: number;
+    title: string;
+    stream_url: string;
+  }[];
+  expires_at: string;
+}
+
 interface PlayerMediaSeason {
   seasonNumber: number;
   episodeCount: number;
@@ -29,230 +53,370 @@ interface PlayerMediaSeason {
 // ============================================================
 // Helpers
 // ============================================================
-function extractImdbId(media: any): string | null {
-  if (!media) return null;
-  if (media.imdbId && /^tt\d{6,}$/i.test(media.imdbId)) return media.imdbId;
-  if (media.imdb_id && /^tt\d{6,}$/i.test(media.imdb_id)) return media.imdb_id;
-  if (typeof media.id === "string" && /^tt\d{6,}$/i.test(media.id)) return media.id;
+
+// Find cinemacity content by title (if no cinemacity_id)
+async function findCinemacityContent(
+  media: any
+): Promise<{ cinemacity_id: string; slug: string; type: string } | null> {
+  // If media already has cinemacity info
+  if (media.cinemacity_id) {
+    return {
+      cinemacity_id: String(media.cinemacity_id),
+      slug: media.slug || "",
+      type: media.type === "tv" ? "tv" : "movie",
+    };
+  }
+
+  // Search VPS API by title
+  try {
+    const res = await fetch(
+      `${VPS_API_BASE}/api/search?q=${encodeURIComponent(media.title || "")}`
+    );
+    const data = await res.json();
+    if (data.success && data.data?.results?.length > 0) {
+      // Find best match (case-insensitive)
+      const titleLower = (media.title || "").toLowerCase();
+      const match =
+        data.data.results.find(
+          (r: any) => r.title.toLowerCase() === titleLower
+        ) ||
+        data.data.results.find((r: any) =>
+          r.title.toLowerCase().includes(titleLower)
+        );
+      if (match) {
+        return {
+          cinemacity_id: String(match.cinemacity_id),
+          slug: match.slug,
+          type: match.type,
+        };
+      }
+    }
+  } catch (e) {
+    console.error("Search VPS failed:", e);
+  }
   return null;
 }
 
-function buildEpisodes(seasons: PlayerMediaSeason[]) {
-  const eps: { season: string; episode: string; title: string }[] = [];
-  const sorted = [...seasons].sort((a, b) => a.seasonNumber - b.seasonNumber);
-  sorted.forEach((s) => {
-    if (s.seasonNumber === 0) return;
-    const count = Math.max(1, Math.min(s.episodeCount || 0, 100));
-    for (let i = 1; i <= count; i++) {
-      eps.push({
-        title: `Episode ${i}`,
-        season: String(s.seasonNumber),
-        episode: String(i),
-      });
-    }
-  });
-  return eps;
-}
-
-// ============================================================
-// Build Embed URL dengan Subtitle Indonesia
-// ============================================================
-function buildEmbedUrl(
-  imdbId: string,
-  type: "movie" | "tv",
-  title: string,
-  season?: string,
-  episode?: string
-): string {
-  let url: string;
-  if (type === "tv" && season && episode) {
-    url = `https://vaplayer.ru/embed/tv/${imdbId}/${season}/${episode}`;
-  } else {
-    url = `https://vaplayer.ru/embed/movie/${imdbId}`;
-  }
-
-  const params = new URLSearchParams({
-    ds_lang: "id",        // Auto-search OpenSubtitles Indonesia
-    autoplay: "1",
-    sub_lang: "id",       // Subtitle language code
-    sub_label: "Bahasa Indonesia",
-    sub_default: "true",  // Set sebagai default track
-  });
-
-  // Inject manual subtitle URL dari database kita
-  const subParams = new URLSearchParams({
-    title: title,
-    type: type,
-    format: "srt", // VidAPI support .srt
-  });
-  if (season) subParams.set("season", season);
-  if (episode) subParams.set("episode", episode);
-
-  // Pakai URL absolut untuk sub_url
-  const subUrl = `${window.location.origin}/api/subtitle/manual?${subParams.toString()}`;
-  params.set("sub_url", subUrl);
-
-  return `${url}?${params.toString()}`;
+// Get stream info from VPS API
+async function getStreamInfo(cinemacityId: string): Promise<StreamInfo> {
+  const res = await fetch(`${VPS_API_BASE}/api/stream/info/${cinemacityId}`);
+  const data = await res.json();
+  if (!data.success)
+    throw new Error(data.error || "Failed to get stream info");
+  return data.data;
 }
 
 // ============================================================
 // PLAYER MODAL
 // ============================================================
 export function PlayerModal() {
-  const { playerMedia, closePlayer, addToHistory, updateHistoryProgress, history } = useAppStore();
+  const {
+    playerMedia,
+    closePlayer,
+    addToHistory,
+    updateHistoryProgress,
+    history,
+  } = useAppStore();
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [embedUrl, setEmbedUrl] = useState<string>("");
-  const [episodes, setEpisodes] = useState<{ season: string; episode: string; title: string }[]>([]);
+
+  // Stream data
+  const [streamInfo, setStreamInfo] = useState<StreamInfo | null>(null);
+  const [cinemacityData, setCinemacityData] = useState<{
+    cinemacity_id: string;
+    slug: string;
+    type: string;
+  } | null>(null);
+
+  // Episode state (TV)
   const [currentSeason, setCurrentSeason] = useState<string>("");
-  const [currentEpisodeIdx, setCurrentEpisodeIdx] = useState<number>(0);
+  const [currentEpisode, setCurrentEpisode] = useState<string>("");
+
+  // HLS state
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const hlsRef = useRef<Hls | null>(null);
+  const [audioTracks, setAudioTracks] = useState<Hls.AudioTrack[]>([]);
+  const [currentAudioTrack, setCurrentAudioTrack] = useState<number>(-1);
+  const [qualityLevels, setQualityLevels] = useState<Hls.Level[]>([]);
+  const [currentQuality, setCurrentQuality] = useState<number>(-1);
+  const [showSettings, setShowSettings] = useState(false);
 
   // ============================================================
-  // Init: Build embed URL + episodes list
+  // Init: Find cinemacity content + get stream info
   // ============================================================
   useEffect(() => {
     if (!playerMedia) {
-      setEmbedUrl("");
-      setEpisodes([]);
+      setStreamInfo(null);
+      setCinemacityData(null);
       setError(null);
       setLoading(true);
       return;
     }
 
-    setLoading(true);
-    setError(null);
+    let cancelled = false;
 
-    const imdbId = extractImdbId(playerMedia);
-    if (!imdbId) {
-      setError("Konten ini tidak memiliki IMDB ID, tidak bisa diputar.");
-      setLoading(false);
-      return;
-    }
+    async function init() {
+      setLoading(true);
+      setError(null);
 
-    const type: "movie" | "tv" = playerMedia.type === "tv" ? "tv" : "movie";
-    const title = playerMedia.title || "";
-
-    if (type === "tv") {
-      const mediaSeasons: PlayerMediaSeason[] =
-        (playerMedia as any).seasons || (playerMedia as any).tv_seasons || [];
-      const validSeasons = mediaSeasons.filter(
-        (s) => s && typeof s.seasonNumber === "number" && s.episodeCount > 0
-      );
-
-      let eps = validSeasons.length > 0 ? buildEpisodes(validSeasons) : [];
-
-      const startSeason = (playerMedia as any)._currentSeason;
-      const startEpisode = (playerMedia as any)._currentEpisode;
-
-      if (startSeason && startEpisode) {
-        const existing = eps.findIndex(
-          (e) => e.season === startSeason && e.episode === startEpisode
-        );
-        if (existing >= 0) {
-          setCurrentEpisodeIdx(existing);
-        } else {
-          eps = [{ season: startSeason, episode: startEpisode, title: `Episode ${startEpisode}` }, ...eps];
-          setCurrentEpisodeIdx(0);
+      try {
+        // Step 1: Find cinemacity content
+        const ccData = await findCinemacityContent(playerMedia);
+        if (!ccData) {
+          throw new Error(
+            "Konten ini tidak tersedia di server streaming kami."
+          );
         }
-      } else if (eps.length > 0) {
-        setCurrentEpisodeIdx(0);
+
+        if (cancelled) return;
+        setCinemacityData(ccData);
+
+        // Step 2: Get stream info (episodes list, etc)
+        const info = await getStreamInfo(ccData.cinemacity_id);
+        if (cancelled) return;
+        setStreamInfo(info);
+
+        // Step 3: Set initial episode (TV)
+        if (ccData.type === "tv" && info.episodes?.length > 0) {
+          const startSeason =
+            (playerMedia as any)._currentSeason ||
+            String(info.episodes[0].season);
+          const startEpisode =
+            (playerMedia as any)._currentEpisode ||
+            String(info.episodes[0].episode);
+          setCurrentSeason(startSeason);
+          setCurrentEpisode(startEpisode);
+        }
+
+        // Add to history
+        const existing = history.find((h) => h.id === playerMedia.id);
+        if (!existing) {
+          addToHistory({
+            ...playerMedia,
+            watchedAt: new Date().toISOString(),
+          });
+        }
+      } catch (e: any) {
+        if (!cancelled) {
+          setError(e.message || "Failed to load stream");
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
       }
-
-      setEpisodes(eps);
-      setCurrentSeason(startSeason || eps[0]?.season || "1");
-
-      const season = startSeason || eps[0]?.season || "1";
-      const episode = startEpisode || eps[0]?.episode || "1";
-      setEmbedUrl(buildEmbedUrl(imdbId, "tv", title, season, episode));
-    } else {
-      setEpisodes([]);
-      setEmbedUrl(buildEmbedUrl(imdbId, "movie", title));
     }
 
-    const existing = history.find((h) => h.id === playerMedia.id);
-    if (!existing) {
-      addToHistory({ ...playerMedia, watchedAt: new Date().toISOString() });
-    }
+    init();
 
-    setLoading(false);
+    return () => {
+      cancelled = true;
+    };
   }, [playerMedia]);
 
   // ============================================================
-  // Episode Change
+  // Build stream URL for current episode
   // ============================================================
-  const handleEpisodeChange = (idx: number) => {
-    const ep = currentSeasonEpisodes[idx];
-    if (!ep) return;
+  const streamUrl = useMemo(() => {
+    if (!cinemacityData || !streamInfo) return "";
 
-    setCurrentEpisodeIdx(idx);
-
-    const imdbId = extractImdbId(playerMedia);
-    if (!imdbId) return;
-
-    setLoading(true);
-    setEmbedUrl(buildEmbedUrl(imdbId, "tv", playerMedia.title || "", ep.season, ep.episode));
-    setTimeout(() => setLoading(false), 1500);
-  };
+    const base = streamInfo.stream_url; // /api/stream/play/{id}?slug=X&type=Y
+    if (cinemacityData.type === "tv" && currentSeason && currentEpisode) {
+      // Append season & episode
+      const separator = base.includes("?") ? "&" : "?";
+      return `${VPS_API_BASE}${base}${separator}season=${currentSeason}&episode=${currentEpisode}`;
+    }
+    return `${VPS_API_BASE}${base}`;
+  }, [cinemacityData, streamInfo, currentSeason, currentEpisode]);
 
   // ============================================================
-  // Season Change
+  // HLS.js Setup
   // ============================================================
-  const handleSeasonChange = (season: string) => {
-    setCurrentSeason(season);
-    const firstEp = episodes.find((e) => (e.season || "1") === season);
-    if (firstEp) {
-      const idx = episodes.findIndex(
-        (e) => (e.season || "1") === season && e.episode === firstEp.episode
-      );
-      if (idx >= 0) handleEpisodeChange(idx);
+  useEffect(() => {
+    if (!streamUrl || !videoRef.current) return;
+
+    const video = videoRef.current;
+
+    // Cleanup previous HLS instance
+    if (hlsRef.current) {
+      hlsRef.current.destroy();
+      hlsRef.current = null;
+    }
+
+    // Setup HLS.js
+    if (Hls.isSupported()) {
+      const hls = new Hls({
+        enableWorker: true,
+        lowLatencyMode: false,
+        // Auto-start at best quality
+        startLevel: -1,
+        // Audio track config
+        audioTrackSwitchLabel: true,
+      });
+
+      hlsRef.current = hls;
+
+      hls.loadSource(streamUrl);
+      hls.attachMedia(video);
+
+      hls.on(Hls.Events.MANIFEST_PARSED, () => {
+        // Auto-play
+        video.play().catch(() => {
+          // Autoplay might be blocked, user needs to click play
+        });
+
+        // Setup audio tracks
+        setAudioTracks(hls.audioTracks || []);
+        // Try to select Indonesian audio by default
+        const indoTrack = (hls.audioTracks || []).findIndex(
+          (t) =>
+            t.name?.toLowerCase().includes("indonesia") ||
+            t.lang?.toLowerCase().includes("id")
+        );
+        if (indoTrack >= 0) {
+          hls.audioTrack = indoTrack;
+          setCurrentAudioTrack(indoTrack);
+        }
+
+        // Setup quality levels
+        setQualityLevels(hls.levels || []);
+        setCurrentQuality(-1); // Auto
+      });
+
+      hls.on(Hls.Events.AUDIO_TRACKS_UPDATED, () => {
+        setAudioTracks(hls.audioTracks || []);
+      });
+
+      hls.on(Hls.Events.LEVELS_UPDATED, () => {
+        setQualityLevels(hls.levels || []);
+      });
+
+      hls.on(Hls.Events.ERROR, (event, data) => {
+        if (data.fatal) {
+          switch (data.type) {
+            case Hls.ErrorTypes.NETWORK_ERROR:
+              hls.startLoad();
+              break;
+            case Hls.ErrorTypes.MEDIA_ERROR:
+              hls.recoverMediaError();
+              break;
+            default:
+              setError("Stream error. Please try again.");
+              hls.destroy();
+              break;
+          }
+        }
+      });
+    } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
+      // Safari native HLS
+      video.src = streamUrl;
+      video.play().catch(() => {});
+    }
+
+    return () => {
+      if (hlsRef.current) {
+        hlsRef.current.destroy();
+        hlsRef.current = null;
+      }
+    };
+  }, [streamUrl]);
+
+  // ============================================================
+  // Progress Tracking via Video Events
+  // ============================================================
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video || !playerMedia) return;
+
+    const handleTimeUpdate = () => {
+      if (video.currentTime > 0 && video.duration > 0) {
+        updateHistoryProgress(
+          playerMedia.id,
+          video.currentTime,
+          video.duration
+        );
+      }
+    };
+
+    const handlePlay = () => {
+      if (video.currentTime > 0 && video.duration > 0) {
+        updateHistoryProgress(
+          playerMedia.id,
+          video.currentTime,
+          video.duration
+        );
+      }
+    };
+
+    video.addEventListener("timeupdate", handleTimeUpdate);
+    video.addEventListener("play", handlePlay);
+
+    return () => {
+      video.removeEventListener("timeupdate", handleTimeUpdate);
+      video.removeEventListener("play", handlePlay);
+    };
+  }, [playerMedia, updateHistoryProgress, streamUrl]);
+
+  // ============================================================
+  // Audio Track Change
+  // ============================================================
+  const handleAudioTrackChange = (trackId: string) => {
+    const idx = parseInt(trackId);
+    if (hlsRef.current) {
+      hlsRef.current.audioTrack = idx;
+      setCurrentAudioTrack(idx);
     }
   };
 
   // ============================================================
-  // Progress Tracking via postMessage
+  // Quality Change
   // ============================================================
-  useEffect(() => {
-    if (!playerMedia || !embedUrl) return;
-
-    const handleMessage = (event: MessageEvent) => {
-      if (event.data?.type !== "PLAYER_EVENT") return;
-
-      const { player_status, player_progress, player_duration } = event.data.data || {};
-
-      if (player_status === "playing" && player_progress && player_duration) {
-        const progress = parseFloat(player_progress);
-        const duration = parseFloat(player_duration);
-        if (progress > 0 && duration > 0) {
-          updateHistoryProgress(playerMedia.id, progress, duration);
-        }
-      }
-
-      if (player_status === "paused" && player_progress) {
-        updateHistoryProgress(playerMedia.id, parseFloat(player_progress), parseFloat(player_duration) || 0);
-      }
-    };
-
-    window.addEventListener("message", handleMessage);
-    return () => window.removeEventListener("message", handleMessage);
-  }, [playerMedia, embedUrl, updateHistoryProgress]);
+  const handleQualityChange = (levelId: string) => {
+    const idx = parseInt(levelId);
+    if (hlsRef.current) {
+      hlsRef.current.currentLevel = idx; // -1 = auto
+      setCurrentQuality(idx);
+    }
+  };
 
   // ============================================================
-  // Derived
+  // Episode Change (TV)
   // ============================================================
+  const episodes = streamInfo?.episodes || [];
+
   const seasons = useMemo(() => {
     const set = new Set<string>();
-    episodes.forEach((e) => set.add(e.season || "1"));
+    episodes.forEach((e) => set.add(String(e.season)));
     return Array.from(set).sort((a, b) => Number(a) - Number(b));
   }, [episodes]);
 
   const currentSeasonEpisodes = useMemo(() => {
-    return episodes.filter((e) => (e.season || "1") === currentSeason);
+    return episodes.filter((e) => String(e.season) === currentSeason);
   }, [episodes, currentSeason]);
+
+  const handleEpisodeChange = (episode: string) => {
+    setCurrentEpisode(episode);
+  };
+
+  const handleSeasonChange = (season: string) => {
+    setCurrentSeason(season);
+    const firstEp = episodes.find((e) => String(e.season) === season);
+    if (firstEp) {
+      setCurrentEpisode(String(firstEp.episode));
+    }
+  };
+
+  // ============================================================
+  // Current episode index (for prev/next)
+  // ============================================================
+  const currentEpisodeIdx = useMemo(() => {
+    return currentSeasonEpisodes.findIndex(
+      (e) => String(e.episode) === currentEpisode
+    );
+  }, [currentSeasonEpisodes, currentEpisode]);
 
   if (!playerMedia) return null;
 
-  const isTV = playerMedia.type === "tv" && episodes.length > 0;
+  const isTV = cinemacityData?.type === "tv" && episodes.length > 0;
 
   return (
     <Dialog open={!!playerMedia} onOpenChange={(open) => !open && closePlayer()}>
@@ -286,20 +450,94 @@ export function PlayerModal() {
           </div>
         )}
 
-        {!loading && !error && embedUrl && (
+        {!loading && !error && streamUrl && (
           <div className="relative aspect-video w-full bg-black">
-            <iframe
-              src={embedUrl}
+            <video
+              ref={videoRef}
               className="h-full w-full"
-              allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
-              allowFullScreen
-              referrerPolicy="no-referrer-when-downgrade"
+              controls
+              autoPlay
+              playsInline
             />
+
+            {/* Settings Button (Audio + Quality) */}
+            <div className="absolute bottom-16 right-4 z-20">
+              <button
+                onClick={() => setShowSettings(!showSettings)}
+                className="flex h-8 w-8 items-center justify-center rounded-full bg-black/50 text-white backdrop-blur-sm transition hover:bg-black/70"
+                aria-label="Settings"
+              >
+                <Settings className="h-4 w-4" />
+              </button>
+
+              {showSettings && (
+                <div className="absolute bottom-10 right-0 flex flex-col gap-2 rounded-lg bg-black/90 p-3 backdrop-blur-md">
+                  {/* Audio Track Selector */}
+                  {audioTracks.length > 1 && (
+                    <div className="flex flex-col gap-1">
+                      <label className="flex items-center gap-1 text-[10px] text-white/60">
+                        <Volume2 className="h-3 w-3" /> Audio
+                      </label>
+                      <Select
+                        value={String(currentAudioTrack)}
+                        onValueChange={handleAudioTrackChange}
+                      >
+                        <SelectTrigger className="h-7 w-40 border-white/20 bg-zinc-900 text-xs text-white">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {audioTracks.map((track, idx) => (
+                            <SelectItem
+                              key={idx}
+                              value={String(idx)}
+                              className="text-xs"
+                            >
+                              {track.name || track.lang || `Track ${idx + 1}`}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
+
+                  {/* Quality Selector */}
+                  {qualityLevels.length > 1 && (
+                    <div className="flex flex-col gap-1">
+                      <label className="text-[10px] text-white/60">
+                        Quality
+                      </label>
+                      <Select
+                        value={String(currentQuality)}
+                        onValueChange={handleQualityChange}
+                      >
+                        <SelectTrigger className="h-7 w-40 border-white/20 bg-zinc-900 text-xs text-white">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="-1" className="text-xs">
+                            Auto
+                          </SelectItem>
+                          {qualityLevels.map((level, idx) => (
+                            <SelectItem
+                              key={idx}
+                              value={String(idx)}
+                              className="text-xs"
+                            >
+                              {level.height}p
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
         )}
 
         {/* TV Episode Controls */}
-        {!loading && !error && embedUrl && isTV && (
+        {!loading && !error && isTV && (
           <div className="flex flex-wrap items-center gap-2 border-t border-white/10 bg-zinc-950 p-3">
             {seasons.length > 1 && (
               <Select value={currentSeason} onValueChange={handleSeasonChange}>
@@ -322,16 +560,17 @@ export function PlayerModal() {
               </span>
             )}
 
-            <Select
-              value={String(currentEpisodeIdx)}
-              onValueChange={(v) => handleEpisodeChange(Number(v))}
-            >
+            <Select value={currentEpisode} onValueChange={handleEpisodeChange}>
               <SelectTrigger className="h-8 w-40 shrink-0 border-white/20 bg-zinc-900 text-xs text-white sm:w-52">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {currentSeasonEpisodes.map((ep, idx) => (
-                  <SelectItem key={idx} value={String(idx)} className="text-xs">
+                {currentSeasonEpisodes.map((ep) => (
+                  <SelectItem
+                    key={ep.episode}
+                    value={String(ep.episode)}
+                    className="text-xs"
+                  >
                     E{ep.episode} — {ep.title}
                   </SelectItem>
                 ))}
@@ -343,8 +582,13 @@ export function PlayerModal() {
             </span>
             <div className="flex gap-1">
               <button
-                onClick={() => currentEpisodeIdx > 0 && handleEpisodeChange(currentEpisodeIdx - 1)}
-                disabled={currentEpisodeIdx === 0}
+                onClick={() =>
+                  currentEpisodeIdx > 0 &&
+                  handleEpisodeChange(
+                    String(currentSeasonEpisodes[currentEpisodeIdx - 1].episode)
+                  )
+                }
+                disabled={currentEpisodeIdx <= 0}
                 className="flex h-8 items-center justify-center rounded-md bg-zinc-900 px-3 text-xs text-white/80 transition-colors hover:bg-zinc-800 disabled:opacity-30"
               >
                 ← Prev
@@ -352,9 +596,11 @@ export function PlayerModal() {
               <button
                 onClick={() =>
                   currentEpisodeIdx < currentSeasonEpisodes.length - 1 &&
-                  handleEpisodeChange(currentEpisodeIdx + 1)
+                  handleEpisodeChange(
+                    String(currentSeasonEpisodes[currentEpisodeIdx + 1].episode)
+                  )
                 }
-                disabled={currentEpisodeIdx === currentSeasonEpisodes.length - 1}
+                disabled={currentEpisodeIdx >= currentSeasonEpisodes.length - 1}
                 className="flex h-8 items-center justify-center rounded-md bg-zinc-900 px-3 text-xs text-white/80 transition-colors hover:bg-zinc-800 disabled:opacity-30"
               >
                 Next →
