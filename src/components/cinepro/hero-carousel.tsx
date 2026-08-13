@@ -3,20 +3,21 @@
 import { useEffect, useState, useRef, useCallback } from "react";
 import { Play, Star, Flame } from "lucide-react";
 
+// ============================================================
+// Types - Pure VPS API (No TMDB)
+// ============================================================
 interface MediaItem {
-  id: string;
-  tmdbId: number;
-  imdbId?: string;
+  id: string;          // cinemacity_id
+  cinemacityId: string;
+  slug: string;
   title: string;
   type: "movie" | "tv";
   poster: string;
   backdrop: string;
-  logo?: string;
   overview: string;
   year: string;
   rating: number;
-  genre?: string;
-  seasons?: Array<{ seasonNumber: number; episodeCount: number; name?: string }>;
+  quality?: string;
 }
 
 const SLIDE_DURATION = 7000;
@@ -35,7 +36,7 @@ export function HeroCarousel({
   const [progress, setProgress] = useState(0);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const progressRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  
+
   // Refs untuk touch swipe
   const touchStartX = useRef(0);
   const touchEndX = useRef(0);
@@ -55,11 +56,10 @@ export function HeroCarousel({
     setProgress(0);
   }, []);
 
-  // Progress bar + auto-advance (selalu jalan kecuali isPaused true)
+  // Progress bar + auto-advance
   useEffect(() => {
     if (isPaused || items.length === 0) return;
 
-    // Progress bar update tiap 50ms
     progressRef.current = setInterval(() => {
       setProgress((prev) => {
         const newProgress = prev + (50 / SLIDE_DURATION) * 100;
@@ -67,7 +67,6 @@ export function HeroCarousel({
       });
     }, 50);
 
-    // Auto-advance
     intervalRef.current = setInterval(() => {
       setCurrentIdx((prev) => (prev + 1) % items.length);
       setProgress(0);
@@ -79,10 +78,10 @@ export function HeroCarousel({
     };
   }, [isPaused, items.length, currentIdx]);
 
-  // Handlers untuk Touch Swipe (Mobile/Tablet)
+  // Touch Swipe handlers
   const handleTouchStart = (e: React.TouchEvent) => {
     touchStartX.current = e.touches[0].clientX;
-    setIsPaused(true); // Pause auto-slide saat disentuh
+    setIsPaused(true);
   };
 
   const handleTouchMove = (e: React.TouchEvent) => {
@@ -91,13 +90,11 @@ export function HeroCarousel({
 
   const handleTouchEnd = () => {
     if (touchStartX.current - touchEndX.current > 50) {
-      // Swipe ke kiri (Next)
       goToNext();
     } else if (touchEndX.current - touchStartX.current > 50) {
-      // Swipe ke kanan (Prev)
       goToPrev();
     }
-    setIsPaused(false); // Lanjut auto-slide
+    setIsPaused(false);
   };
 
   if (items.length === 0) return null;
@@ -134,25 +131,16 @@ export function HeroCarousel({
       ))}
 
       {/* Content */}
-      {/* Tambah pb-12 sm:pb-14 agar konten tidak ketutup dots indicator di bawah */}
       <div className="relative z-10 flex h-full flex-col justify-end p-4 pb-12 sm:p-10 sm:pb-14 md:p-14 md:pb-10 lg:p-16">
         <div className="max-w-2xl">
           <span className="mb-2 inline-flex w-fit items-center gap-1.5 rounded-full bg-red-600 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-white sm:mb-3 sm:px-3 sm:py-1 sm:text-xs">
             <Flame className="h-3 w-3" /> Trending
           </span>
 
-          {/* TMDB Logo atau Judul */}
-          {current.logo ? (
-            <img
-              src={current.logo}
-              alt={current.title}
-              className="mb-2 h-10 w-auto max-w-[70%] object-contain object-left drop-shadow-2xl sm:mb-3 sm:h-16 md:h-20 md:max-w-[60%] lg:h-28 pointer-events-none"
-            />
-          ) : (
-            <h1 className="mb-2 text-2xl font-black leading-tight text-white drop-shadow-2xl sm:mb-3 sm:text-4xl md:text-5xl lg:text-7xl">
-              {current.title}
-            </h1>
-          )}
+          {/* Title (always text, no logo) */}
+          <h1 className="mb-2 text-2xl font-black leading-tight text-white drop-shadow-2xl sm:mb-3 sm:text-4xl md:text-5xl lg:text-7xl">
+            {current.title}
+          </h1>
 
           {/* Meta info */}
           <div className="mb-2 flex flex-wrap items-center gap-2 text-xs sm:mb-3 sm:gap-3 sm:text-sm">
@@ -166,7 +154,11 @@ export function HeroCarousel({
             <span className="rounded border border-white/30 px-1.5 py-0.5 text-[10px] uppercase text-white/80 sm:px-2">
               {current.type === "tv" ? "TV Series" : "Movie"}
             </span>
-            {current.genre && <span className="hidden text-white/60 sm:inline sm:text-xs">{current.genre}</span>}
+            {current.quality && (
+              <span className="rounded border border-white/30 px-1.5 py-0.5 text-[10px] uppercase text-white/80 sm:px-2">
+                {current.quality}
+              </span>
+            )}
           </div>
 
           {/* Synopsis */}
@@ -176,7 +168,7 @@ export function HeroCarousel({
             </p>
           )}
 
-          {/* CTA buttons - Tombol Putar Sekarang diubah jadi Merah */}
+          {/* CTA buttons */}
           <div className="flex flex-row gap-2 sm:gap-3">
             <button
               onClick={() => onPlay(current)}
@@ -195,7 +187,7 @@ export function HeroCarousel({
         </div>
       </div>
 
-      {/* Dots indicator + Progress bar (Posisi diatur lebih turun untuk mobile) */}
+      {/* Dots indicator + Progress bar */}
       <div className="absolute bottom-3 left-1/2 z-20 -translate-x-1/2 sm:bottom-4 md:bottom-6">
         <div className="flex gap-1.5 sm:gap-2">
           {items.map((_, idx) => (
