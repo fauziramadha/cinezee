@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useSafeSession } from "@/lib/use-safe-session";
 import {
@@ -16,7 +16,7 @@ import { getAvatarRingClass } from "@/components/badge/avatar-ring";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useAppStore } from "@/lib/store";
-import { getImageUrl, fetchDetail, fetchImdbId, type MovieDetail } from "@/lib/tmdb";
+import { getImageUrl, fetchDetail, type MovieDetail } from "@/lib/tmdb";
 import { MovieCard } from "./movie-card";
 import { TrailerModal } from "./trailer-modal";
 import { CastList } from "./cast-list";
@@ -62,10 +62,6 @@ export function DetailModal() {
   const [episode, setEpisode] = useState(1);
   const [episodes, setEpisodes] = useState<Episode[]>([]);
   const [episodesLoading, setEpisodesLoading] = useState(false);
-  
-  // null = loading, [] = kosong, [{season:-1}] = fallback (tampilkan semua), [{season:1,...}] = ada data
-  const [vidapiEps, setVidapiEps] = useState<{ season: number; episodes: number[] }[] | null>(null);
-  const [cachedImdbId, setCachedImdbId] = useState<string | null>(null);
   const [trailerOpen, setTrailerOpen] = useState(false);
 
   const handlePersonClick = (personId: number) => {
@@ -78,7 +74,7 @@ export function DetailModal() {
   };
 
   // ============================================================
-  // LOAD DETAIL (Tanpa fetch episode, hanya TMDB detail)
+  // LOAD DETAIL (TMDB)
   // ============================================================
   useEffect(() => {
     if (!selectedMedia) {
@@ -87,8 +83,6 @@ export function DetailModal() {
         setRatings([]); setUserRating(null); setComments([]);
         setReplyTo(null); setReplyText(""); setCommentText("");
         setSeason(1); setEpisode(1); setEpisodes([]);
-        setCachedImdbId(null);
-        setVidapiEps(null);
       });
       return;
     }
@@ -120,22 +114,7 @@ export function DetailModal() {
         if (cancelled) return;
         if (!data) throw new Error("Failed to load detail");
 
-        // Fallback: fetch external_ids terpisah jika tidak ada
-        if (!(data as any).external_ids && tmdbId > 0) {
-          try {
-            const extRes = await fetch(`/api/tmdb/${selectedMedia.type}/${tmdbId}/external_ids`);
-            if (extRes.ok) {
-              const extData = await extRes.json();
-              (data as any).external_ids = extData;
-            }
-          } catch {}
-        }
-
         setDetail(data);
-
-        const imdbId = (data as any).external_ids?.imdb_id || (selectedMedia as any).imdbId;
-        if (imdbId) setCachedImdbId(imdbId);
-
       } catch (err) {
         if (cancelled) return;
         setError(err instanceof Error ? err.message : "Unknown error");
@@ -167,67 +146,7 @@ export function DetailModal() {
   }, [selectedMedia, session, status]);
 
   // ============================================================
-  // FETCH EPISODE (UseEffect terpisah, TIDAK bergantung loadDetail)
-  // ============================================================
-  useEffect(() => {
-    if (selectedMedia?.type !== "tv") return;
-    
-    let cancelled = false;
-    setVidapiEps(null); // Reset ke loading state
-
-    const fetchEpisodes = async () => {
-      // 1. Coba ambil imdbId dari selectedMedia atau cachedImdbId
-      let imdbId = (selectedMedia as any)?.imdbId || cachedImdbId;
-      
-      // 2. Kalau belum ada, fetch dari TMDB external_ids
-      if (!imdbId) {
-        const tmdbId = extractTmdbId(selectedMedia);
-        if (tmdbId > 0) {
-          try {
-            const res = await fetch(`/api/tmdb/tv/${tmdbId}/external_ids`);
-            if (res.ok) {
-              const data = await res.json();
-              imdbId = data.imdb_id;
-              if (imdbId && !cancelled) setCachedImdbId(imdbId);
-            }
-          } catch (e) {
-            console.warn("[Detail] Failed to fetch external_ids for episodes:", e);
-          }
-        }
-      }
-
-      if (!imdbId || cancelled) {
-        if (!cancelled) setVidapiEps([]);
-        return;
-      }
-
-      // 3. Fetch episode dari VidAPI
-      try {
-        const epsRes = await fetch(`/api/vidapi/show-episodes?imdb=${imdbId}`);
-        if (cancelled) return;
-        if (epsRes.ok) {
-          const epsData = await epsRes.json();
-          if (epsData.fallback) {
-            // Show ada di TV list tapi episode list kosong → tampilkan semua
-            setVidapiEps([{ season: -1, episodes: [-1] }]);
-          } else {
-            setVidapiEps(epsData.seasons || []);
-          }
-        } else {
-          setVidapiEps([]);
-        }
-      } catch (e) {
-        if (!cancelled) setVidapiEps([]);
-      }
-    };
-
-    fetchEpisodes();
-
-    return () => { cancelled = true; };
-  }, [selectedMedia, cachedImdbId]);
-
-  // ============================================================
-  // FETCH TMDB SEASON DETAILS
+  // FETCH TMDB SEASON DETAILS (untuk episode thumbnails)
   // ============================================================
   useEffect(() => {
     if (!selectedMedia || selectedMedia.type !== "tv" || !detail) return;
@@ -258,41 +177,24 @@ export function DetailModal() {
     return () => { cancelled = true; };
   }, [selectedMedia, detail, season]);
 
-  const handlePlay = async (epNum?: number) => {
+  // ============================================================
+  // HANDLE PLAY - Pass cinemacityId + slug to player
+  // ============================================================
+  const handlePlay = (epNum?: number) => {
     if (!selectedMedia) return;
     const ep = epNum || episode;
     if (epNum) setEpisode(epNum);
 
-    let finalImdbId = cachedImdbId || (selectedMedia as any).imdbId;
-    if (!finalImdbId) {
-      try {
-        const tmdbId = extractTmdbId(selectedMedia);
-        if (tmdbId > 0) {
-          const fetched = await fetchImdbId(tmdbId, selectedMedia.type as "movie" | "tv");
-          if (fetched) {
-            finalImdbId = fetched;
-            setCachedImdbId(fetched);
-          }
-        }
-      } catch (e) { console.warn("[Detail] Failed to fetch imdbId:", e); }
-    }
-
-    let seasonsMeta: any[] | undefined;
-    if (selectedMedia.type === "tv" && (detail as any)?.seasons) {
-      seasonsMeta = (detail as any).seasons
-        .filter((s: any) => s.season_number > 0)
-        .map((s: any) => ({
-          seasonNumber: s.season_number,
-          episodeCount: s.episode_count,
-          name: s.name,
-        }));
-    }
+    const seasonsMeta = (detail as any)?.seasons
+      ?.filter((s: any) => s.season_number > 0)
+      ?.map((s: any) => ({
+        seasonNumber: s.season_number,
+        episodeCount: s.episode_count,
+        name: s.name,
+      }));
 
     const enrichedMedia = {
       ...selectedMedia,
-      id: finalImdbId || selectedMedia.id,
-      imdbId: finalImdbId,
-      tmdbId: extractTmdbId(selectedMedia) || undefined,
       title: detail?.title || detail?.name || selectedMedia.title,
       type: selectedMedia.type,
       poster: detail?.poster_path ? getImageUrl(detail.poster_path, "w342") : (selectedMedia as any).poster,
@@ -301,6 +203,9 @@ export function DetailModal() {
       year: (detail?.release_date || detail?.first_air_date || "").slice(0, 4),
       rating: detail?.vote_average || 0,
       seasons: seasonsMeta,
+      // Pass cinemacity info for VPS API player
+      cinemacity_id: (selectedMedia as any).cinemacityId || (selectedMedia as any).cinemacity_id,
+      slug: (selectedMedia as any).slug,
       ...(selectedMedia.type === "tv" ? {
         _currentSeason: String(season),
         _currentEpisode: String(ep),
@@ -430,18 +335,6 @@ export function DetailModal() {
     || (detail as any)?.images?.logos?.[0]
     || null;
 
-  // Filter episodes by VidAPI availability
-  const isFallbackMode = vidapiEps?.some(s => s.season === -1);
-  const currentSeasonVidapi = vidapiEps?.find(s => s.season === season);
-  const availableEps = currentSeasonVidapi?.episodes || [];
-  const isVidapiLoaded = vidapiEps !== null;
-  
-  const filteredEpisodes = isVidapiLoaded
-    ? (isFallbackMode 
-        ? episodes // Fallback: tampilkan semua episode TMDB
-        : episodes.filter(ep => availableEps.includes(ep.episodeNumber)))
-    : [];
-
   return (
     <>
       <Dialog open={!!selectedMedia} onOpenChange={(open) => { if (!open) setSelectedMedia(null); }}>
@@ -552,10 +445,10 @@ export function DetailModal() {
                     </div>
                     {episodesLoading ? (
                       <div className="flex h-24 items-center justify-center"><Loader2 className="h-5 w-5 animate-spin text-primary" /></div>
-                    ) : filteredEpisodes.length > 0 ? (
+                    ) : episodes.length > 0 ? (
                       <div className="overflow-x-auto pb-1" style={{ scrollbarWidth: "none", WebkitOverflowScrolling: "touch" }}>
                         <div className="flex gap-2">
-                          {filteredEpisodes.map((ep) => (
+                          {episodes.map((ep) => (
                             <button
                               key={ep.episodeNumber}
                               onClick={() => handlePlay(ep.episodeNumber)}
@@ -579,15 +472,8 @@ export function DetailModal() {
                         </div>
                       </div>
                     ) : (
-                      <div className="flex h-24 items-center justify-center gap-2 text-xs text-muted-foreground">
-                        {isVidapiLoaded && !isFallbackMode ? (
-                          "Episode belum tersedia di VidAPI"
-                        ) : (
-                          <>
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                            Mengecek ketersediaan episode...
-                          </>
-                        )}
+                      <div className="flex h-24 items-center justify-center text-xs text-muted-foreground">
+                        Tidak ada episode di season ini
                       </div>
                     )}
                   </div>
