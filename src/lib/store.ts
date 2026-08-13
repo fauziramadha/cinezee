@@ -14,21 +14,18 @@ export interface SelectedMedia {
   id: number | string;
   type: MediaType;
   title: string;
-  // Legacy fields (untuk backward-compat dengan file lama)
-  posterPath?: string | null;
-  backdropPath?: string | null;
+  
+  // === VPS API Fields (CineStream v2) ===
+  cinemacityId?: string;
   slug?: string;
-  source?: "tmdb" | "cinemacity" | "vaplayer";
-  // === Field baru untuk vaplayer + TMDB ===
-  imdbId?: string;
-  tmdbId?: number;
   poster?: string;
   backdrop?: string;
   overview?: string;
   year?: string;
   rating?: number;
-  seasons?: PlayerSeason[];
-  // Pre-fill current episode (untuk TV dari vidapi episode list)
+  quality?: string;
+  
+  // Pre-fill current episode (untuk TV)
   _currentSeason?: string;
   _currentEpisode?: string;
 }
@@ -71,14 +68,14 @@ interface AppState {
   // Detail modal
   selectedMedia: SelectedMedia | null;
   setSelectedMedia: (media: SelectedMedia | null) => void;
-  setDetailMedia: (media: SelectedMedia | null) => void;  // Alias untuk page.tsx
+  setDetailMedia: (media: SelectedMedia | null) => void;
 
   // Player modal
   playerMedia: SelectedMedia | null;
   playerSeason?: number;
   playerEpisode?: number;
   openPlayer: (media: SelectedMedia, season?: number, episode?: number) => void;
-  setPlayerMedia: (media: SelectedMedia | null) => void;  // Alias untuk page.tsx
+  setPlayerMedia: (media: SelectedMedia | null) => void;
   closePlayer: () => void;
 
   // Watch history
@@ -89,12 +86,12 @@ interface AppState {
   loadHistory: () => void;
   updateHistoryProgress: (id: number | string, progress: number, duration: number) => void;
 
-  // Favorites (localStorage, max 50)
+  // Favorites
   favorites: FavoriteItem[];
   toggleFavorite: (item: SelectedMedia) => void;
   loadFavorites: () => void;
 
-  // Activity log (localStorage, max 50)
+  // Activity log
   activityLog: ActivityItem[];
   addActivity: (item: ActivityItem) => void;
   loadActivity: () => void;
@@ -138,14 +135,12 @@ export const useAppStore = create<AppState>((set, get) => ({
   // === Detail modal ===
   selectedMedia: null,
   setSelectedMedia: (media) => set({ selectedMedia: media }),
-  // Alias: setDetailMedia = setSelectedMedia (untuk dipanggil dari page.tsx)
   setDetailMedia: (media) => set({ selectedMedia: media }),
 
   // === Player modal ===
   playerMedia: null,
   openPlayer: (media, season, episode) =>
     set({ playerMedia: media, playerSeason: season, playerEpisode: episode }),
-  // Alias: setPlayerMedia = openPlayer tanpa season/episode (untuk dipanggil dari page.tsx)
   setPlayerMedia: (media) => set({ playerMedia: media }),
   closePlayer: () =>
     set({ playerMedia: null, playerSeason: undefined, playerEpisode: undefined }),
