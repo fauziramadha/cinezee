@@ -7,49 +7,56 @@ import { SearchModal } from "@/components/cinepro/search-modal";
 import { DetailModal } from "@/components/cinepro/detail-modal";
 import { PlayerModal } from "@/components/cinepro/player-modal";
 import { AuthModal } from "@/components/cinepro/auth-modal";
-import { MovieCard } from "@/components/cinepro/movie-card";
+import { MovieCard, type MediaItem } from "@/components/cinepro/movie-card";
 import { Loader2, ChevronLeft, ChevronRight, ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useAppStore } from "@/lib/store";
 
-interface MovieItem {
-  id: number;
-  title?: string;
-  name?: string;
-  poster_path: string | null;
-  backdrop_path: string | null;
-  vote_average: number;
-  release_date?: string;
-  first_air_date?: string;
-  overview?: string;
-  media_type?: string;
-}
-
-function unwrap(res: any): any {
-  if (!res) return null;
-  if (res.error) return null;
-  return res;
-}
+const VPS_API_BASE =
+  process.env.NEXT_PUBLIC_API_URL || "https://api.cinestream.my.id";
 
 export function MoviesContent() {
-  const [items, setItems] = useState<MovieItem[]>([]);
+  const setDetailMedia = useAppStore((s) => s.setDetailMedia);
+
+  const [items, setItems] = useState<MediaItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [page, setPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
+  const [hasMore, setHasMore] = useState(true);
+
+  // Normalize VPS API item to MediaItem
+  const normalizeItem = (item: any): MediaItem => ({
+    id: String(item.cinemacity_id || item.id),
+    cinemacityId: String(item.cinemacity_id || item.id),
+    slug: item.slug || "",
+    title: item.title || "Untitled",
+    type: "movie",
+    poster: item.poster_url || "/placeholder-poster.png",
+    backdrop: item.poster_url || "/placeholder-poster.png",
+    overview: item.description || "",
+    year: item.release_year ? String(item.release_year) : "",
+    rating: item.rating || 0,
+    quality: item.quality || undefined,
+  });
 
   const loadData = useCallback(async (pageNum: number) => {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch("/api/movies/popular?page=" + pageNum, {
+      // Fetch dari VPS API
+      const res = await fetch(`${VPS_API_BASE}/api/home/page/${pageNum}`, {
         cache: "no-store",
       });
       if (!res.ok) throw new Error("HTTP " + res.status);
       const json = await res.json();
-      const inner = unwrap(json);
-      const results = inner?.results || [];
-      setItems(results);
-      setTotalPages(inner?.total_pages || 1);
+      const allItems = json.data?.items || json.items || [];
+      // Filter hanya type=movie
+      const movies = allItems
+        .filter((item: any) => item.type === "movie")
+        .map(normalizeItem);
+      setItems(movies);
+      // VPS return 20 items per page, kalau < 20 berarti halaman terakhir
+      setHasMore(allItems.length >= 20);
     } catch (err) {
       console.error("[Movies] error:", err);
       setError(err instanceof Error ? err.message : "Failed to load");
@@ -72,12 +79,27 @@ export function MoviesContent() {
   };
 
   const handleNextPage = () => {
-    if (page < totalPages) {
+    if (hasMore) {
       const newPage = page + 1;
       setPage(newPage);
       loadData(newPage);
       window.scrollTo({ top: 0, behavior: "smooth" });
     }
+  };
+
+  const handleCardClick = (item: MediaItem) => {
+    setDetailMedia({
+      id: item.cinemacityId || item.id,
+      cinemacityId: item.cinemacityId,
+      slug: item.slug,
+      title: item.title,
+      type: item.type,
+      poster: item.poster,
+      backdrop: item.backdrop,
+      overview: item.overview,
+      year: item.year,
+      rating: item.rating,
+    } as any);
   };
 
   if (loading && items.length === 0) {
@@ -130,7 +152,7 @@ export function MoviesContent() {
         <div className="mb-6">
           <h1 className="text-2xl font-bold sm:text-3xl">Movies</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Film populer dari seluruh dunia. Halaman {page} dari {totalPages}
+            Koleksi film dari CinemaCity. Halaman {page}
           </p>
         </div>
 
@@ -140,8 +162,12 @@ export function MoviesContent() {
           </div>
         ) : items.length > 0 ? (
           <div className="grid grid-cols-3 gap-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7">
-            {items.map((movie) => (
-              <MovieCard key={movie.id} movie={movie} type="movie" />
+            {items.map((item) => (
+              <MovieCard
+                key={`${item.id}-${item.slug}`}
+                item={item}
+                onClick={handleCardClick}
+              />
             ))}
           </div>
         ) : (
@@ -169,7 +195,7 @@ export function MoviesContent() {
             variant="outline"
             size="sm"
             onClick={handleNextPage}
-            disabled={page >= totalPages || loading}
+            disabled={!hasMore || loading}
             className="gap-1.5"
           >
             Next
