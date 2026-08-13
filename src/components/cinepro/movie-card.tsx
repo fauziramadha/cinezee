@@ -3,37 +3,29 @@
 import { useState } from "react";
 import { Play, Star } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { getImageUrl, type Movie } from "@/lib/tmdb";
-import { useAppStore, type SelectedMedia } from "@/lib/store";
 
 // ============================================================
-// MediaItem interface (kompatibel dengan page.tsx baru)
+// MediaItem interface - Pure VPS API (No TMDB)
 // ============================================================
-interface MediaItem {
-  id: string | number;
-  tmdbId: number;
-  imdbId?: string;
+export interface MediaItem {
+  id: string;          // cinemacity_id
+  cinemacityId: string;
+  slug: string;
   title: string;
   type: "movie" | "tv";
   poster: string;
   backdrop: string;
-  logo?: string;
   overview: string;
   year: string;
   rating: number;
-  genre?: string;
-  seasons?: Array<{ seasonNumber: number; episodeCount: number; name?: string }>;
+  quality?: string;
 }
 
 interface MovieCardProps {
-  // === Props baru (page.tsx baru) ===
-  item?: MediaItem;
-  onClick?: (item: MediaItem) => void;
-  // === Props lama (backward-compat) ===
-  movie?: Movie;
+  item: MediaItem;
+  onClick: (item: MediaItem) => void;
   className?: string;
   size?: "sm" | "md" | "lg";
-  type?: "movie" | "tv";
 }
 
 const sizeClasses = {
@@ -42,73 +34,17 @@ const sizeClasses = {
   lg: "w-[160px] sm:w-[180px] md:w-[200px]",
 };
 
-// Helper: dapatkan poster URL dari MediaItem (sudah full URL) atau Movie (perlu getImageUrl)
-function getPosterUrl(item?: MediaItem, movie?: Movie): string {
-  if (item?.poster) return item.poster;
-  if (movie?.poster_path) return getImageUrl(movie.poster_path, "w500");
-  return "/placeholder-poster.png";
-}
-
-function getBackdropUrl(item?: MediaItem, movie?: Movie): string {
-  if (item?.backdrop) return item.backdrop;
-  if (movie?.backdrop_path) return getImageUrl(movie.backdrop_path, "w1280");
-  return "";
-}
-
-export function MovieCard({ item, onClick, movie, className, size = "md", type }: MovieCardProps) {
+export function MovieCard({ item, onClick, className, size = "md" }: MovieCardProps) {
   const [imageLoaded, setImageLoaded] = useState(false);
-  const setSelectedMedia = useAppStore((s) => s.setSelectedMedia);
 
-  // === Normalize: pakai item (baru) atau movie (lama) ===
-  const useItem = !!item;
-  const source = item || (movie as any);
-
-  const title = useItem
-    ? (item!.title || "Untitled")
-    : (movie?.title || movie?.name || "Untitled");
-  const year = useItem
-    ? (item!.year || "")
-    : (movie?.release_date || movie?.first_air_date || "").split("-")[0];
-  const rating = useItem
-    ? (item!.rating?.toFixed(1) || "N/A")
-    : (movie?.vote_average?.toFixed(1) || "N/A");
-  const mediaType: "movie" | "tv" = useItem
-    ? (item!.type || "movie")
-    : (type || movie?.media_type || (movie?.title ? "movie" : "tv"));
-
-  const posterUrl = getPosterUrl(item, movie);
-  const backdropUrl = getBackdropUrl(item, movie);
+  const title = item.title || "Untitled";
+  const year = item.year || "";
+  const rating = item.rating?.toFixed(1) || "N/A";
+  const mediaType: "movie" | "tv" = item.type || "movie";
+  const posterUrl = item.poster || "/placeholder-poster.png";
 
   const handleClick = () => {
-    if (useItem && onClick) {
-      // === Mode baru: panggil onClick dari parent ===
-      onClick(item!);
-      return;
-    }
-
-    // === Mode lama: set selectedMedia langsung (backward-compat) ===
-    if (movie) {
-      const selected: SelectedMedia = {
-        id: movie.id,
-        type: mediaType,
-        title,
-        posterPath: movie.poster_path,
-        backdropPath: movie.backdrop_path,
-        slug: (movie as any).slug,
-        source: (movie as any).source,
-      } as SelectedMedia;
-      setSelectedMedia(selected);
-    } else if (item) {
-      // Fallback kalau item ada tapi onClick tidak
-      const selected: SelectedMedia = {
-        id: item.tmdbId,
-        type: item.type,
-        title: item.title,
-        posterPath: undefined,
-        backdropPath: undefined,
-      } as SelectedMedia;
-      setSelectedMedia(selected);
-    }
+    onClick(item);
   };
 
   return (
@@ -126,7 +62,6 @@ export function MovieCard({ item, onClick, movie, className, size = "md", type }
           <div className="absolute inset-0 animate-pulse bg-gradient-to-br from-muted to-muted/60" />
         )}
         {posterUrl && !posterUrl.includes("placeholder") ? (
-          // eslint-disable-next-line @next/next/no-img-element
           <img
             src={posterUrl}
             alt={title}
