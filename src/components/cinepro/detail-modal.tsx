@@ -1,12 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
 import { useSafeSession } from "@/lib/use-safe-session";
 import {
-  Play, X, Star, Calendar, Clock, Loader2, Bookmark, Check, Share2,
+  Play, X, Star, Calendar, Loader2, Bookmark, Check, Share2,
   MessageSquare, Send, Trash2, CornerDownRight, ChevronLeft, ChevronRight,
-  User as UserIcon, Film, Building2,
+  Film,
 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -16,35 +15,83 @@ import { getAvatarRingClass } from "@/components/badge/avatar-ring";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useAppStore } from "@/lib/store";
-import { getImageUrl, fetchDetail, type MovieDetail } from "@/lib/tmdb";
-import { MovieCard } from "./movie-card";
-import { TrailerModal } from "./trailer-modal";
-import { CastList } from "./cast-list";
-import { SimilarList } from "./similar-list";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+
+const VPS_API_BASE =
+  process.env.NEXT_PUBLIC_API_URL || "https://api.cinestream.my.id";
+
+// ============================================================
+// Types
+// ============================================================
+interface VPSContent {
+  id: number;
+  cinemacity_id: string;
+  slug: string;
+  title: string;
+  type: string;
+  poster_url: string | null;
+  description: string | null;
+  rating: number | null;
+  release_year: number | null;
+  quality: string | null;
+  stream_data: any[] | null;
+}
+
+interface Episode {
+  season: number;
+  episode: number;
+  title: string;
+}
 
 interface UserRating { id: string; rating: number; review: string | null; }
 interface RatingItem { id: string; rating: number; review: string | null; createdAt: string; userId: string; name: string | null; image: string | null; }
 interface CommentItem { id: string; userId: string; mediaId: number; mediaType: string; content: string; parentId: string | null; createdAt: string; updatedAt: string; userName: string | null; userImage: string | null; replies: CommentItem[]; }
-interface Episode { episodeNumber: number; name: string; overview: string; stillPath: string | null; airDate: string; runtime: number | null; }
 
-function extractTmdbId(media: any): number {
-  if (media?.tmdbId) return Number(media.tmdbId);
-  if (typeof media?.id === "number") return media.id;
-  if (typeof media?.id === "string") {
-    if (media.id.startsWith("tmdb-")) return parseInt(media.id.replace("tmdb-", ""), 10);
-    if (/^\d+$/.test(media.id)) return parseInt(media.id, 10);
+// ============================================================
+// Fetch VPS Content Detail
+// ============================================================
+async function fetchVPSContent(cinemacityId: string): Promise<VPSContent | null> {
+  try {
+    const res = await fetch(`${VPS_API_BASE}/api/content/${cinemacityId}`);
+    const data = await res.json();
+    return data.data || null;
+  } catch (e) {
+    console.error("[Detail] Fetch VPS error:", e);
+    return null;
   }
-  return 0;
 }
 
+// ============================================================
+// Parse episodes from stream_data
+// ============================================================
+function parseEpisodes(streamData: any[] | null): Episode[] {
+  if (!streamData || !Array.isArray(streamData)) return [];
+  const episodes: Episode[] = [];
+  for (const season of streamData) {
+    const seasonNum = parseInt(String(season.title || "").match(/\d+/)?.[0] || "1");
+    if (season.folder && Array.isArray(season.folder)) {
+      for (const ep of season.folder) {
+        const epNum = parseInt(String(ep.title || "").match(/\d+/)?.[0] || "1");
+        episodes.push({
+          season: seasonNum,
+          episode: epNum,
+          title: ep.title || `Episode ${epNum}`,
+        });
+      }
+    }
+  }
+  return episodes;
+}
+
+// ============================================================
+// Detail Modal Component
+// ============================================================
 export function DetailModal() {
   const { selectedMedia, setSelectedMedia, openPlayer, addToHistory, setAuthModalOpen } = useAppStore();
   const { data: session, status } = useSafeSession();
-  const router = useRouter();
 
-  const [detail, setDetail] = useState<MovieDetail | null>(null);
+  const [content, setContent] = useState<VPSContent | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [inWatchlist, setInWatchlist] = useState(false);
@@ -60,61 +107,55 @@ export function DetailModal() {
   const [replyText, setReplyText] = useState("");
   const [season, setSeason] = useState(1);
   const [episode, setEpisode] = useState(1);
-  const [episodes, setEpisodes] = useState<Episode[]>([]);
-  const [episodesLoading, setEpisodesLoading] = useState(false);
-  const [trailerOpen, setTrailerOpen] = useState(false);
-
-  const handlePersonClick = (personId: number) => {
-    if (selectedMedia) {
-      router.push(`/person/${personId}?return=${selectedMedia.type}=${selectedMedia.id}`);
-    } else {
-      router.push(`/person/${personId}`);
-    }
-    setSelectedMedia(null);
-  };
 
   // ============================================================
-  // LOAD DETAIL (TMDB)
+  // Load Detail from VPS API
   // ============================================================
   useEffect(() => {
     if (!selectedMedia) {
       Promise.resolve().then(() => {
-        setDetail(null); setError(null); setInWatchlist(false);
+        setContent(null); setError(null); setInWatchlist(false);
         setRatings([]); setUserRating(null); setComments([]);
         setReplyTo(null); setReplyText(""); setCommentText("");
-        setSeason(1); setEpisode(1); setEpisodes([]);
+        setSeason(1); setEpisode(1);
       });
       return;
     }
+
     let cancelled = false;
 
     const loadDetail = async () => {
-      await Promise.resolve();
-      if (cancelled) return;
-      setLoading(true); setError(null);
+      setLoading(true);
+      setError(null);
 
       try {
-        const tmdbId = extractTmdbId(selectedMedia);
-        let data: MovieDetail | null = null;
+        const cinemacityId =
+          (selectedMedia as any).cinemacityId ||
+          (selectedMedia as any).cinemacity_id ||
+          selectedMedia.id;
 
-        if (tmdbId > 0) {
-          try {
-            const proxyUrl = `/api/tmdb/${selectedMedia.type}/${tmdbId}?append_to_response=external_ids,credits,videos,similar,recommendations,images&include_image_language=en,null`;
-            const res = await fetch(proxyUrl);
-            if (res.ok) {
-              data = await res.json();
-            }
-          } catch (e) { console.warn("[Detail] Proxy failed:", e); }
+        if (!cinemacityId) {
+          throw new Error("No content ID");
         }
 
-        if (!data && tmdbId > 0) {
-          data = await fetchDetail(tmdbId, selectedMedia.type as "movie" | "tv");
-        }
-
+        const data = await fetchVPSContent(String(cinemacityId));
         if (cancelled) return;
         if (!data) throw new Error("Failed to load detail");
 
-        setDetail(data);
+        setContent(data);
+
+        // Set initial season/episode
+        const eps = parseEpisodes(data.stream_data);
+        if (eps.length > 0) {
+          const startSeason = (selectedMedia as any)._currentSeason
+            ? parseInt((selectedMedia as any)._currentSeason)
+            : eps[0].season;
+          const startEpisode = (selectedMedia as any)._currentEpisode
+            ? parseInt((selectedMedia as any)._currentEpisode)
+            : eps[0].episode;
+          setSeason(startSeason);
+          setEpisode(startEpisode);
+        }
       } catch (err) {
         if (cancelled) return;
         setError(err instanceof Error ? err.message : "Unknown error");
@@ -125,106 +166,96 @@ export function DetailModal() {
 
     loadDetail();
 
+    // Fetch user data (watchlist, ratings, comments)
+    const mediaId = selectedMedia.id;
+    const mediaType = selectedMedia.type;
+
     if (status === "authenticated" && session?.user) {
-      fetch("/api/watchlist").then((res) => res.json()).then((data) => {
-        if (cancelled) return;
-        const exists = data.watchlist?.some((item: any) => item.mediaId === selectedMedia.id && item.mediaType === selectedMedia.type);
-        setInWatchlist(!!exists);
-      }).catch(() => {});
-    }
-
-    fetch(`/api/ratings?mediaId=${selectedMedia.id}&mediaType=${selectedMedia.type}`).then((res) => res.json()).then((data) => {
-      if (cancelled) return;
-      setRatings(data.ratings || []); setUserRating(data.userRating || null);
-    }).catch(() => {});
-    fetch(`/api/comments?mediaId=${selectedMedia.id}&mediaType=${selectedMedia.type}`).then((res) => res.json()).then((data) => {
-      if (cancelled) return;
-      setComments(data.comments || []);
-    }).catch(() => {});
-
-    return () => { cancelled = true; };
-  }, [selectedMedia, session, status]);
-
-  // ============================================================
-  // FETCH TMDB SEASON DETAILS (untuk episode thumbnails)
-  // ============================================================
-  useEffect(() => {
-    if (!selectedMedia || selectedMedia.type !== "tv" || !detail) return;
-    let cancelled = false;
-    setEpisodesLoading(true);
-
-    const tmdbId = extractTmdbId(selectedMedia);
-    if (tmdbId > 0) {
-      fetch(`/api/tmdb/tv/${tmdbId}/season/${season}`)
+      fetch("/api/watchlist")
         .then((res) => res.json())
         .then((data) => {
           if (cancelled) return;
-          const normalizedEps: Episode[] = (data.episodes || []).map((ep: any) => ({
-            episodeNumber: ep.episode_number,
-            name: ep.name || `Episode ${ep.episode_number}`,
-            overview: ep.overview || "",
-            stillPath: ep.still_path,
-            airDate: ep.air_date || "",
-            runtime: ep.runtime,
-          }));
-          setEpisodes(normalizedEps);
+          const exists = data.watchlist?.some(
+            (item: any) => item.mediaId == mediaId && item.mediaType === mediaType
+          );
+          setInWatchlist(!!exists);
         })
-        .catch(() => {})
-        .finally(() => { if (!cancelled) setEpisodesLoading(false); });
-    } else {
-      setEpisodesLoading(false);
+        .catch(() => {});
     }
-    return () => { cancelled = true; };
-  }, [selectedMedia, detail, season]);
+
+    fetch(`/api/ratings?mediaId=${mediaId}&mediaType=${mediaType}`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (cancelled) return;
+        setRatings(data.ratings || []);
+        setUserRating(data.userRating || null);
+      })
+      .catch(() => {});
+
+    fetch(`/api/comments?mediaId=${mediaId}&mediaType=${mediaType}`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (cancelled) return;
+        setComments(data.comments || []);
+      })
+      .catch(() => {});
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedMedia, session, status]);
 
   // ============================================================
-  // HANDLE PLAY - Pass cinemacityId + slug to player
+  // Handle Play
   // ============================================================
   const handlePlay = (epNum?: number) => {
-    if (!selectedMedia) return;
+    if (!selectedMedia || !content) return;
     const ep = epNum || episode;
     if (epNum) setEpisode(epNum);
 
-    const seasonsMeta = (detail as any)?.seasons
-      ?.filter((s: any) => s.season_number > 0)
-      ?.map((s: any) => ({
-        seasonNumber: s.season_number,
-        episodeCount: s.episode_count,
-        name: s.name,
-      }));
-
     const enrichedMedia = {
       ...selectedMedia,
-      title: detail?.title || detail?.name || selectedMedia.title,
-      type: selectedMedia.type,
-      poster: detail?.poster_path ? getImageUrl(detail.poster_path, "w342") : (selectedMedia as any).poster,
-      backdrop: detail?.backdrop_path ? getImageUrl(detail.backdrop_path, "w1280") : (selectedMedia as any).backdrop,
-      overview: detail?.overview || (selectedMedia as any).overview || "",
-      year: (detail?.release_date || detail?.first_air_date || "").slice(0, 4),
-      rating: detail?.vote_average || 0,
-      seasons: seasonsMeta,
-      // Pass cinemacity info for VPS API player
-      cinemacity_id: (selectedMedia as any).cinemacityId || (selectedMedia as any).cinemacity_id,
-      slug: (selectedMedia as any).slug,
-      ...(selectedMedia.type === "tv" ? {
-        _currentSeason: String(season),
-        _currentEpisode: String(ep),
-      } : {}),
+      cinemacityId: content.cinemacity_id,
+      slug: content.slug,
+      title: content.title,
+      type: content.type === "tv" ? "tv" : "movie",
+      poster: content.poster_url || (selectedMedia as any).poster,
+      backdrop: content.poster_url || (selectedMedia as any).backdrop,
+      overview: content.description || "",
+      ...(content.type === "tv"
+        ? { _currentSeason: String(season), _currentEpisode: String(ep) }
+        : {}),
     };
 
     addToHistory({ ...enrichedMedia, watchedAt: new Date().toISOString() });
     openPlayer(enrichedMedia, season, ep);
   };
 
+  // ============================================================
+  // Watchlist
+  // ============================================================
   const handleToggleWatchlist = async () => {
-    if (!selectedMedia || !detail) return;
-    if (status !== "authenticated" || !session?.user) { setAuthModalOpen(true); toast.info("Silakan login dulu"); return; }
+    if (!selectedMedia || !content) return;
+    if (status !== "authenticated" || !session?.user) {
+      setAuthModalOpen(true);
+      toast.info("Silakan login dulu");
+      return;
+    }
     setWatchlistLoading(true);
     try {
       if (inWatchlist) {
-        const listRes = await fetch("/api/watchlist"); const listData = await listRes.json();
-        const item = listData.watchlist?.find((i: any) => i.mediaId === selectedMedia.id && i.mediaType === selectedMedia.type);
-        if (item) { await fetch(`/api/watchlist?id=${item.id}`, { method: "DELETE" }); setInWatchlist(false); toast.success("Dihapus dari watchlist"); }
+        const listRes = await fetch("/api/watchlist");
+        const listData = await listRes.json();
+        const item = listData.watchlist?.find(
+          (i: any) =>
+            i.mediaId == selectedMedia.id &&
+            i.mediaType === selectedMedia.type
+        );
+        if (item) {
+          await fetch(`/api/watchlist?id=${item.id}`, { method: "DELETE" });
+          setInWatchlist(false);
+          toast.success("Dihapus dari watchlist");
+        }
       } else {
         const res = await fetch("/api/watchlist", {
           method: "POST",
@@ -232,52 +263,94 @@ export function DetailModal() {
           body: JSON.stringify({
             mediaId: selectedMedia.id,
             mediaType: selectedMedia.type,
-            title: detail.title || detail.name || selectedMedia.title,
-            posterPath: detail.poster_path,
-            backdropPath: detail.backdrop_path
-          })
+            title: content.title,
+            posterPath: content.poster_url,
+            backdropPath: content.poster_url,
+          }),
         });
-        if (res.ok) { setInWatchlist(true); toast.success("Ditambahkan ke watchlist"); }
+        if (res.ok) {
+          setInWatchlist(true);
+          toast.success("Ditambahkan ke watchlist");
+        }
       }
-    } catch { toast.error("Terjadi kesalahan"); } finally { setWatchlistLoading(false); }
+    } catch {
+      toast.error("Terjadi kesalahan");
+    } finally {
+      setWatchlistLoading(false);
+    }
   };
 
+  // ============================================================
+  // Rate
+  // ============================================================
   const handleRate = async (value: number) => {
     if (!selectedMedia) return;
-    if (status !== "authenticated") { setAuthModalOpen(true); toast.info("Silakan login dulu"); return; }
+    if (status !== "authenticated") {
+      setAuthModalOpen(true);
+      toast.info("Silakan login dulu");
+      return;
+    }
     setRatingLoading(true);
     try {
       const res = await fetch("/api/ratings", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ mediaId: selectedMedia.id, mediaType: selectedMedia.type, rating: value })
+        body: JSON.stringify({
+          mediaId: selectedMedia.id,
+          mediaType: selectedMedia.type,
+          rating: value,
+        }),
       });
       if (res.ok) {
         toast.success(value === 0 ? "Rating dihapus" : "Rating disimpan!");
-        const refresh = await fetch(`/api/ratings?mediaId=${selectedMedia.id}&mediaType=${selectedMedia.type}`);
+        const refresh = await fetch(
+          `/api/ratings?mediaId=${selectedMedia.id}&mediaType=${selectedMedia.type}`
+        );
         const data = await refresh.json();
-        setRatings(data.ratings || []); setUserRating(data.userRating || null);
+        setRatings(data.ratings || []);
+        setUserRating(data.userRating || null);
       }
-    } catch { toast.error("Gagal menyimpan rating"); } finally { setRatingLoading(false); }
+    } catch {
+      toast.error("Gagal menyimpan rating");
+    } finally {
+      setRatingLoading(false);
+    }
   };
 
+  // ============================================================
+  // Comments
+  // ============================================================
   const handlePostComment = async () => {
     if (!selectedMedia || !commentText.trim()) return;
-    if (status !== "authenticated") { setAuthModalOpen(true); return; }
+    if (status !== "authenticated") {
+      setAuthModalOpen(true);
+      return;
+    }
     setCommentLoading(true);
     try {
       const res = await fetch("/api/comments", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ mediaId: selectedMedia.id, mediaType: selectedMedia.type, content: commentText })
+        body: JSON.stringify({
+          mediaId: selectedMedia.id,
+          mediaType: selectedMedia.type,
+          content: commentText,
+        }),
       });
       if (res.ok) {
-        setCommentText(""); toast.success("Komentar ditambahkan");
-        const refresh = await fetch(`/api/comments?mediaId=${selectedMedia.id}&mediaType=${selectedMedia.type}`);
+        setCommentText("");
+        toast.success("Komentar ditambahkan");
+        const refresh = await fetch(
+          `/api/comments?mediaId=${selectedMedia.id}&mediaType=${selectedMedia.type}`
+        );
         const data = await refresh.json();
         setComments(data.comments || []);
       }
-    } catch { toast.error("Gagal menambahkan komentar"); } finally { setCommentLoading(false); }
+    } catch {
+      toast.error("Gagal menambahkan komentar");
+    } finally {
+      setCommentLoading(false);
+    }
   };
 
   const handlePostReply = async (parentId: string) => {
@@ -287,68 +360,104 @@ export function DetailModal() {
       const res = await fetch("/api/comments", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ mediaId: selectedMedia.id, mediaType: selectedMedia.type, content: replyText, parentId })
+        body: JSON.stringify({
+          mediaId: selectedMedia.id,
+          mediaType: selectedMedia.type,
+          content: replyText,
+          parentId,
+        }),
       });
       if (res.ok) {
-        setReplyText(""); setReplyTo(null); toast.success("Reply ditambahkan");
-        const refresh = await fetch(`/api/comments?mediaId=${selectedMedia.id}&mediaType=${selectedMedia.type}`);
+        setReplyText("");
+        setReplyTo(null);
+        toast.success("Reply ditambahkan");
+        const refresh = await fetch(
+          `/api/comments?mediaId=${selectedMedia.id}&mediaType=${selectedMedia.type}`
+        );
         const data = await refresh.json();
         setComments(data.comments || []);
       }
-    } catch { toast.error("Gagal menambahkan reply"); } finally { setCommentLoading(false); }
+    } catch {
+      toast.error("Gagal menambahkan reply");
+    } finally {
+      setCommentLoading(false);
+    }
   };
 
   const handleDeleteComment = async (id: string) => {
     try {
       const res = await fetch(`/api/comments?id=${id}`, { method: "DELETE" });
-      if (res.ok) { toast.success("Komentar dihapus"); setComments((prev) => prev.filter((c) => c.id !== id)); }
-    } catch { toast.error("Gagal menghapus"); }
+      if (res.ok) {
+        toast.success("Komentar dihapus");
+        setComments((prev) => prev.filter((c) => c.id !== id));
+      }
+    } catch {
+      toast.error("Gagal menghapus");
+    }
   };
 
   const handleShare = () => {
-    if (!selectedMedia) return;
+    if (!selectedMedia || !content) return;
     const shareUrl = `${window.location.origin}/?${selectedMedia.type}=${selectedMedia.id}`;
-    const shareTitle = detail?.title || detail?.name || selectedMedia.title || "CineStream";
+    const shareTitle = content.title || "CineStream";
     if (navigator.share) {
-      navigator.share({ title: shareTitle, text: `Tonton ${shareTitle} di CineStream!`, url: shareUrl }).catch(() => {});
+      navigator
+        .share({
+          title: shareTitle,
+          text: `Tonton ${shareTitle} di CineStream!`,
+          url: shareUrl,
+        })
+        .catch(() => {});
     } else {
       navigator.clipboard.writeText(shareUrl);
-      toast.success("Link film disalin ke clipboard!");
+      toast.success("Link disalin ke clipboard!");
     }
   };
 
   if (!selectedMedia) return null;
 
-  const title = detail?.title || detail?.name || selectedMedia.title;
-  const year = (detail?.release_date || detail?.first_air_date || "").split("-")[0];
-  const tmdbRating = detail?.vote_average?.toFixed(1) || "N/A";
-  const runtime = detail?.runtime || detail?.episode_run_time?.[0];
-  const director = detail?.credits?.crew?.find((c) => c.job === "Director")?.name;
-  const creator = detail?.created_by?.[0]?.name;
-  const cast = detail?.credits?.cast?.slice(0, 12) || [];
-  const trailer = detail?.videos?.results?.find((v) => v.site === "YouTube" && v.type === "Trailer");
-  const similar = detail?.recommendations?.results?.slice(0, 12) || detail?.similar?.results?.slice(0, 12) || [];
-  const avgUserRating = ratings.length > 0 ? (ratings.reduce((sum, r) => sum + r.rating, 0) / ratings.length).toFixed(1) : null;
-  const isTV = selectedMedia.type === "tv";
+  // ============================================================
+  // Derived
+  // ============================================================
+  const title = content?.title || selectedMedia.title;
+  const year = content?.release_year ? String(content.release_year) : "";
+  const rating = content?.rating?.toFixed(1) || "N/A";
+  const overview = content?.description || "No overview available.";
+  const poster = content?.poster_url || (selectedMedia as any).poster;
+  const isTV = (content?.type || selectedMedia.type) === "tv";
 
-  const logo = (detail as any)?.images?.logos?.find((l: any) => l.iso_639_1 === "en")
-    || (detail as any)?.images?.logos?.[0]
-    || null;
+  const allEpisodes = parseEpisodes(content?.stream_data || null);
+  const seasons = Array.from(
+    new Set(allEpisodes.map((e) => e.season))
+  ).sort((a, b) => a - b);
+  const currentSeasonEpisodes = allEpisodes.filter((e) => e.season === season);
+  const avgUserRating =
+    ratings.length > 0
+      ? (ratings.reduce((sum, r) => sum + r.rating, 0) / ratings.length).toFixed(1)
+      : null;
 
   return (
     <>
-      <Dialog open={!!selectedMedia} onOpenChange={(open) => { if (!open) setSelectedMedia(null); }}>
+      <Dialog
+        open={!!selectedMedia}
+        onOpenChange={(open) => {
+          if (!open) setSelectedMedia(null);
+        }}
+      >
         <DialogContent
           className="flex flex-col gap-0 overflow-hidden p-0 max-w-[95vw] sm:max-w-2xl md:max-w-4xl lg:max-w-6xl"
           style={{
             height: "calc(100dvh - 2rem)",
-            maxHeight: "calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 1rem)",
+            maxHeight:
+              "calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 1rem)",
             marginTop: "env(safe-area-inset-top)",
             marginBottom: "env(safe-area-inset-bottom)",
             borderRadius: "12px",
           }}
         >
-          <DialogHeader className="sr-only"><DialogTitle>{title}</DialogTitle></DialogHeader>
+          <DialogHeader className="sr-only">
+            <DialogTitle>{title}</DialogTitle>
+          </DialogHeader>
 
           <button
             onClick={() => setSelectedMedia(null)}
@@ -360,19 +469,23 @@ export function DetailModal() {
 
           <div className="flex-1 overflow-y-auto overflow-x-hidden">
             {loading ? (
-              <div className="flex h-96 items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
+              <div className="flex h-96 items-center justify-center">
+                <Loader2 className="h-8 w-8 animate-spin text-primary" />
+              </div>
             ) : error ? (
               <div className="flex h-96 flex-col items-center justify-center gap-3 p-6 text-center">
                 <p className="text-sm text-destructive">{error}</p>
-                <Button variant="secondary" size="sm" onClick={() => setSelectedMedia(null)}>Go back</Button>
+                <Button variant="secondary" size="sm" onClick={() => setSelectedMedia(null)}>
+                  Go back
+                </Button>
               </div>
-            ) : detail ? (
+            ) : content ? (
               <div className="fade-in pb-16">
                 {/* === Hero Section === */}
                 <div className="relative h-[22vh] min-h-[140px] w-full overflow-hidden bg-muted sm:h-[30vh] md:aspect-video md:h-auto">
-                  {detail.backdrop_path && (
+                  {poster && (
                     <img
-                      src={getImageUrl(detail.backdrop_path, "original")}
+                      src={poster}
                       alt={title}
                       className="h-full w-full object-cover"
                     />
@@ -380,99 +493,128 @@ export function DetailModal() {
                   <div className="absolute inset-0 bg-gradient-to-t from-card via-card/30 to-transparent" />
                   <div className="absolute inset-0 bg-gradient-to-r from-card/80 via-transparent to-transparent" />
                   <div className="absolute bottom-0 left-0 right-0 p-3 pr-12 sm:p-6 md:p-8">
-                    <Badge className="mb-1 bg-primary text-primary-foreground sm:mb-2">{isTV ? "TV Series" : "Movie"}</Badge>
-                    {logo ? (
-                      <div className="relative h-10 w-auto max-w-[75%] sm:h-14 md:h-20 md:max-w-[60%]">
-                        <img
-                          src={getImageUrl(logo.file_path, "w500")}
-                          alt={title}
-                          className="h-full w-full object-contain object-left-bottom drop-shadow-lg"
-                          onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
-                        />
-                      </div>
-                    ) : (
-                      <h2 className="text-lg font-extrabold tracking-tight text-white drop-shadow-lg sm:text-2xl md:text-4xl">
-                        {title}
-                      </h2>
+                    <Badge className="mb-1 bg-primary text-primary-foreground sm:mb-2">
+                      {isTV ? "TV Series" : "Movie"}
+                    </Badge>
+                    {content.quality && (
+                      <Badge className="mb-1 ml-1 bg-secondary text-secondary-foreground sm:mb-2">
+                        {content.quality}
+                      </Badge>
                     )}
-                    {detail.tagline && (
-                      <p className="mt-0.5 truncate text-[10px] italic text-white/80 sm:text-sm">
-                        &quot;{detail.tagline}&quot;
-                      </p>
-                    )}
+                    <h2 className="text-lg font-extrabold tracking-tight text-white drop-shadow-lg sm:text-2xl md:text-4xl">
+                      {title}
+                    </h2>
                   </div>
                 </div>
 
                 {/* === Action bar === */}
                 <div className="flex flex-wrap items-center gap-2 border-b border-border bg-card/50 px-4 py-3 sm:gap-3 sm:px-6 md:px-8">
-                  <Button size="sm" onClick={() => handlePlay()} className="gap-2 bg-red-600 text-white hover:bg-red-700 sm:size-lg">
-                    <Play className="h-4 w-4 fill-current" /><span className="text-xs sm:text-sm">Play</span>
+                  <Button
+                    size="sm"
+                    onClick={() => handlePlay()}
+                    className="gap-2 bg-red-600 text-white hover:bg-red-700 sm:size-lg"
+                  >
+                    <Play className="h-4 w-4 fill-current" />
+                    <span className="text-xs sm:text-sm">Play</span>
                   </Button>
-                  {trailer && (
-                    <Button size="sm" variant="secondary" className="gap-2 sm:size-lg" onClick={() => setTrailerOpen(true)}>
-                      <Film className="h-3 w-3 sm:h-4 sm:w-4" /><span className="text-xs sm:text-sm">Trailer</span>
-                    </Button>
-                  )}
-                  <Button size="icon" variant="outline" onClick={handleToggleWatchlist} disabled={watchlistLoading} className={inWatchlist ? "border-primary text-primary" : ""}>
-                    {watchlistLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : inWatchlist ? <Check className="h-4 w-4" /> : <Bookmark className="h-4 w-4" />}
+                  <Button
+                    size="icon"
+                    variant="outline"
+                    onClick={handleToggleWatchlist}
+                    disabled={watchlistLoading}
+                    className={inWatchlist ? "border-primary text-primary" : ""}
+                  >
+                    {watchlistLoading ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : inWatchlist ? (
+                      <Check className="h-4 w-4" />
+                    ) : (
+                      <Bookmark className="h-4 w-4" />
+                    )}
                   </Button>
-                  <Button size="icon" variant="outline" aria-label="Share" onClick={handleShare}>
+                  <Button
+                    size="icon"
+                    variant="outline"
+                    aria-label="Share"
+                    onClick={handleShare}
+                  >
                     <Share2 className="h-4 w-4" />
                   </Button>
                 </div>
 
                 {/* === Season/Episode selector (TV only) === */}
-                {isTV && detail?.seasons && (
+                {isTV && seasons.length > 0 && (
                   <div className="border-b border-border bg-card/30 px-4 py-3 sm:px-6 md:px-8">
                     <div className="mb-3 flex items-center gap-2">
-                      <Select value={String(season)} onValueChange={(v) => { setSeason(parseInt(v, 10)); setEpisode(1); }}>
-                        <SelectTrigger className="h-8 w-28 shrink-0 text-xs"><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          {detail.seasons.filter((s) => s.season_number > 0).map((s) => (
-                            <SelectItem key={s.id} value={String(s.season_number)}>S{s.season_number}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <span className="ml-auto text-[10px] text-muted-foreground">EP {episode}</span>
+                      {seasons.length > 1 && (
+                        <Select
+                          value={String(season)}
+                          onValueChange={(v) => {
+                            setSeason(parseInt(v, 10));
+                            setEpisode(1);
+                          }}
+                        >
+                          <SelectTrigger className="h-8 w-28 shrink-0 text-xs">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {seasons.map((s) => (
+                              <SelectItem key={s} value={String(s)}>
+                                S{s}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      )}
+                      <span className="ml-auto text-[10px] text-muted-foreground">
+                        EP {episode}
+                      </span>
                       <div className="flex gap-1">
-                        <Button size="icon" variant="ghost" className="h-8 w-8" disabled={episode <= 1} onClick={() => setEpisode(Math.max(1, episode - 1))}>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="h-8 w-8"
+                          disabled={episode <= 1}
+                          onClick={() => setEpisode(Math.max(1, episode - 1))}
+                        >
                           <ChevronLeft className="h-4 w-4" />
                         </Button>
-                        <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => setEpisode(episode + 1)}>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="h-8 w-8"
+                          onClick={() => setEpisode(episode + 1)}
+                        >
                           <ChevronRight className="h-4 w-4" />
                         </Button>
                       </div>
                     </div>
-                    {episodesLoading ? (
-                      <div className="flex h-24 items-center justify-center"><Loader2 className="h-5 w-5 animate-spin text-primary" /></div>
-                    ) : episodes.length > 0 ? (
-                      <div className="overflow-x-auto pb-1" style={{ scrollbarWidth: "none", WebkitOverflowScrolling: "touch" }}>
-                        <div className="flex gap-2">
-                          {episodes.map((ep) => (
+                    {currentSeasonEpisodes.length > 0 ? (
+                      <div
+                        className="overflow-x-auto pb-1"
+                        style={{
+                          scrollbarWidth: "none",
+                          WebkitOverflowScrolling: "touch",
+                        }}
+                      >
+                        <div className="flex flex-wrap gap-2">
+                          {currentSeasonEpisodes.map((ep) => (
                             <button
-                              key={ep.episodeNumber}
-                              onClick={() => handlePlay(ep.episodeNumber)}
-                              className={`relative aspect-video w-28 shrink-0 overflow-hidden rounded-lg border-2 transition-all sm:w-36 ${episode === ep.episodeNumber ? "border-primary" : "border-transparent hover:border-border"}`}
+                              key={ep.episode}
+                              onClick={() => handlePlay(ep.episode)}
+                              className={`flex h-8 w-8 items-center justify-center rounded-md text-[10px] font-bold transition-all sm:h-10 sm:w-10 sm:text-xs ${
+                                episode === ep.episode
+                                  ? "bg-primary text-primary-foreground"
+                                  : "bg-muted text-muted-foreground hover:bg-muted/80"
+                              }`}
                             >
-                              {ep.stillPath ? (
-                                <img src={getImageUrl(ep.stillPath, "w300")} alt={`Ep ${ep.episodeNumber}`} className="h-full w-full object-cover" />
-                              ) : (
-                                <div className="flex h-full items-center justify-center bg-muted"><span className="text-[10px] text-muted-foreground">No Img</span></div>
-                              )}
-                              <div className="absolute inset-0 bg-gradient-to-t from-black/90 to-transparent" />
-                              <div className="absolute bottom-1 left-1 right-1">
-                                <p className="truncate text-[9px] font-bold text-white">EP {ep.episodeNumber}</p>
-                                <p className="truncate text-[8px] text-white/70">{ep.name}</p>
-                              </div>
-                              <div className="absolute inset-0 flex items-center justify-center bg-black/30 opacity-0 transition-opacity hover:opacity-100">
-                                <div className="flex h-7 w-7 items-center justify-center rounded-full bg-primary"><Play className="h-3 w-3 fill-white text-white" /></div>
-                              </div>
+                              {ep.episode}
                             </button>
                           ))}
                         </div>
                       </div>
                     ) : (
-                      <div className="flex h-24 items-center justify-center text-xs text-muted-foreground">
+                      <div className="flex h-16 items-center justify-center text-xs text-muted-foreground">
                         Tidak ada episode di season ini
                       </div>
                     )}
@@ -486,8 +628,7 @@ export function DetailModal() {
                     <div className="mb-3 flex flex-wrap items-center gap-2 text-xs sm:mb-4 sm:gap-3 sm:text-sm">
                       <span className="flex items-center gap-1">
                         <Star className="h-3.5 w-3.5 fill-yellow-400 text-yellow-400 sm:h-4 sm:w-4" />
-                        <span className="font-semibold">{tmdbRating}</span>
-                        <span className="text-muted-foreground">TMDB</span>
+                        <span className="font-semibold">{rating}</span>
                       </span>
                       {avgUserRating && (
                         <span className="flex items-center gap-1 text-primary">
@@ -498,50 +639,24 @@ export function DetailModal() {
                       )}
                       {year && (
                         <span className="flex items-center gap-1 text-muted-foreground">
-                          <Calendar className="h-3.5 w-3.5 sm:h-4 sm:w-4" />{year}
+                          <Calendar className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                          {year}
                         </span>
                       )}
-                      {runtime && (
-                        <span className="flex items-center gap-1 text-muted-foreground">
-                          <Clock className="h-3.5 w-3.5 sm:h-4 sm:w-4" />{runtime}m
-                        </span>
+                      {content.quality && (
+                        <Badge variant="secondary" className="text-xs">
+                          {content.quality}
+                        </Badge>
                       )}
-                      {detail.status && <Badge variant="secondary" className="text-xs">{detail.status}</Badge>}
                     </div>
 
-                    {/* Genres */}
-                    {detail.genres && detail.genres.length > 0 && (
-                      <div className="mb-3 flex flex-wrap gap-1.5 sm:mb-4">
-                        {detail.genres.map((g) => <Badge key={g.id} variant="outline" className="text-xs">{g.name}</Badge>)}
-                      </div>
-                    )}
-
                     {/* Overview */}
-                    <h3 className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground sm:mb-2 sm:text-sm">Overview</h3>
+                    <h3 className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground sm:mb-2 sm:text-sm">
+                      Overview
+                    </h3>
                     <p className="break-words text-xs leading-relaxed text-foreground/90 sm:text-sm md:text-base">
-                      {detail.overview || "No overview available."}
+                      {overview}
                     </p>
-
-                    {/* Studio Logos */}
-                    {detail.production_companies && detail.production_companies.length > 0 && (
-                      <div className="mt-4 flex flex-wrap items-center gap-4 border-t border-border pt-4">
-                        <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                          <Building2 className="h-3.5 w-3.5" /> Studios:
-                        </span>
-                        {detail.production_companies.filter(c => c.logo_path).map(c => (
-                          <img 
-                            key={c.id} 
-                            src={getImageUrl(c.logo_path, "w92")} 
-                            alt={c.name} 
-                            className="h-6 object-contain opacity-70 sm:h-8" 
-                            title={c.name}
-                          />
-                        ))}
-                      </div>
-                    )}
-
-                    {/* Cast List */}
-                    <CastList cast={cast} />
 
                     {/* Rate This */}
                     <div className="mt-6 border-t border-border pt-4">
@@ -549,9 +664,10 @@ export function DetailModal() {
                         Rate This {isTV ? "Series" : "Movie"}
                       </h3>
                       <div className="flex items-center gap-1">
-                        {[1,2,3,4,5].map((star) => {
+                        {[1, 2, 3, 4, 5].map((star) => {
                           const value = star * 2;
-                          const isActive = (hoverRating || userRating?.rating || 0) >= value;
+                          const isActive =
+                            (hoverRating || userRating?.rating || 0) >= value;
                           return (
                             <button
                               key={star}
@@ -561,98 +677,130 @@ export function DetailModal() {
                               disabled={ratingLoading}
                               className="transition-transform hover:scale-110 disabled:opacity-50"
                             >
-                              <Star className={isActive ? "h-6 w-6 fill-yellow-400 text-yellow-400 sm:h-7 sm:w-7" : "h-6 w-6 text-muted-foreground sm:h-7 sm:w-7"} />
+                              <Star
+                                className={
+                                  isActive
+                                    ? "h-6 w-6 fill-yellow-400 text-yellow-400 sm:h-7 sm:w-7"
+                                    : "h-6 w-6 text-muted-foreground sm:h-7 sm:w-7"
+                                }
+                              />
                             </button>
                           );
                         })}
                         <span className="ml-3 text-sm font-medium">
-                          {ratingLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : userRating ? <span className="text-primary">{userRating.rating}/10</span> : <span className="text-muted-foreground">Click to rate</span>}
+                          {ratingLoading ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : userRating ? (
+                            <span className="text-primary">{userRating.rating}/10</span>
+                          ) : (
+                            <span className="text-muted-foreground">Click to rate</span>
+                          )}
                         </span>
                       </div>
-                      {userRating && <Button variant="ghost" size="sm" onClick={() => handleRate(0)} className="mt-2 text-xs text-muted-foreground hover:text-destructive">Hapus rating</Button>}
+                      {userRating && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleRate(0)}
+                          className="mt-2 text-xs text-muted-foreground hover:text-destructive"
+                        >
+                          Hapus rating
+                        </Button>
+                      )}
                     </div>
                   </div>
 
                   {/* Right sidebar info */}
                   <div className="min-w-0 space-y-3 sm:space-y-4">
-                    {(director || creator) && (
-                      <div className="overflow-hidden">
-                        <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{isTV ? "Creator" : "Director"}</h4>
-                        <p className="mt-0.5 break-words text-xs sm:text-sm">{director || creator}</p>
-                      </div>
-                    )}
-                    {isTV && detail.number_of_seasons && (
+                    {isTV && seasons.length > 0 && (
                       <div className="flex gap-4">
                         <div>
-                          <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Seasons</h4>
-                          <p className="mt-0.5 text-xs sm:text-sm">{detail.number_of_seasons}</p>
+                          <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                            Seasons
+                          </h4>
+                          <p className="mt-0.5 text-xs sm:text-sm">{seasons.length}</p>
                         </div>
                         <div>
-                          <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Episodes</h4>
-                          <p className="mt-0.5 text-xs sm:text-sm">{detail.number_of_episodes}</p>
+                          <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                            Episodes
+                          </h4>
+                          <p className="mt-0.5 text-xs sm:text-sm">{allEpisodes.length}</p>
                         </div>
                       </div>
                     )}
-                    {detail.spoken_languages && detail.spoken_languages.length > 0 && (
-                      <div className="overflow-hidden">
-                        <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Languages</h4>
-                        <p className="mt-0.5 break-words text-xs sm:text-sm">{detail.spoken_languages.map((l) => l.english_name).join(", ")}</p>
+                    {content.quality && (
+                      <div>
+                        <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                          Quality
+                        </h4>
+                        <p className="mt-0.5 text-xs sm:text-sm">{content.quality}</p>
                       </div>
                     )}
                   </div>
                 </div>
 
-                {/* Similar List */}
-                <div className="px-4 sm:px-6 md:px-8">
-                  <SimilarList 
-                    items={similar} 
-                    onItemClick={(m) => {
-                      setSelectedMedia({
-                        id: m.id,
-                        type: m.media_type || (m.title ? "movie" : "tv"),
-                        title: m.title || m.name,
-                      } as any);
-                    }} 
-                  />
-                </div>
-
                 {/* Comments */}
                 <div className="border-t border-border px-4 py-4 pb-12 sm:px-6 sm:py-6 md:px-8">
                   <h3 className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground sm:text-sm">
-                    <MessageSquare className="h-4 w-4" />Comments ({comments.length})
+                    <MessageSquare className="h-4 w-4" />
+                    Comments ({comments.length})
                   </h3>
                   <div className="mb-4 flex gap-2">
                     <Avatar className="h-8 w-8 shrink-0">
                       <AvatarImage src={session?.user?.image || undefined} />
-                      <AvatarFallback className="bg-primary/20 text-xs text-primary">{session?.user?.name?.[0]?.toUpperCase() || "U"}</AvatarFallback>
+                      <AvatarFallback className="bg-primary/20 text-xs text-primary">
+                        {session?.user?.name?.[0]?.toUpperCase() || "U"}
+                      </AvatarFallback>
                     </Avatar>
                     <div className="min-w-0 flex-1">
                       <textarea
                         value={commentText}
                         onChange={(e) => setCommentText(e.target.value)}
-                        placeholder={status === "authenticated" ? "Tulis komentar..." : "Login untuk berkomentar"}
+                        placeholder={
+                          status === "authenticated"
+                            ? "Tulis komentar..."
+                            : "Login untuk berkomentar"
+                        }
                         disabled={status !== "authenticated"}
                         className="w-full resize-none rounded-lg border border-border bg-transparent px-3 py-2 text-sm outline-none placeholder:text-muted-foreground focus:border-primary disabled:opacity-50"
                         rows={2}
                         maxLength={2000}
                       />
                       {status === "authenticated" && (
-                        <Button size="sm" onClick={handlePostComment} disabled={!commentText.trim() || commentLoading} className="mt-2 gap-1.5">
-                          {commentLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}Post
+                        <Button
+                          size="sm"
+                          onClick={handlePostComment}
+                          disabled={!commentText.trim() || commentLoading}
+                          className="mt-2 gap-1.5"
+                        >
+                          {commentLoading ? (
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          ) : (
+                            <Send className="h-3.5 w-3.5" />
+                          )}
+                          Post
                         </Button>
                       )}
                     </div>
                   </div>
-                  <div className="max-h-[300px] space-y-3 overflow-y-auto pr-1" style={{ scrollbarWidth: "thin", WebkitOverflowScrolling: "touch" }}>
+                  <div
+                    className="max-h-[300px] space-y-3 overflow-y-auto pr-1"
+                    style={{ scrollbarWidth: "thin", WebkitOverflowScrolling: "touch" }}
+                  >
                     {comments.length === 0 ? (
-                      <p className="py-4 text-center text-xs text-muted-foreground">Belum ada komentar. Jadilah yang pertama!</p>
+                      <p className="py-4 text-center text-xs text-muted-foreground">
+                        Belum ada komentar. Jadilah yang pertama!
+                      </p>
                     ) : (
                       comments.map((c) => (
                         <CommentNode
                           key={c.id}
                           comment={c}
                           currentUserId={session?.user?.id}
-                          onReply={(id: string) => { setReplyTo(id); setReplyText(""); }}
+                          onReply={(id: string) => {
+                            setReplyTo(id);
+                            setReplyText("");
+                          }}
                           replyTo={replyTo}
                           replyText={replyText}
                           setReplyText={setReplyText}
@@ -670,15 +818,31 @@ export function DetailModal() {
           </div>
         </DialogContent>
       </Dialog>
-
-      <TrailerModal trailerKey={trailer?.key || null} open={trailerOpen} onClose={() => setTrailerOpen(false)} />
     </>
   );
 }
 
-function CommentNode({ comment, currentUserId, onReply, replyTo, replyText, setReplyText, onPostReply, onDelete, commentLoading, level }: any) {
+// ============================================================
+// Comment Node Component
+// ============================================================
+function CommentNode({
+  comment,
+  currentUserId,
+  onReply,
+  replyTo,
+  replyText,
+  setReplyText,
+  onPostReply,
+  onDelete,
+  commentLoading,
+  level,
+}: any) {
   const initial = comment.userName?.[0]?.toUpperCase() || "U";
-  const timeAgo = new Date(comment.createdAt).toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" });
+  const timeAgo = new Date(comment.createdAt).toLocaleDateString("id-ID", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
   const isOwner = currentUserId === comment.userId;
   const badge = comment.userBadge;
 
@@ -687,26 +851,40 @@ function CommentNode({ comment, currentUserId, onReply, replyTo, replyText, setR
       <div className="flex gap-2">
         <Avatar className={cn("h-8 w-8 shrink-0", getAvatarRingClass(badge?.slug))}>
           <AvatarImage src={comment.userImage || undefined} />
-          <AvatarFallback className="bg-primary/20 text-xs text-primary">{initial}</AvatarFallback>
+          <AvatarFallback className="bg-primary/20 text-xs text-primary">
+            {initial}
+          </AvatarFallback>
         </Avatar>
         <div className="min-w-0 flex-1">
           <div className="rounded-lg bg-muted/40 px-3 py-2">
             <div className="flex items-center justify-between gap-2">
               <div className="flex items-center gap-1.5">
-                <span className="text-xs font-semibold">{comment.userName || "Anonymous"}</span>
+                <span className="text-xs font-semibold">
+                  {comment.userName || "Anonymous"}
+                </span>
                 {badge && <BadgeLabel slug={badge.slug} name={badge.name} size={10} />}
               </div>
               <span className="text-[10px] text-muted-foreground">{timeAgo}</span>
             </div>
-            <p className="mt-1 break-words text-xs leading-relaxed sm:text-sm">{comment.content}</p>
+            <p className="mt-1 break-words text-xs leading-relaxed sm:text-sm">
+              {comment.content}
+            </p>
           </div>
           <div className="mt-1 flex items-center gap-3 px-1">
-            <button onClick={() => onReply(comment.id)} className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-primary">
-              <CornerDownRight className="h-3 w-3" />Reply
+            <button
+              onClick={() => onReply(comment.id)}
+              className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-primary"
+            >
+              <CornerDownRight className="h-3 w-3" />
+              Reply
             </button>
             {isOwner && (
-              <button onClick={() => onDelete(comment.id)} className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-destructive">
-                <Trash2 className="h-3 w-3" />Delete
+              <button
+                onClick={() => onDelete(comment.id)}
+                className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-destructive"
+              >
+                <Trash2 className="h-3 w-3" />
+                Delete
               </button>
             )}
           </div>
@@ -721,8 +899,17 @@ function CommentNode({ comment, currentUserId, onReply, replyTo, replyText, setR
                 maxLength={2000}
                 autoFocus
               />
-              <Button size="sm" onClick={() => onPostReply(comment.id)} disabled={!replyText.trim() || commentLoading} className="gap-1 self-end">
-                {commentLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Send className="h-3 w-3" />}
+              <Button
+                size="sm"
+                onClick={() => onPostReply(comment.id)}
+                disabled={!replyText.trim() || commentLoading}
+                className="gap-1 self-end"
+              >
+                {commentLoading ? (
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                ) : (
+                  <Send className="h-3 w-3" />
+                )}
               </Button>
             </div>
           )}
