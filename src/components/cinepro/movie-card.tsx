@@ -66,6 +66,7 @@ export function MovieCard({ item, onClick, className, size = "md" }: MovieCardPr
             src={posterUrl}
             alt={title}
             loading="lazy"
+            referrerPolicy="no-referrer"
             className={cn(
               "h-full w-full object-cover transition-opacity duration-300 group-hover:scale-105",
               imageLoaded ? "opacity-100" : "opacity-0",
