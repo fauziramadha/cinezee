@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useMemo, useRef } from "react";
 import Hls from "hls.js";
-import { X, AlertCircle, Loader2, Settings, Volume2 } from "lucide-react";
+import { X, AlertCircle, Loader2 } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -34,12 +34,16 @@ interface StreamInfo {
     title: string;
     type: string;
   };
-  stream_url: string; // relative path: /api/stream/play/{id}?slug=X&type=Y
+  stream_url: string;
   episodes: {
     season: number;
     episode: number;
     title: string;
     stream_url: string;
+  }[];
+  subtitles: {
+    name: string;
+    url: string;
   }[];
   expires_at: string;
 }
@@ -121,11 +125,6 @@ export function PlayerModal() {
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const hlsRef = useRef<Hls | null>(null);
-  const [audioTracks, setAudioTracks] = useState<Hls.AudioTrack[]>([]);
-  const [currentAudioTrack, setCurrentAudioTrack] = useState<number>(-1);
-  const [qualityLevels, setQualityLevels] = useState<Hls.Level[]>([]);
-  const [currentQuality, setCurrentQuality] = useState<number>(-1);
-  const [showSettings, setShowSettings] = useState(false);
 
   useEffect(() => {
     if (!playerMedia) {
@@ -215,7 +214,13 @@ export function PlayerModal() {
         enableWorker: true,
         lowLatencyMode: false,
         startLevel: -1,
-        audioTrackSwitchLabel: true,
+        // FIX STUCK: Tambah buffer & retry
+        maxBufferLength: 30,
+        maxMaxBufferLength: 60,
+        fragLoadingMaxRetry: 6,
+        fragLoadingRetryDelay: 500,
+        manifestLoadingMaxRetry: 4,
+        levelLoadingMaxRetry: 4,
       });
 
       hlsRef.current = hls;
@@ -225,28 +230,6 @@ export function PlayerModal() {
 
       hls.on(Hls.Events.MANIFEST_PARSED, () => {
         video.play().catch(() => {});
-
-        setAudioTracks(hls.audioTracks || []);
-        const indoTrack = (hls.audioTracks || []).findIndex(
-          (t) =>
-            t.name?.toLowerCase().includes("indonesia") ||
-            t.lang?.toLowerCase().includes("id")
-        );
-        if (indoTrack >= 0) {
-          hls.audioTrack = indoTrack;
-          setCurrentAudioTrack(indoTrack);
-        }
-
-        setQualityLevels(hls.levels || []);
-        setCurrentQuality(-1);
-      });
-
-      hls.on(Hls.Events.AUDIO_TRACKS_UPDATED, () => {
-        setAudioTracks(hls.audioTracks || []);
-      });
-
-      hls.on(Hls.Events.LEVELS_UPDATED, () => {
-        setQualityLevels(hls.levels || []);
       });
 
       hls.on(Hls.Events.ERROR, (event, data) => {
@@ -266,6 +249,7 @@ export function PlayerModal() {
         }
       });
     } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
+      // Safari native HLS (iPhone)
       video.src = streamUrl;
       video.play().catch(() => {});
     }
@@ -292,42 +276,12 @@ export function PlayerModal() {
       }
     };
 
-    const handlePlay = () => {
-      if (video.currentTime > 0 && video.duration > 0) {
-        updateHistoryProgress(
-          playerMedia.id,
-          video.currentTime,
-          video.duration
-        );
-      }
-    };
-
     video.addEventListener("timeupdate", handleTimeUpdate);
-    video.addEventListener("play", handlePlay);
-
-    return () => {
-      video.removeEventListener("timeupdate", handleTimeUpdate);
-      video.removeEventListener("play", handlePlay);
-    };
+    return () => video.removeEventListener("timeupdate", handleTimeUpdate);
   }, [playerMedia, updateHistoryProgress, streamUrl]);
 
-  const handleAudioTrackChange = (trackId: string) => {
-    const idx = parseInt(trackId);
-    if (hlsRef.current) {
-      hlsRef.current.audioTrack = idx;
-      setCurrentAudioTrack(idx);
-    }
-  };
-
-  const handleQualityChange = (levelId: string) => {
-    const idx = parseInt(levelId);
-    if (hlsRef.current) {
-      hlsRef.current.currentLevel = idx;
-      setCurrentQuality(idx);
-    }
-  };
-
   const episodes = streamInfo?.episodes || [];
+  const subtitles = streamInfo?.subtitles || [];
 
   const seasons = useMemo(() => {
     const set = new Set<string>();
@@ -339,16 +293,11 @@ export function PlayerModal() {
     return episodes.filter((e) => String(e.season) === currentSeason);
   }, [episodes, currentSeason]);
 
-  const handleEpisodeChange = (episode: string) => {
-    setCurrentEpisode(episode);
-  };
-
+  const handleEpisodeChange = (episode: string) => setCurrentEpisode(episode);
   const handleSeasonChange = (season: string) => {
     setCurrentSeason(season);
     const firstEp = episodes.find((e) => String(e.season) === season);
-    if (firstEp) {
-      setCurrentEpisode(String(firstEp.episode));
-    }
+    if (firstEp) setCurrentEpisode(String(firstEp.episode));
   };
 
   const currentEpisodeIdx = useMemo(() => {
@@ -401,81 +350,19 @@ export function PlayerModal() {
               controls
               autoPlay
               playsInline
-              // FIX: Tambahkan referrerPolicy="no-referrer" supaya stream tidak di-block oleh cinemacity
               referrerPolicy="no-referrer"
-            />
-
-            {/* Settings Button (Audio + Quality) */}
-            <div className="absolute bottom-16 right-4 z-20">
-              <button
-                onClick={() => setShowSettings(!showSettings)}
-                className="flex h-8 w-8 items-center justify-center rounded-full bg-black/50 text-white backdrop-blur-sm transition hover:bg-black/70"
-                aria-label="Settings"
-              >
-                <Settings className="h-4 w-4" />
-              </button>
-
-              {showSettings && (
-                <div className="absolute bottom-10 right-0 flex flex-col gap-2 rounded-lg bg-black/90 p-3 backdrop-blur-md">
-                  {audioTracks.length > 1 && (
-                    <div className="flex flex-col gap-1">
-                      <label className="flex items-center gap-1 text-[10px] text-white/60">
-                        <Volume2 className="h-3 w-3" /> Audio
-                      </label>
-                      <Select
-                        value={String(currentAudioTrack)}
-                        onValueChange={handleAudioTrackChange}
-                      >
-                        <SelectTrigger className="h-7 w-40 border-white/20 bg-zinc-900 text-xs text-white">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {audioTracks.map((track, idx) => (
-                            <SelectItem
-                              key={idx}
-                              value={String(idx)}
-                              className="text-xs"
-                            >
-                              {track.name || track.lang || `Track ${idx + 1}`}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  )}
-
-                  {qualityLevels.length > 1 && (
-                    <div className="flex flex-col gap-1">
-                      <label className="text-[10px] text-white/60">
-                        Quality
-                      </label>
-                      <Select
-                        value={String(currentQuality)}
-                        onValueChange={handleQualityChange}
-                      >
-                        <SelectTrigger className="h-7 w-40 border-white/20 bg-zinc-900 text-xs text-white">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="-1" className="text-xs">
-                            Auto
-                          </SelectItem>
-                          {qualityLevels.map((level, idx) => (
-                            <SelectItem
-                              key={idx}
-                              value={String(idx)}
-                              className="text-xs"
-                            >
-                              {level.height}p
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
+            >
+              {/* Tambahkan subtitle ke native video player */}
+              {subtitles.map((sub, idx) => (
+                <track
+                  key={idx}
+                  kind="subtitles"
+                  src={sub.url}
+                  srcLang={sub.name.includes('Indonesia') ? 'id' : 'en'}
+                  label={sub.name}
+                />
+              ))}
+            </video>
           </div>
         )}
 
