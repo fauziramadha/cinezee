@@ -136,12 +136,13 @@ export function SearchResults({ query, context, activeTab, onClose }: Props) {
   return (
     <div className="p-4">
       {context === "movie" && (
-        <div className="grid grid-cols-3 gap-3 sm:grid-cols-4 md:grid-cols-5">
+        <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 sm:gap-3 md:grid-cols-5">
           {results.map((item: MediaItem) => (
             <MovieCard 
               key={`${item.id}-${item.slug}`} 
               item={item} 
-              onClick={handleSelectMovie} 
+              onClick={handleSelectMovie}
+              className="w-full" 
             />
           ))}
         </div>
