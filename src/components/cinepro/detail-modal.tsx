@@ -5,7 +5,6 @@ import { useSafeSession } from "@/lib/use-safe-session";
 import {
   Play, X, Star, Calendar, Loader2, Bookmark, Check, Share2,
   MessageSquare, Send, Trash2, CornerDownRight, ChevronLeft, ChevronRight,
-  Film,
 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -129,11 +128,11 @@ export function DetailModal() {
       setError(null);
 
       try {
-const cinemacityId = String(
-  (selectedMedia as any).cinemacityId ||
-  (selectedMedia as any).cinemacity_id ||
-  selectedMedia.id
-);
+        const cinemacityId = String(
+          (selectedMedia as any).cinemacityId ||
+          (selectedMedia as any).cinemacity_id ||
+          selectedMedia.id
+        );
 
         if (!cinemacityId) {
           throw new Error("No content ID");
@@ -385,7 +384,7 @@ const cinemacityId = String(
     }
   };
 
-  const handleDeleteComment = async (id: string) => {
+  const handleDeleteComment = async (id: string) {
     try {
       const res = await fetch(`/api/comments?id=${id}`, { method: "DELETE" });
       if (res.ok) {
@@ -486,7 +485,7 @@ const cinemacityId = String(
                 <div className="relative h-[22vh] min-h-[140px] w-full overflow-hidden bg-muted sm:h-[30vh] md:aspect-video md:h-auto">
                   {poster && (
                     <img
-                      src={poster}
+                      src={`${VPS_API_BASE}/api/image?url=${encodeURIComponent(poster)}`}
                       alt={title}
                       referrerPolicy="no-referrer"
                       className="h-full w-full object-cover"
