@@ -120,6 +120,7 @@ export function HeroCarousel({
           <img
             src={item.backdrop}
             alt={item.title}
+            referrerPolicy="no-referrer"
             className="h-full w-full object-cover pointer-events-none"
             onError={(e) => {
               (e.target as HTMLImageElement).src = item.poster;
