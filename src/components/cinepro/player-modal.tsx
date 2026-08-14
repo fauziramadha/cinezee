@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useMemo, useRef } from "react";
 import Hls from "hls.js";
-import { X, AlertCircle, Loader2 } from "lucide-react";
+import { X, AlertCircle, Loader2, Settings, Volume2 } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -125,6 +125,11 @@ export function PlayerModal() {
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const hlsRef = useRef<Hls | null>(null);
+  const [audioTracks, setAudioTracks] = useState<Hls.AudioTrack[]>([]);
+  const [currentAudioTrack, setCurrentAudioTrack] = useState<number>(-1);
+  const [qualityLevels, setQualityLevels] = useState<Hls.Level[]>([]);
+  const [currentQuality, setCurrentQuality] = useState<number>(-1);
+  const [showSettings, setShowSettings] = useState(false);
 
   useEffect(() => {
     if (!playerMedia) {
@@ -209,12 +214,12 @@ export function PlayerModal() {
       hlsRef.current = null;
     }
 
+    // FIX: Paksa paksa hls.js di semua perangkat (termasuk iPhone)
     if (Hls.isSupported()) {
       const hls = new Hls({
         enableWorker: true,
         lowLatencyMode: false,
         startLevel: -1,
-        // FIX STUCK: Tambah buffer & retry
         maxBufferLength: 30,
         maxMaxBufferLength: 60,
         fragLoadingMaxRetry: 6,
@@ -230,6 +235,28 @@ export function PlayerModal() {
 
       hls.on(Hls.Events.MANIFEST_PARSED, () => {
         video.play().catch(() => {});
+
+        setAudioTracks(hls.audioTracks || []);
+        const indoTrack = (hls.audioTracks || []).findIndex(
+          (t) =>
+            t.name?.toLowerCase().includes("indonesia") ||
+            t.lang?.toLowerCase().includes("id")
+        );
+        if (indoTrack >= 0) {
+          hls.audioTrack = indoTrack;
+          setCurrentAudioTrack(indoTrack);
+        }
+
+        setQualityLevels(hls.levels || []);
+        setCurrentQuality(-1);
+      });
+
+      hls.on(Hls.Events.AUDIO_TRACKS_UPDATED, () => {
+        setAudioTracks(hls.audioTracks || []);
+      });
+
+      hls.on(Hls.Events.LEVELS_UPDATED, () => {
+        setQualityLevels(hls.levels || []);
       });
 
       hls.on(Hls.Events.ERROR, (event, data) => {
@@ -248,10 +275,6 @@ export function PlayerModal() {
           }
         }
       });
-    } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
-      // Safari native HLS (iPhone)
-      video.src = streamUrl;
-      video.play().catch(() => {});
     }
 
     return () => {
@@ -279,6 +302,22 @@ export function PlayerModal() {
     video.addEventListener("timeupdate", handleTimeUpdate);
     return () => video.removeEventListener("timeupdate", handleTimeUpdate);
   }, [playerMedia, updateHistoryProgress, streamUrl]);
+
+  const handleAudioTrackChange = (trackId: string) => {
+    const idx = parseInt(trackId);
+    if (hlsRef.current) {
+      hlsRef.current.audioTrack = idx;
+      setCurrentAudioTrack(idx);
+    }
+  };
+
+  const handleQualityChange = (levelId: string) => {
+    const idx = parseInt(levelId);
+    if (hlsRef.current) {
+      hlsRef.current.currentLevel = idx;
+      setCurrentQuality(idx);
+    }
+  };
 
   const episodes = streamInfo?.episodes || [];
   const subtitles = streamInfo?.subtitles || [];
@@ -368,6 +407,80 @@ export function PlayerModal() {
                 );
               })}
             </video>
+
+            {/* Settings Button (Audio + Quality) */}
+            <div className="absolute bottom-16 right-4 z-20">
+              <button
+                onClick={() => setShowSettings(!showSettings)}
+                className="flex h-8 w-8 items-center justify-center rounded-full bg-black/50 text-white backdrop-blur-sm transition hover:bg-black/70"
+                aria-label="Settings"
+              >
+                <Settings className="h-4 w-4" />
+              </button>
+
+              {showSettings && (
+                <div className="absolute bottom-10 right-0 flex flex-col gap-2 rounded-lg bg-black/90 p-3 backdrop-blur-md">
+                  {/* Audio Track Selector */}
+                  {audioTracks.length > 1 && (
+                    <div className="flex flex-col gap-1">
+                      <label className="flex items-center gap-1 text-[10px] text-white/60">
+                        <Volume2 className="h-3 w-3" /> Audio
+                      </label>
+                      <Select
+                        value={String(currentAudioTrack)}
+                        onValueChange={handleAudioTrackChange}
+                      >
+                        <SelectTrigger className="h-7 w-40 border-white/20 bg-zinc-900 text-xs text-white">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {audioTracks.map((track, idx) => (
+                            <SelectItem
+                              key={idx}
+                              value={String(idx)}
+                              className="text-xs"
+                            >
+                              {track.name || track.lang || `Track ${idx + 1}`}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
+
+                  {/* Quality Selector */}
+                  {qualityLevels.length > 1 && (
+                    <div className="flex flex-col gap-1">
+                      <label className="text-[10px] text-white/60">
+                        Quality
+                      </label>
+                      <Select
+                        value={String(currentQuality)}
+                        onValueChange={handleQualityChange}
+                      >
+                        <SelectTrigger className="h-7 w-40 border-white/20 bg-zinc-900 text-xs text-white">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="-1" className="text-xs">
+                            Auto
+                          </SelectItem>
+                          {qualityLevels.map((level, idx) => (
+                            <SelectItem
+                              key={idx}
+                              value={String(idx)}
+                              className="text-xs"
+                            >
+                              {level.height}p
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
         )}
 
