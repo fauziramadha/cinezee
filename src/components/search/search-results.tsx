@@ -1,15 +1,17 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { Search, X, Film, Tv, Loader2, ArrowRight } from "lucide-react";
+import { Search, Loader2, ArrowRight } from "lucide-react";
 import { useAppStore } from "@/lib/store";
-import { getImageUrl } from "@/lib/tmdb";
+import { MovieCard, type MediaItem } from "@/components/cinepro/movie-card";
 import { AnimeCard } from "@/components/anime/anime-card";
 import { DonghuaCard } from "@/components/donghua/donghua-card";
 import { ComicCard } from "@/components/comic/comic-card";
 import { DrakorCard } from "@/components/drakor/drakor-card";
+
+const VPS_API_BASE =
+  process.env.NEXT_PUBLIC_API_URL || "https://api.cinestream.my.id";
 
 interface Props {
   query: string;
@@ -35,11 +37,26 @@ export function SearchResults({ query, context, activeTab, onClose }: Props) {
     const timer = setTimeout(async () => {
       try {
         if (context === "movie") {
-          // Pakai API Search baru (sudah difilter VidAPI di server)
-          const res = await fetch(`/api/tmdb/search?q=${encodeURIComponent(query)}`);
+          // Fetch dari VPS API langsung
+          const res = await fetch(`${VPS_API_BASE}/api/search?q=${encodeURIComponent(query)}`);
           if (!res.ok) throw new Error("Fetch failed");
           const data = await res.json();
-          setResults(data.results || []);
+          
+          // Format ke MediaItem
+          const items: MediaItem[] = (data.data?.results || []).map((item: any) => ({
+            id: String(item.cinemacity_id),
+            cinemacityId: String(item.cinemacity_id),
+            slug: item.slug,
+            title: item.title || "Untitled",
+            type: item.type === "tv" ? "tv" : "movie",
+            poster: item.poster_url ? `${VPS_API_BASE}/api/image?url=${encodeURIComponent(item.poster_url)}` : "/placeholder-poster.png",
+            backdrop: item.poster_url ? `${VPS_API_BASE}/api/image?url=${encodeURIComponent(item.poster_url)}` : "/placeholder-poster.png",
+            overview: item.description || "",
+            year: item.release_year ? String(item.release_year) : "",
+            rating: item.rating ? parseFloat(item.rating) : 0,
+            quality: item.quality || undefined,
+          }));
+          setResults(items);
         }
         else if (context === "anime") {
           const endpoint = animeServer === "animasu"
@@ -84,14 +101,18 @@ export function SearchResults({ query, context, activeTab, onClose }: Props) {
     return () => clearTimeout(timer);
   }, [query, activeTab, context, animeServer, donghuaServer]);
 
-  const handleSelectMovie = (movie: any) => {
-    const mediaType: "movie" | "tv" = movie.media_type || (movie.title ? "movie" : "tv");
+  const handleSelectMovie = (item: MediaItem) => {
     setSelectedMedia({
-      id: movie.id,
-      type: mediaType,
-      title: movie.title || movie.name || "Untitled",
-      posterPath: movie.poster_path,
-      backdropPath: movie.backdrop_path,
+      id: item.cinemacityId || item.id,
+      cinemacityId: item.cinemacityId,
+      slug: item.slug,
+      title: item.title,
+      type: item.type,
+      poster: item.poster,
+      backdrop: item.backdrop,
+      overview: item.overview,
+      year: item.year,
+      rating: item.rating,
     } as any);
     onClose();
   };
@@ -117,26 +138,13 @@ export function SearchResults({ query, context, activeTab, onClose }: Props) {
     <div className="p-4">
       {context === "movie" && (
         <div className="grid grid-cols-3 gap-3 sm:grid-cols-4 md:grid-cols-5">
-          {results.map((movie) => {
-            const title = movie.title || movie.name || "Untitled";
-            const mediaType: "movie" | "tv" = movie.media_type || (movie.title ? "movie" : "tv");
-            const rating = movie.vote_average?.toFixed(1) || "N/A";
-            const year = movie.release_date?.split("-")[0] || movie.first_air_date?.split("-")[0];
-            return (
-              <button key={movie.id + "-" + mediaType} onClick={() => handleSelectMovie(movie)} className="group relative aspect-[2/3] overflow-hidden rounded-lg bg-card text-left transition-all hover:ring-2 hover:ring-primary">
-                <Image src={getImageUrl(movie.poster_path, "w500")} alt={title} fill sizes="(max-width: 768px) 30vw, 150px" className="object-cover" unoptimized />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent" />
-                <div className="absolute bottom-0 p-2">
-                  <span className="rounded bg-primary/90 px-1 text-[8px] font-bold uppercase text-primary-foreground">{mediaType}</span>
-                  <h3 className="mt-1 line-clamp-2 text-[11px] font-semibold text-white sm:text-xs">{title}</h3>
-                  <div className="flex items-center gap-1">
-                    {rating !== "N/A" && <span className="text-[9px] text-white/60">{rating}</span>}
-                    {year && <span className="text-[9px] text-white/60">• {year}</span>}
-                  </div>
-                </div>
-              </button>
-            );
-          })}
+          {results.map((item: MediaItem) => (
+            <MovieCard 
+              key={`${item.id}-${item.slug}`} 
+              item={item} 
+              onClick={handleSelectMovie} 
+            />
+          ))}
         </div>
       )}
 
