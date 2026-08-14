@@ -37,7 +37,7 @@ export function SearchResults({ query, context, activeTab, onClose }: Props) {
     const timer = setTimeout(async () => {
       try {
         if (context === "movie") {
-          // Fetch dari VPS API langsung
+          // Fetch dari VPS API (Live Search)
           const res = await fetch(`${VPS_API_BASE}/api/search?q=${encodeURIComponent(query)}`);
           if (!res.ok) throw new Error("Fetch failed");
           const data = await res.json();
@@ -54,7 +54,6 @@ export function SearchResults({ query, context, activeTab, onClose }: Props) {
             overview: item.description || "",
             year: item.release_year ? String(item.release_year) : "",
             rating: item.rating ? parseFloat(item.rating) : 0,
-            quality: item.quality || undefined,
           }));
           setResults(items);
         }
