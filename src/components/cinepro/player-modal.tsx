@@ -351,17 +351,22 @@ export function PlayerModal() {
               autoPlay
               playsInline
               referrerPolicy="no-referrer"
+              crossOrigin="anonymous"
             >
-              {/* Tambahkan subtitle ke native video player */}
-              {subtitles.map((sub, idx) => (
-                <track
-                  key={idx}
-                  kind="subtitles"
-                  src={sub.url}
-                  srcLang={sub.name.includes('Indonesia') ? 'id' : 'en'}
-                  label={sub.name}
-                />
-              ))}
+              {subtitles.map((sub, idx) => {
+                const isIndo = sub.name.toLowerCase().includes('indonesia') || sub.name.toLowerCase().includes('malay');
+                const subUrl = `${VPS_API_BASE}/api/subtitle?url=${encodeURIComponent(sub.url)}`;
+                return (
+                  <track
+                    key={idx}
+                    kind="subtitles"
+                    src={subUrl}
+                    srcLang={isIndo ? 'id' : 'en'}
+                    label={sub.name}
+                    default={isIndo}
+                  />
+                );
+              })}
             </video>
           </div>
         )}
