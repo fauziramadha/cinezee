@@ -16,14 +16,20 @@ async function getDB() {
 
 // Format cinemacity item to frontend format
 function formatItem(item: any) {
+  const type = item.type === "tv" ? "tv" : "movie";
+  const VPS_API_BASE = process.env.NEXT_PUBLIC_API_URL || "https://api.cinestream.my.id";
+  const posterUrl = item.poster_url 
+    ? `${VPS_API_BASE}/api/image?url=${encodeURIComponent(item.poster_url)}`
+    : "/placeholder-poster.png";
+  
   return {
     id: item.cinemacity_id,
     cinemacityId: item.cinemacity_id,
     slug: item.slug,
     title: item.title,
-    type: item.type === "tv" ? "tv" : "movie",
-    poster: item.poster_url || "/placeholder-poster.png",
-    backdrop: item.poster_url || "/placeholder-poster.png",
+    type,
+    poster: posterUrl,
+    backdrop: posterUrl,
     overview: item.description || "",
     year: item.release_year ? String(item.release_year) : "",
     rating: item.rating || 0,
