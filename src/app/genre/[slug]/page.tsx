@@ -141,12 +141,13 @@ export default function GenrePage() {
         {/* Movies Grid */}
         {!loading && !error && movies.length > 0 && (
           <>
-            <div className="grid grid-cols-3 gap-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6">
+            <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 sm:gap-3 md:grid-cols-5 lg:grid-cols-6">
               {movies.map((item) => (
                 <MovieCard
                   key={`${item.id}-${item.slug}`}
                   item={item}
                   onClick={handleCardClick}
+                  className="w-full"
                 />
               ))}
             </div>
