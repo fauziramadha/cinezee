@@ -44,21 +44,12 @@ interface StreamInfo {
   expires_at: string;
 }
 
-interface PlayerMediaSeason {
-  seasonNumber: number;
-  episodeCount: number;
-  name?: string;
-}
-
 // ============================================================
 // Helpers
 // ============================================================
-
-// Find cinemacity content by title (if no cinemacity_id)
 async function findCinemacityContent(
   media: any
 ): Promise<{ cinemacity_id: string; slug: string; type: string } | null> {
-  // If media already has cinemacity info (check camelCase and snake_case)
   if (media.cinemacityId || media.cinemacity_id) {
     return {
       cinemacity_id: String(media.cinemacityId || media.cinemacity_id),
@@ -67,14 +58,12 @@ async function findCinemacityContent(
     };
   }
 
-  // Search VPS API by title
   try {
     const res = await fetch(
       `${VPS_API_BASE}/api/search?q=${encodeURIComponent(media.title || "")}`
     );
     const data = await res.json();
     if (data.success && data.data?.results?.length > 0) {
-      // Find best match (case-insensitive)
       const titleLower = (media.title || "").toLowerCase();
       const match =
         data.data.results.find(
@@ -97,7 +86,6 @@ async function findCinemacityContent(
   return null;
 }
 
-// Get stream info from VPS API
 async function getStreamInfo(cinemacityId: string): Promise<StreamInfo> {
   const res = await fetch(`${VPS_API_BASE}/api/stream/info/${cinemacityId}`);
   const data = await res.json();
@@ -121,7 +109,6 @@ export function PlayerModal() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Stream data
   const [streamInfo, setStreamInfo] = useState<StreamInfo | null>(null);
   const [cinemacityData, setCinemacityData] = useState<{
     cinemacity_id: string;
@@ -129,11 +116,9 @@ export function PlayerModal() {
     type: string;
   } | null>(null);
 
-  // Episode state (TV)
   const [currentSeason, setCurrentSeason] = useState<string>("");
   const [currentEpisode, setCurrentEpisode] = useState<string>("");
 
-  // HLS state
   const videoRef = useRef<HTMLVideoElement>(null);
   const hlsRef = useRef<Hls | null>(null);
   const [audioTracks, setAudioTracks] = useState<Hls.AudioTrack[]>([]);
@@ -142,9 +127,6 @@ export function PlayerModal() {
   const [currentQuality, setCurrentQuality] = useState<number>(-1);
   const [showSettings, setShowSettings] = useState(false);
 
-  // ============================================================
-  // Init: Find cinemacity content + get stream info
-  // ============================================================
   useEffect(() => {
     if (!playerMedia) {
       setStreamInfo(null);
@@ -161,23 +143,18 @@ export function PlayerModal() {
       setError(null);
 
       try {
-        // Step 1: Find cinemacity content
         const ccData = await findCinemacityContent(playerMedia);
         if (!ccData) {
-          throw new Error(
-            "Konten ini tidak tersedia di server streaming kami."
-          );
+          throw new Error("Konten ini tidak tersedia di server streaming kami.");
         }
 
         if (cancelled) return;
         setCinemacityData(ccData);
 
-        // Step 2: Get stream info (episodes list, etc)
         const info = await getStreamInfo(ccData.cinemacity_id);
         if (cancelled) return;
         setStreamInfo(info);
 
-        // Step 3: Set initial episode (TV)
         if (ccData.type === "tv" && info.episodes?.length > 0) {
           const startSeason =
             (playerMedia as any)._currentSeason ||
@@ -189,7 +166,6 @@ export function PlayerModal() {
           setCurrentEpisode(startEpisode);
         }
 
-        // Add to history
         const existing = history.find((h) => h.id === playerMedia.id);
         if (!existing) {
           addToHistory({
@@ -213,43 +189,32 @@ export function PlayerModal() {
     };
   }, [playerMedia]);
 
-  // ============================================================
-  // Build stream URL for current episode
-  // ============================================================
   const streamUrl = useMemo(() => {
     if (!cinemacityData || !streamInfo) return "";
 
-    const base = streamInfo.stream_url; // /api/stream/play/{id}?slug=X&type=Y
+    const base = streamInfo.stream_url;
     if (cinemacityData.type === "tv" && currentSeason && currentEpisode) {
-      // Append season & episode
       const separator = base.includes("?") ? "&" : "?";
       return `${VPS_API_BASE}${base}${separator}season=${currentSeason}&episode=${currentEpisode}`;
     }
     return `${VPS_API_BASE}${base}`;
   }, [cinemacityData, streamInfo, currentSeason, currentEpisode]);
 
-  // ============================================================
-  // HLS.js Setup
-  // ============================================================
   useEffect(() => {
     if (!streamUrl || !videoRef.current) return;
 
     const video = videoRef.current;
 
-    // Cleanup previous HLS instance
     if (hlsRef.current) {
       hlsRef.current.destroy();
       hlsRef.current = null;
     }
 
-    // Setup HLS.js
     if (Hls.isSupported()) {
       const hls = new Hls({
         enableWorker: true,
         lowLatencyMode: false,
-        // Auto-start at best quality
         startLevel: -1,
-        // Audio track config
         audioTrackSwitchLabel: true,
       });
 
@@ -259,14 +224,9 @@ export function PlayerModal() {
       hls.attachMedia(video);
 
       hls.on(Hls.Events.MANIFEST_PARSED, () => {
-        // Auto-play
-        video.play().catch(() => {
-          // Autoplay might be blocked, user needs to click play
-        });
+        video.play().catch(() => {});
 
-        // Setup audio tracks
         setAudioTracks(hls.audioTracks || []);
-        // Try to select Indonesian audio by default
         const indoTrack = (hls.audioTracks || []).findIndex(
           (t) =>
             t.name?.toLowerCase().includes("indonesia") ||
@@ -277,9 +237,8 @@ export function PlayerModal() {
           setCurrentAudioTrack(indoTrack);
         }
 
-        // Setup quality levels
         setQualityLevels(hls.levels || []);
-        setCurrentQuality(-1); // Auto
+        setCurrentQuality(-1);
       });
 
       hls.on(Hls.Events.AUDIO_TRACKS_UPDATED, () => {
@@ -307,7 +266,6 @@ export function PlayerModal() {
         }
       });
     } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
-      // Safari native HLS
       video.src = streamUrl;
       video.play().catch(() => {});
     }
@@ -320,9 +278,6 @@ export function PlayerModal() {
     };
   }, [streamUrl]);
 
-  // ============================================================
-  // Progress Tracking via Video Events
-  // ============================================================
   useEffect(() => {
     const video = videoRef.current;
     if (!video || !playerMedia) return;
@@ -356,9 +311,6 @@ export function PlayerModal() {
     };
   }, [playerMedia, updateHistoryProgress, streamUrl]);
 
-  // ============================================================
-  // Audio Track Change
-  // ============================================================
   const handleAudioTrackChange = (trackId: string) => {
     const idx = parseInt(trackId);
     if (hlsRef.current) {
@@ -367,20 +319,14 @@ export function PlayerModal() {
     }
   };
 
-  // ============================================================
-  // Quality Change
-  // ============================================================
   const handleQualityChange = (levelId: string) => {
     const idx = parseInt(levelId);
     if (hlsRef.current) {
-      hlsRef.current.currentLevel = idx; // -1 = auto
+      hlsRef.current.currentLevel = idx;
       setCurrentQuality(idx);
     }
   };
 
-  // ============================================================
-  // Episode Change (TV)
-  // ============================================================
   const episodes = streamInfo?.episodes || [];
 
   const seasons = useMemo(() => {
@@ -405,9 +351,6 @@ export function PlayerModal() {
     }
   };
 
-  // ============================================================
-  // Current episode index (for prev/next)
-  // ============================================================
   const currentEpisodeIdx = useMemo(() => {
     return currentSeasonEpisodes.findIndex(
       (e) => String(e.episode) === currentEpisode
@@ -458,6 +401,8 @@ export function PlayerModal() {
               controls
               autoPlay
               playsInline
+              // FIX: Tambahkan referrerPolicy="no-referrer" supaya stream tidak di-block oleh cinemacity
+              referrerPolicy="no-referrer"
             />
 
             {/* Settings Button (Audio + Quality) */}
@@ -472,7 +417,6 @@ export function PlayerModal() {
 
               {showSettings && (
                 <div className="absolute bottom-10 right-0 flex flex-col gap-2 rounded-lg bg-black/90 p-3 backdrop-blur-md">
-                  {/* Audio Track Selector */}
                   {audioTracks.length > 1 && (
                     <div className="flex flex-col gap-1">
                       <label className="flex items-center gap-1 text-[10px] text-white/60">
@@ -500,7 +444,6 @@ export function PlayerModal() {
                     </div>
                   )}
 
-                  {/* Quality Selector */}
                   {qualityLevels.length > 1 && (
                     <div className="flex flex-col gap-1">
                       <label className="text-[10px] text-white/60">
