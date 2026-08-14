@@ -488,6 +488,7 @@ const cinemacityId = String(
                     <img
                       src={poster}
                       alt={title}
+                      referrerPolicy="no-referrer"
                       className="h-full w-full object-cover"
                     />
                   )}
