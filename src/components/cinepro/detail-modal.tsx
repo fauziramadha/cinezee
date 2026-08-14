@@ -129,10 +129,11 @@ export function DetailModal() {
       setError(null);
 
       try {
-        const cinemacityId =
-          (selectedMedia as any).cinemacityId ||
-          (selectedMedia as any).cinemacity_id ||
-          selectedMedia.id;
+const cinemacityId = String(
+  (selectedMedia as any).cinemacityId ||
+  (selectedMedia as any).cinemacity_id ||
+  selectedMedia.id
+);
 
         if (!cinemacityId) {
           throw new Error("No content ID");
