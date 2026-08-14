@@ -112,12 +112,12 @@ export function MovieCard({ item, onClick, className, size = "md" }: MovieCardPr
           </div>
         </div>
 
-        {/* Text Area (Push to bottom) */}
-        <div className="mt-auto bg-gradient-to-t from-black/95 via-black/70 to-transparent p-2 pt-8">
+        {/* Text Area (Solid Background) */}
+        <div className="mt-auto bg-zinc-900 p-2">
           <h3 className="line-clamp-1 text-xs font-semibold text-white sm:text-sm">
             {title}
           </h3>
-          <div className="mt-0.5 flex items-center gap-1.5 text-[10px] text-white/70">
+          <div className="mt-0.5 flex items-center gap-1.5 text-[10px] text-white/60">
             <span className="uppercase tracking-wide">{mediaType}</span>
             {year && (
               <>
