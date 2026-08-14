@@ -4,33 +4,31 @@ import { useEffect, useState, useCallback } from "react";
 import { useParams } from "next/navigation";
 import { Header } from "@/components/cinepro/header";
 import { Footer } from "@/components/cinepro/footer";
-import { MovieCard } from "@/components/cinepro/movie-card";
+import { MovieCard, type MediaItem } from "@/components/cinepro/movie-card";
 import { Loader2, Film, ChevronLeft, ChevronRight, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import type { Movie } from "@/lib/tmdb";
-import { cinemacityToTMDB } from "@/lib/cinemacity-api";
+import { useAppStore } from "@/lib/store";
+import { SearchModal } from "@/components/cinepro/search-modal";
+import { DetailModal } from "@/components/cinepro/detail-modal";
+import { PlayerModal } from "@/components/cinepro/player-modal";
+import { AuthModal } from "@/components/cinepro/auth-modal";
 
-interface CinemacityMovie {
-  id: string;
-  slug: string;
-  type: "movie" | "tv";
-  title: string;
-  url: string;
-  poster?: string;
-  year?: string;
-}
+const VPS_API_BASE =
+  process.env.NEXT_PUBLIC_API_URL || "https://api.cinestream.my.id";
 
 export default function GenrePage() {
   const params = useParams();
   const slug = params.slug as string;
 
-  const [movies, setMovies] = useState<Movie[]>([]);
+  const [movies, setMovies] = useState<MediaItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [genreName, setGenreName] = useState("");
   
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
+
+  const setDetailMedia = useAppStore((s) => s.setDetailMedia);
 
   useEffect(() => {
     const name = slug
@@ -45,20 +43,28 @@ export default function GenrePage() {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`/api/cinemacity/genre/${slug}?page=${pageNum}`);
+      const res = await fetch(`${VPS_API_BASE}/api/genre/${slug}?page=${pageNum}`);
       if (!res.ok) throw new Error("Failed to fetch genre");
       const data = await res.json();
 
-      const cinemacityMovies: CinemacityMovie[] = data.movies || [];
-      const adapted: Movie[] = cinemacityMovies.map(cinemacityToTMDB);
+      const items = data.data?.items || [];
+      
+      const adapted: MediaItem[] = items.map((item: any) => ({
+        id: String(item.cinemacity_id),
+        cinemacityId: String(item.cinemacity_id),
+        slug: item.slug,
+        title: item.title || "Untitled",
+        type: item.type === "tv" ? "tv" : "movie",
+        poster: item.poster_url ? `${VPS_API_BASE}/api/image?url=${encodeURIComponent(item.poster_url)}` : "/placeholder-poster.png",
+        backdrop: item.poster_url ? `${VPS_API_BASE}/api/image?url=${encodeURIComponent(item.poster_url)}` : "/placeholder-poster.png",
+        overview: item.description || "",
+        year: item.release_year ? String(item.release_year) : "",
+        rating: item.rating ? parseFloat(item.rating) : 0,
+        quality: item.quality || undefined,
+      }));
       
       setMovies(adapted);
-      
-      if (adapted.length < 20) {
-        setHasMore(false);
-      } else {
-        setHasMore(true);
-      }
+      setHasMore(data.data?.has_more ?? false);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load. Coba lagi.");
     } finally {
@@ -77,6 +83,21 @@ export default function GenrePage() {
     setPage(newPage);
     fetchGenre(newPage);
     window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  const handleCardClick = (item: MediaItem) => {
+    setDetailMedia({
+      id: item.cinemacityId || item.id,
+      cinemacityId: item.cinemacityId,
+      slug: item.slug,
+      title: item.title,
+      type: item.type,
+      poster: item.poster,
+      backdrop: item.backdrop,
+      overview: item.overview,
+      year: item.year,
+      rating: item.rating,
+    } as any);
   };
 
   return (
@@ -106,7 +127,7 @@ export default function GenrePage() {
           </div>
         )}
 
-        {/* Error State (Tampilkan tanpa menghilangkan grid lama kalau ada) */}
+        {/* Error State */}
         {error && (
           <div className="mb-4 flex flex-col items-center justify-center gap-3 rounded-lg border border-destructive/50 bg-destructive/10 p-6 text-center">
             <AlertCircle className="h-8 w-8 text-destructive" />
@@ -121,8 +142,12 @@ export default function GenrePage() {
         {!loading && !error && movies.length > 0 && (
           <>
             <div className="grid grid-cols-3 gap-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6">
-              {movies.map((movie) => (
-                <MovieCard key={`${movie.id}-${movie.media_type}`} movie={movie} />
+              {movies.map((item) => (
+                <MovieCard
+                  key={`${item.id}-${item.slug}`}
+                  item={item}
+                  onClick={handleCardClick}
+                />
               ))}
             </div>
 
@@ -169,6 +194,12 @@ export default function GenrePage() {
       </div>
 
       <Footer />
+      
+      {/* Render modals agar MovieCard bisa diklik */}
+      <SearchModal />
+      <DetailModal />
+      <PlayerModal />
+      <AuthModal />
     </main>
   );
 }
