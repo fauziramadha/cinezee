@@ -384,7 +384,7 @@ export function DetailModal() {
     }
   };
 
-  const handleDeleteComment = async (id: string) {
+  const handleDeleteComment = async (id: string) => {
     try {
       const res = await fetch(`/api/comments?id=${id}`, { method: "DELETE" });
       if (res.ok) {
