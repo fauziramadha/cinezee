@@ -20,6 +20,15 @@ import { cn } from "@/lib/utils";
 const VPS_API_BASE =
   process.env.NEXT_PUBLIC_API_URL || "https://api.cinestream.my.id";
 
+// Helper: wrap cinemacity image URL ke image proxy
+function wrapImage(url: string | null | undefined): string {
+  if (!url) return "/placeholder-poster.png";
+  if (url.includes("cinemacity.cc")) {
+    return `${VPS_API_BASE}/api/image?url=${encodeURIComponent(url)}`;
+  }
+  return url;
+}
+
 // ============================================================
 // Types
 // ============================================================
@@ -31,7 +40,7 @@ interface VPSContent {
   type: string;
   poster_url: string | null;
   description: string | null;
-  rating: number | null;
+  rating: string | number | null;
   release_year: number | null;
   quality: string | null;
   stream_data: any[] | null;
@@ -219,9 +228,10 @@ export function DetailModal() {
       slug: content.slug,
       title: content.title,
       type: content.type === "tv" ? "tv" : "movie",
-      poster: content.poster_url || (selectedMedia as any).poster,
-      backdrop: content.poster_url || (selectedMedia as any).backdrop,
+      poster: wrapImage(content.poster_url || (selectedMedia as any).poster),
+      backdrop: wrapImage(content.poster_url || (selectedMedia as any).backdrop),
       overview: content.description || "",
+      rating: content.rating ? parseFloat(String(content.rating)) : 0,
       ...(content.type === "tv"
         ? { _currentSeason: String(season), _currentEpisode: String(ep) }
         : {}),
@@ -421,9 +431,10 @@ export function DetailModal() {
   // ============================================================
   const title = content?.title || selectedMedia.title;
   const year = content?.release_year ? String(content.release_year) : "";
-  const rating = content?.rating?.toFixed(1) || "N/A";
+  const ratingNum = content?.rating ? parseFloat(String(content.rating)) : 0;
+  const rating = ratingNum > 0 ? ratingNum.toFixed(1) : "N/A";
   const overview = content?.description || "No overview available.";
-  const poster = content?.poster_url || (selectedMedia as any).poster;
+  const poster = wrapImage(content?.poster_url || (selectedMedia as any).poster);
   const isTV = (content?.type || selectedMedia.type) === "tv";
 
   const allEpisodes = parseEpisodes(content?.stream_data || null);
@@ -485,7 +496,7 @@ export function DetailModal() {
                 <div className="relative h-[22vh] min-h-[140px] w-full overflow-hidden bg-muted sm:h-[30vh] md:aspect-video md:h-auto">
                   {poster && (
                     <img
-                      src={`${VPS_API_BASE}/api/image?url=${encodeURIComponent(poster)}`}
+                      src={poster}
                       alt={title}
                       referrerPolicy="no-referrer"
                       className="h-full w-full object-cover"
