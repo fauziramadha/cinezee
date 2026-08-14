@@ -57,7 +57,7 @@ function formatItem(item: CinemacityContent): EnrichedMediaItem {
   const type: "movie" | "tv" = item.type === "tv" ? "tv" : "movie";
   const VPS_API_BASE = process.env.NEXT_PUBLIC_API_URL || "https://api.cinestream.my.id";
   
-  // Proxy poster via VPS to bypass Cloudflare block
+  // Proxy poster via VPS (dengan login cookies)
   const posterUrl = item.poster_url 
     ? `${VPS_API_BASE}/api/image?url=${encodeURIComponent(item.poster_url)}`
     : "/placeholder-poster.png";
@@ -69,7 +69,7 @@ function formatItem(item: CinemacityContent): EnrichedMediaItem {
     title: item.title,
     type,
     poster: posterUrl,
-    backdrop: posterUrl, // Pakai poster juga untuk backdrop
+    backdrop: posterUrl,
     overview: item.description || "",
     year: item.release_year ? String(item.release_year) : "",
     rating: item.rating || 0,
