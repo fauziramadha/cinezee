@@ -58,10 +58,10 @@ interface PlayerMediaSeason {
 async function findCinemacityContent(
   media: any
 ): Promise<{ cinemacity_id: string; slug: string; type: string } | null> {
-  // If media already has cinemacity info
-  if (media.cinemacity_id) {
+  // If media already has cinemacity info (check camelCase and snake_case)
+  if (media.cinemacityId || media.cinemacity_id) {
     return {
-      cinemacity_id: String(media.cinemacity_id),
+      cinemacity_id: String(media.cinemacityId || media.cinemacity_id),
       slug: media.slug || "",
       type: media.type === "tv" ? "tv" : "movie",
     };
