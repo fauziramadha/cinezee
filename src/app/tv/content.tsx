@@ -24,36 +24,19 @@ export function TVContent() {
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
 
-  const normalizeItem = (item: any): MediaItem => ({
-    id: String(item.cinemacity_id || item.id),
-    cinemacityId: String(item.cinemacity_id || item.id),
-    slug: item.slug || "",
-    title: item.title || "Untitled",
-    type: "tv",
-    poster: item.poster_url || "/placeholder-poster.png",
-    backdrop: item.poster_url || "/placeholder-poster.png",
-    overview: item.description || "",
-    year: item.release_year ? String(item.release_year) : "",
-    rating: item.rating || 0,
-    quality: item.quality || undefined,
-  });
-
   const loadData = useCallback(async (pageNum: number) => {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`${VPS_API_BASE}/api/home/page/${pageNum}`, {
+      // Pakai endpoint baru /api/content/list?type=tv
+      const res = await fetch(`${VPS_API_BASE}/api/content/list?type=tv&page=${pageNum}`, {
         cache: "no-store",
       });
       if (!res.ok) throw new Error("HTTP " + res.status);
       const json = await res.json();
-      const allItems = json.data?.items || json.items || [];
-      // Filter hanya type=tv
-      const tvShows = allItems
-        .filter((item: any) => item.type === "tv")
-        .map(normalizeItem);
-      setItems(tvShows);
-      setHasMore(allItems.length >= 20);
+      const apiItems = json.data?.items || [];
+      setItems(apiItems as MediaItem[]);
+      setHasMore(json.data?.has_more ?? apiItems.length >= 20);
     } catch (err) {
       console.error("[TV] error:", err);
       setError(err instanceof Error ? err.message : "Failed to load");
@@ -90,7 +73,7 @@ export function TVContent() {
       cinemacityId: item.cinemacityId,
       slug: item.slug,
       title: item.title,
-      type: item.type,
+      type: "tv",
       poster: item.poster,
       backdrop: item.backdrop,
       overview: item.overview,
