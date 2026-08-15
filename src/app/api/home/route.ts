@@ -64,7 +64,9 @@ export async function GET() {
 
     // 4. Save to D1 cache
     const response = NextResponse.json(result, {
-      headers: { "Cache-Control": "public, s-maxage=300" },
+      headers: { 
+        "Cache-Control": "public, s-maxage=300, stale-while-revalidate=86400",
+      },
     });
 
     if (db) {
