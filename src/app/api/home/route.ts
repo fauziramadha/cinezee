@@ -14,29 +14,6 @@ async function getDB() {
   }
 }
 
-// Format cinemacity item to frontend format
-function formatItem(item: any) {
-  const type = item.type === "tv" ? "tv" : "movie";
-  const VPS_API_BASE = process.env.NEXT_PUBLIC_API_URL || "https://api.cinestream.my.id";
-  const posterUrl = item.poster_url 
-    ? `${VPS_API_BASE}/api/image?url=${encodeURIComponent(item.poster_url)}`
-    : "/placeholder-poster.png";
-  
-  return {
-    id: item.cinemacity_id,
-    cinemacityId: item.cinemacity_id,
-    slug: item.slug,
-    title: item.title,
-    type,
-    poster: posterUrl,
-    backdrop: posterUrl,
-    overview: item.description || "",
-    year: item.release_year ? String(item.release_year) : "",
-    rating: item.rating || 0,
-    quality: item.quality || undefined,
-  };
-}
-
 export async function GET() {
   try {
     const db = await getDB();
@@ -62,7 +39,7 @@ export async function GET() {
       }
     }
 
-    // 2. Fetch from VPS API (NO TMDB)
+    // 2. Fetch from VPS API
     console.log("[Home API] Cache MISS, fetching from VPS API...");
     const r = await fetch(`${VPS_API_BASE}/api/home`, {
       headers: { Accept: "application/json" },
@@ -71,23 +48,18 @@ export async function GET() {
     const vpsData = await r.json();
     const data = vpsData.data || vpsData;
 
-    // 3. Format items (NO TMDB enrichment)
-    const hero = (data.hero_carousel || []).map(formatItem);
-    const allItems = data.sections?.[0]?.items || [];
-
-    const movies = allItems
-      .filter((i: any) => i.type === "movie")
-      .map(formatItem);
-    const tvShows = allItems
-      .filter((i: any) => i.type === "tv")
-      .map(formatItem);
-
+    // 3. Return structured sections (VPS API sudah format items)
     const result = {
-      hero,
-      movies,
-      popularMovies: movies,
-      tvShows,
-      episodes: tvShows,
+      hero: data.hero || [],
+      top10: data.top10 || [],
+      trending: data.trending || [],
+      asian: data.asian || [],
+      indian: data.indian || [],
+      // Keep backward compatibility
+      movies: data.trending || [],
+      popularMovies: data.trending || [],
+      tvShows: (data.asian || []).filter((i: any) => i.type === "tv"),
+      episodes: [],
     };
 
     // 4. Save to D1 cache
