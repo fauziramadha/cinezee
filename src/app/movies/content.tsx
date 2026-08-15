@@ -24,39 +24,19 @@ export function MoviesContent() {
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
 
-  // Normalize VPS API item to MediaItem
-  const normalizeItem = (item: any): MediaItem => ({
-    id: String(item.cinemacity_id || item.id),
-    cinemacityId: String(item.cinemacity_id || item.id),
-    slug: item.slug || "",
-    title: item.title || "Untitled",
-    type: "movie",
-    poster: item.poster_url || "/placeholder-poster.png",
-    backdrop: item.poster_url || "/placeholder-poster.png",
-    overview: item.description || "",
-    year: item.release_year ? String(item.release_year) : "",
-    rating: item.rating || 0,
-    quality: item.quality || undefined,
-  });
-
   const loadData = useCallback(async (pageNum: number) => {
     setLoading(true);
     setError(null);
     try {
-      // Fetch dari VPS API
-      const res = await fetch(`${VPS_API_BASE}/api/home/page/${pageNum}`, {
+      // Pakai endpoint baru /api/content/list?type=movie
+      const res = await fetch(`${VPS_API_BASE}/api/content/list?type=movie&page=${pageNum}`, {
         cache: "no-store",
       });
       if (!res.ok) throw new Error("HTTP " + res.status);
       const json = await res.json();
-      const allItems = json.data?.items || json.items || [];
-      // Filter hanya type=movie
-      const movies = allItems
-        .filter((item: any) => item.type === "movie")
-        .map(normalizeItem);
-      setItems(movies);
-      // VPS return 20 items per page, kalau < 20 berarti halaman terakhir
-      setHasMore(allItems.length >= 20);
+      const apiItems = json.data?.items || [];
+      setItems(apiItems as MediaItem[]);
+      setHasMore(json.data?.has_more ?? apiItems.length >= 20);
     } catch (err) {
       console.error("[Movies] error:", err);
       setError(err instanceof Error ? err.message : "Failed to load");
@@ -93,7 +73,7 @@ export function MoviesContent() {
       cinemacityId: item.cinemacityId,
       slug: item.slug,
       title: item.title,
-      type: item.type,
+      type: "movie",
       poster: item.poster,
       backdrop: item.backdrop,
       overview: item.overview,
