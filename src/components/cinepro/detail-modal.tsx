@@ -61,7 +61,10 @@ interface CommentItem { id: string; userId: string; mediaId: number; mediaType: 
 // ============================================================
 async function fetchVPSContent(cinemacityId: string): Promise<VPSContent | null> {
   try {
-    const res = await fetch(`${VPS_API_BASE}/api/content/${cinemacityId}`);
+const slug = (selectedMedia as any).slug || '';
+const type = (selectedMedia as any).type || 'movie';
+const url = `${VPS_API_BASE}/api/content/${cinemacityId}?slug=${encodeURIComponent(slug)}&type=${type}`;
+const res = await fetch(url);
     const data = await res.json();
     return data.data || null;
   } catch (e) {
