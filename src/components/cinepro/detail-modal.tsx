@@ -59,12 +59,14 @@ interface CommentItem { id: string; userId: string; mediaId: number; mediaType: 
 // ============================================================
 // Fetch VPS Content Detail
 // ============================================================
-async function fetchVPSContent(cinemacityId: string): Promise<VPSContent | null> {
+async function fetchVPSContent(cinemacityId: string, slug?: string, type?: string): Promise<VPSContent | null> {
   try {
-const slug = (selectedMedia as any).slug || '';
-const type = (selectedMedia as any).type || 'movie';
-const url = `${VPS_API_BASE}/api/content/${cinemacityId}?slug=${encodeURIComponent(slug)}&type=${type}`;
-const res = await fetch(url);
+    const params = new URLSearchParams();
+    if (slug) params.set('slug', slug);
+    if (type) params.set('type', type);
+    const query = params.toString();
+    const url = `${VPS_API_BASE}/api/content/${cinemacityId}${query ? '?' + query : ''}`;
+    const res = await fetch(url);
     const data = await res.json();
     return data.data || null;
   } catch (e) {
@@ -150,7 +152,9 @@ export function DetailModal() {
           throw new Error("No content ID");
         }
 
-        const data = await fetchVPSContent(String(cinemacityId));
+        const slug = (selectedMedia as any).slug || '';
+        const type = (selectedMedia as any).type || 'movie';
+        const data = await fetchVPSContent(String(cinemacityId), slug, type);
         if (cancelled) return;
         if (!data) throw new Error("Failed to load detail");
 
