@@ -14,12 +14,20 @@ async function getDB() {
   }
 }
 
+// Helper: cek apakah hero items sudah lengkap (punya overview)
+function isHeroComplete(hero: any[]): boolean {
+  if (!hero || hero.length === 0) return false;
+  return hero.every(
+    (h) => h.overview && h.overview.trim().length > 0
+  );
+}
+
 export async function GET() {
   try {
     const db = await getDB();
     const cacheKey = "home:all_data";
 
-    // 1. Check D1 cache
+    // 1. Check D1 cache - TAPI skip kalau hero belum lengkap
     if (db) {
       try {
         const row = await db
@@ -30,9 +38,15 @@ export async function GET() {
           .first();
 
         if (row?.cache_value) {
-          return NextResponse.json(JSON.parse(row.cache_value as string), {
-            headers: { "Cache-Control": "public, max-age=60" },
-          });
+          const cached = JSON.parse(row.cache_value as string);
+          // VALIDATION: hanya pakai cache kalau hero items sudah punya overview
+          if (isHeroComplete(cached.hero)) {
+            return NextResponse.json(cached, {
+              headers: { "Cache-Control": "public, max-age=60" },
+            });
+          } else {
+            console.log("[Home API] Cache SKIP - hero incomplete, fetching fresh...");
+          }
         }
       } catch (e) {
         console.warn("[Home API] D1 read error:", e);
@@ -55,21 +69,18 @@ export async function GET() {
       trending: data.trending || [],
       asian: data.asian || [],
       indian: data.indian || [],
-      // Keep backward compatibility
       movies: data.trending || [],
       popularMovies: data.trending || [],
       tvShows: (data.asian || []).filter((i: any) => i.type === "tv"),
       episodes: [],
     };
 
-    // 4. Save to D1 cache
+    // 4. Save to D1 cache - HANYA kalau hero items sudah lengkap
     const response = NextResponse.json(result, {
-      headers: { 
-        "Cache-Control": "public, s-maxage=300, stale-while-revalidate=86400",
-      },
+      headers: { "Cache-Control": "public, s-maxage=300, stale-while-revalidate=86400" },
     });
 
-    if (db) {
+    if (db && isHeroComplete(result.hero)) {
       try {
         await db
           .prepare(
@@ -77,7 +88,10 @@ export async function GET() {
           )
           .bind(cacheKey, JSON.stringify(result), Date.now() + CACHE_TTL * 1000)
           .run();
+        console.log("[Home API] Cached with complete hero data");
       } catch (e) {}
+    } else {
+      console.log("[Home API] Skip cache - hero incomplete, will refetch next time");
     }
 
     return response;
