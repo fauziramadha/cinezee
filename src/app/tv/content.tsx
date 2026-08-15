@@ -147,6 +147,7 @@ export function TVContent() {
                 key={`${item.id}-${item.slug}`}
                 item={item}
                 onClick={handleCardClick}
+                className="w-full"
               />
             ))}
           </div>
