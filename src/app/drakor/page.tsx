@@ -1,3 +1,4 @@
+export const dynamic = "force-dynamic";
 import { DrakorContent } from "./content";
 
 export const dynamic = "force-dynamic";
