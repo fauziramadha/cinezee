@@ -1,3 +1,4 @@
+export const dynamic = "force-dynamic";
 import { DonghuaS1Content } from "./content";
 
 export const dynamic = "force-dynamic";
