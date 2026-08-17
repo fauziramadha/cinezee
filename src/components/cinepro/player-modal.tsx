@@ -97,8 +97,17 @@ async function findCinemacityContent(
   return null;
 }
 
-async function getStreamInfo(cinemacityId: string): Promise<StreamInfo> {
-  const res = await fetch(`${VPS_API_BASE}/api/stream/info/${cinemacityId}`);
+async function getStreamInfo(
+  cinemacityId: string,
+  season?: string,
+  episode?: string
+): Promise<StreamInfo> {
+  const params = new URLSearchParams();
+  if (season) params.set("season", season);
+  if (episode) params.set("episode", episode);
+  const query = params.toString();
+  const url = `${VPS_API_BASE}/api/stream/info/${cinemacityId}${query ? "?" + query : ""}`;
+  const res = await fetch(url);
   const data = await res.json();
   if (!data.success)
     throw new Error(data.error || "Failed to get stream info");
@@ -118,6 +127,7 @@ export function PlayerModal() {
   } = useAppStore();
 
   const [loading, setLoading] = useState(true);
+  const [switching, setSwitching] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const [streamInfo, setStreamInfo] = useState<StreamInfo | null>(null);
@@ -129,7 +139,6 @@ export function PlayerModal() {
 
   const [currentSeason, setCurrentSeason] = useState<string>("");
   const [currentEpisode, setCurrentEpisode] = useState<string>("");
-  // PATCH 5: Multi-server state
   const [currentServer, setCurrentServer] = useState<string>("");
 
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -140,6 +149,7 @@ export function PlayerModal() {
   const [currentQuality, setCurrentQuality] = useState<number>(-1);
   const [showSettings, setShowSettings] = useState(false);
 
+  // === Initial load (modal open) ===
   useEffect(() => {
     if (!playerMedia) {
       setStreamInfo(null);
@@ -180,7 +190,6 @@ export function PlayerModal() {
           setCurrentEpisode(startEpisode);
         }
 
-        // PATCH 5: Set default server ke "0" kalau ada multiple servers
         if (info.servers?.length > 1) {
           setCurrentServer("0");
         } else {
@@ -210,7 +219,46 @@ export function PlayerModal() {
     };
   }, [playerMedia]);
 
-  // PATCH 5: Build stream URL dari scratch, include server param jika multi-server
+  // === FIX BUG #2: Refetch streamInfo saat ganti episode (untuk subtitle per-episode) ===
+  useEffect(() => {
+    if (!cinemacityData || !streamInfo) return;
+    if (cinemacityData.type !== "tv") return;
+    if (!currentSeason || !currentEpisode) return;
+
+    let cancelled = false;
+
+    async function refetchSubtitles() {
+      try {
+        const freshInfo = await getStreamInfo(
+          cinemacityData.cinemacity_id,
+          currentSeason,
+          currentEpisode
+        );
+        if (cancelled) return;
+        // Update subtitles + episodes (preserve servers)
+        setStreamInfo((prev) =>
+          prev
+            ? {
+                ...prev,
+                subtitles: freshInfo.subtitles,
+                episodes: freshInfo.episodes,
+              }
+            : freshInfo
+        );
+      } catch (e) {
+        console.error("Refetch subtitles failed:", e);
+      }
+    }
+
+    refetchSubtitles();
+
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentSeason, currentEpisode]);
+
+  // Build stream URL
   const streamUrl = useMemo(() => {
     if (!cinemacityData || !streamInfo) return "";
 
@@ -223,7 +271,6 @@ export function PlayerModal() {
       params.set("episode", currentEpisode);
     }
 
-    // Add server param only if multi-server and user selected a server
     if (currentServer !== "" && streamInfo.servers?.length > 1) {
       params.set("server", currentServer);
     }
@@ -231,82 +278,108 @@ export function PlayerModal() {
     return `${VPS_API_BASE}/api/stream/play/${cinemacityData.cinemacity_id}?${params.toString()}`;
   }, [cinemacityData, streamInfo, currentSeason, currentEpisode, currentServer]);
 
+  // === FIX BUG #1: HLS cleanup yang aman saat ganti server/episode ===
   useEffect(() => {
     if (!streamUrl || !videoRef.current) return;
 
     const video = videoRef.current;
 
-    if (hlsRef.current) {
-      hlsRef.current.destroy();
+    // Tandai sedang switching (untuk loading indicator)
+    setSwitching(true);
+
+    // Cleanup instance lama dengan benar
+    const oldHls = hlsRef.current;
+    if (oldHls) {
+      try {
+        oldHls.detachMedia();
+        oldHls.destroy();
+      } catch (e) {
+        console.error("HLS destroy error:", e);
+      }
       hlsRef.current = null;
     }
 
-    // FIX: Paksa pakai hls.js di semua perangkat (termasuk iPhone)
-    if (Hls.isSupported()) {
-      const hls = new Hls({
-        enableWorker: true,
-        lowLatencyMode: false,
-        startLevel: -1,
-        maxBufferLength: 30,
-        maxMaxBufferLength: 60,
-        fragLoadingMaxRetry: 6,
-        fragLoadingRetryDelay: 500,
-        manifestLoadingMaxRetry: 4,
-        levelLoadingMaxRetry: 4,
-      });
+    // Reset video element
+    try {
+      video.removeAttribute("src");
+      video.load();
+    } catch (e) {}
 
-      hlsRef.current = hls;
+    // Beri delay kecil supaya cleanup selesai sebelum instance baru dibuat
+    const initTimer = setTimeout(() => {
+      if (Hls.isSupported()) {
+        const hls = new Hls({
+          enableWorker: true,
+          lowLatencyMode: false,
+          startLevel: -1,
+          maxBufferLength: 30,
+          maxMaxBufferLength: 60,
+          fragLoadingMaxRetry: 6,
+          fragLoadingRetryDelay: 500,
+          manifestLoadingMaxRetry: 4,
+          levelLoadingMaxRetry: 4,
+        });
 
-      hls.loadSource(streamUrl);
-      hls.attachMedia(video);
+        hlsRef.current = hls;
 
-      hls.on(Hls.Events.MANIFEST_PARSED, () => {
-        video.play().catch(() => {});
+        hls.loadSource(streamUrl);
+        hls.attachMedia(video);
 
-        setAudioTracks(hls.audioTracks || []);
-        const indoTrack = (hls.audioTracks || []).findIndex(
-          (t) =>
-            t.name?.toLowerCase().includes("indonesia") ||
-            t.lang?.toLowerCase().includes("id")
-        );
-        if (indoTrack >= 0) {
-          hls.audioTrack = indoTrack;
-          setCurrentAudioTrack(indoTrack);
-        }
+        hls.on(Hls.Events.MANIFEST_PARSED, () => {
+          video.play().catch(() => {});
+          setSwitching(false);
 
-        setQualityLevels(hls.levels || []);
-        setCurrentQuality(-1);
-      });
-
-      hls.on(Hls.Events.AUDIO_TRACKS_UPDATED, () => {
-        setAudioTracks(hls.audioTracks || []);
-      });
-
-      hls.on(Hls.Events.LEVELS_UPDATED, () => {
-        setQualityLevels(hls.levels || []);
-      });
-
-      hls.on(Hls.Events.ERROR, (event, data) => {
-        if (data.fatal) {
-          switch (data.type) {
-            case Hls.ErrorTypes.NETWORK_ERROR:
-              hls.startLoad();
-              break;
-            case Hls.ErrorTypes.MEDIA_ERROR:
-              hls.recoverMediaError();
-              break;
-            default:
-              setError("Stream error. Please try again.");
-              hls.destroy();
-              break;
+          setAudioTracks(hls.audioTracks || []);
+          const indoTrack = (hls.audioTracks || []).findIndex(
+            (t) =>
+              t.name?.toLowerCase().includes("indonesia") ||
+              t.lang?.toLowerCase().includes("id")
+          );
+          if (indoTrack >= 0) {
+            hls.audioTrack = indoTrack;
+            setCurrentAudioTrack(indoTrack);
           }
-        }
-      });
-    }
+
+          setQualityLevels(hls.levels || []);
+          setCurrentQuality(-1);
+        });
+
+        hls.on(Hls.Events.AUDIO_TRACKS_UPDATED, () => {
+          setAudioTracks(hls.audioTracks || []);
+        });
+
+        hls.on(Hls.Events.LEVELS_UPDATED, () => {
+          setQualityLevels(hls.levels || []);
+        });
+
+        hls.on(Hls.Events.ERROR, (event, data) => {
+          if (data.fatal) {
+            switch (data.type) {
+              case Hls.ErrorTypes.NETWORK_ERROR:
+                hls.startLoad();
+                break;
+              case Hls.ErrorTypes.MEDIA_ERROR:
+                hls.recoverMediaError();
+                break;
+              default:
+                setError("Stream error. Please try again.");
+                setSwitching(false);
+                hls.destroy();
+                break;
+            }
+          }
+        });
+      } else {
+        setSwitching(false);
+      }
+    }, 150);
 
     return () => {
+      clearTimeout(initTimer);
       if (hlsRef.current) {
-        hlsRef.current.destroy();
+        try {
+          hlsRef.current.destroy();
+        } catch (e) {}
         hlsRef.current = null;
       }
     };
@@ -346,14 +419,12 @@ export function PlayerModal() {
     }
   };
 
-  // PATCH 5: Handler untuk ganti server
   const handleServerChange = (serverId: string) => {
     setCurrentServer(serverId);
   };
 
   const episodes = streamInfo?.episodes || [];
   const subtitles = streamInfo?.subtitles || [];
-  // PATCH 5: Get servers list
   const servers = streamInfo?.servers || [];
 
   const seasons = useMemo(() => {
@@ -379,10 +450,26 @@ export function PlayerModal() {
     );
   }, [currentSeasonEpisodes, currentEpisode]);
 
-  // FIX: Hanya tampilkan settings jika ada pilihan Audio (>1) atau Quality (>1)
   const hasSettings = audioTracks.length > 1 || qualityLevels.length > 1;
-  // PATCH 5: Cek apakah ada multiple servers
   const hasMultipleServers = servers.length > 1;
+
+  // FIX: Pilih subtitle default — prefer Indonesia, fallback ke English Full, fallback ke pertama
+  const defaultSubtitleIdx = useMemo(() => {
+    if (subtitles.length === 0) return -1;
+    const indoIdx = subtitles.findIndex(
+      (s) =>
+        s.name.toLowerCase().includes("indonesia") ||
+        s.name.toLowerCase().includes("malay")
+    );
+    if (indoIdx >= 0) return indoIdx;
+    const englishFullIdx = subtitles.findIndex(
+      (s) =>
+        s.name.toLowerCase().includes("english") &&
+        s.name.toLowerCase().includes("full")
+    );
+    if (englishFullIdx >= 0) return englishFullIdx;
+    return 0;
+  }, [subtitles]);
 
   if (!playerMedia) return null;
 
@@ -432,22 +519,34 @@ export function PlayerModal() {
               crossOrigin="anonymous"
             >
               {subtitles.map((sub, idx) => {
-                const isIndo = sub.name.toLowerCase().includes('indonesia') || sub.name.toLowerCase().includes('malay');
+                const isDefault = idx === defaultSubtitleIdx;
+                const isIndo =
+                  sub.name.toLowerCase().includes("indonesia") ||
+                  sub.name.toLowerCase().includes("malay");
                 const subUrl = `${VPS_API_BASE}/api/subtitle?url=${encodeURIComponent(sub.url)}`;
                 return (
                   <track
-                    key={idx}
+                    key={`${sub.url}-${idx}`}
                     kind="subtitles"
                     src={subUrl}
-                    srcLang={isIndo ? 'id' : 'en'}
+                    srcLang={isIndo ? "id" : "en"}
                     label={sub.name}
-                    default={isIndo}
+                    default={isDefault}
                   />
                 );
               })}
             </video>
 
-            {/* FIX: Settings Button dipindah ke pojok kanan atas & hanya muncul jika hasSettings true */}
+            {/* FIX BUG #1: Switching indicator saat ganti server/episode */}
+            {switching && (
+              <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+                <div className="flex flex-col items-center gap-2">
+                  <Loader2 className="h-8 w-8 animate-spin text-white" />
+                  <p className="text-xs text-white/70">Switching...</p>
+                </div>
+              </div>
+            )}
+
             {hasSettings && (
               <div className="absolute right-12 top-2 z-30">
                 <button
@@ -460,7 +559,6 @@ export function PlayerModal() {
 
                 {showSettings && (
                   <div className="absolute top-10 right-0 flex flex-col gap-2 rounded-lg bg-black/90 p-3 backdrop-blur-md">
-                    {/* Audio Track Selector */}
                     {audioTracks.length > 1 && (
                       <div className="flex flex-col gap-1">
                         <label className="flex items-center gap-1 text-[10px] text-white/60">
@@ -488,7 +586,6 @@ export function PlayerModal() {
                       </div>
                     )}
 
-                    {/* Quality Selector */}
                     {qualityLevels.length > 1 && (
                       <div className="flex flex-col gap-1">
                         <label className="text-[10px] text-white/60">
@@ -525,7 +622,7 @@ export function PlayerModal() {
           </div>
         )}
 
-        {/* PATCH 5: Server Selector (untuk film multi-server) */}
+        {/* Server Selector */}
         {!loading && !error && hasMultipleServers && (
           <div className="flex flex-wrap items-center gap-2 border-t border-white/10 bg-zinc-950 p-3">
             <span className="flex items-center gap-1 text-xs font-medium text-white/60">
