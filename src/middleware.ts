@@ -241,6 +241,10 @@ function generateRequestId(): string {
 // ============================================================
 // MATCHER — Konfigurasi route yang dijalankan middleware
 // ============================================================
+// Skip API routes dari middleware untuk hemat Worker CPU:
+// - API routes mostly proxy ke VPS (api.cinestream.my.id)
+// - VPS sudah punya rate limiting sendiri (nginx + express-rate-limit)
+// - Middleware tetap jalan untuk halaman HTML (security headers)
 export const config = {
   matcher: [
     /*
@@ -249,7 +253,8 @@ export const config = {
      * - _next/image (image optimization files)
      * - favicon.ico
      * - public assets
+     * - api/* (skip middleware untuk API routes — hemat CPU Worker)
      */
-    "/((?!_next/static|_next/image|favicon.ico|public/).*)",
+    "/((?!_next/static|_next/image|favicon.ico|public/|api/).*)",
   ],
 };
