@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useMemo, useRef } from "react";
 import Hls from "hls.js";
-import { X, AlertCircle, Loader2, Settings, Volume2 } from "lucide-react";
+import { X, AlertCircle, Loader2, Settings, Volume2, Server } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -27,6 +27,12 @@ const VPS_API_BASE =
 // ============================================================
 // Types
 // ============================================================
+interface ServerInfo {
+  id: number;
+  title: string;
+  stream_url: string;
+}
+
 interface StreamInfo {
   content: {
     id: number;
@@ -35,6 +41,7 @@ interface StreamInfo {
     type: string;
   };
   stream_url: string;
+  servers: ServerInfo[];
   episodes: {
     season: number;
     episode: number;
@@ -122,6 +129,8 @@ export function PlayerModal() {
 
   const [currentSeason, setCurrentSeason] = useState<string>("");
   const [currentEpisode, setCurrentEpisode] = useState<string>("");
+  // PATCH 5: Multi-server state
+  const [currentServer, setCurrentServer] = useState<string>("");
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const hlsRef = useRef<Hls | null>(null);
@@ -137,6 +146,7 @@ export function PlayerModal() {
       setCinemacityData(null);
       setError(null);
       setLoading(true);
+      setCurrentServer("");
       return;
     }
 
@@ -170,6 +180,13 @@ export function PlayerModal() {
           setCurrentEpisode(startEpisode);
         }
 
+        // PATCH 5: Set default server ke "0" kalau ada multiple servers
+        if (info.servers?.length > 1) {
+          setCurrentServer("0");
+        } else {
+          setCurrentServer("");
+        }
+
         const existing = history.find((h) => h.id === playerMedia.id);
         if (!existing) {
           addToHistory({
@@ -193,16 +210,26 @@ export function PlayerModal() {
     };
   }, [playerMedia]);
 
+  // PATCH 5: Build stream URL dari scratch, include server param jika multi-server
   const streamUrl = useMemo(() => {
     if (!cinemacityData || !streamInfo) return "";
 
-    const base = streamInfo.stream_url;
+    const params = new URLSearchParams();
+    params.set("slug", cinemacityData.slug);
+    params.set("type", cinemacityData.type);
+
     if (cinemacityData.type === "tv" && currentSeason && currentEpisode) {
-      const separator = base.includes("?") ? "&" : "?";
-      return `${VPS_API_BASE}${base}${separator}season=${currentSeason}&episode=${currentEpisode}`;
+      params.set("season", currentSeason);
+      params.set("episode", currentEpisode);
     }
-    return `${VPS_API_BASE}${base}`;
-  }, [cinemacityData, streamInfo, currentSeason, currentEpisode]);
+
+    // Add server param only if multi-server and user selected a server
+    if (currentServer !== "" && streamInfo.servers?.length > 1) {
+      params.set("server", currentServer);
+    }
+
+    return `${VPS_API_BASE}/api/stream/play/${cinemacityData.cinemacity_id}?${params.toString()}`;
+  }, [cinemacityData, streamInfo, currentSeason, currentEpisode, currentServer]);
 
   useEffect(() => {
     if (!streamUrl || !videoRef.current) return;
@@ -319,8 +346,15 @@ export function PlayerModal() {
     }
   };
 
+  // PATCH 5: Handler untuk ganti server
+  const handleServerChange = (serverId: string) => {
+    setCurrentServer(serverId);
+  };
+
   const episodes = streamInfo?.episodes || [];
   const subtitles = streamInfo?.subtitles || [];
+  // PATCH 5: Get servers list
+  const servers = streamInfo?.servers || [];
 
   const seasons = useMemo(() => {
     const set = new Set<string>();
@@ -347,6 +381,8 @@ export function PlayerModal() {
 
   // FIX: Hanya tampilkan settings jika ada pilihan Audio (>1) atau Quality (>1)
   const hasSettings = audioTracks.length > 1 || qualityLevels.length > 1;
+  // PATCH 5: Cek apakah ada multiple servers
+  const hasMultipleServers = servers.length > 1;
 
   if (!playerMedia) return null;
 
@@ -486,6 +522,34 @@ export function PlayerModal() {
                 )}
               </div>
             )}
+          </div>
+        )}
+
+        {/* PATCH 5: Server Selector (untuk film multi-server) */}
+        {!loading && !error && hasMultipleServers && (
+          <div className="flex flex-wrap items-center gap-2 border-t border-white/10 bg-zinc-950 p-3">
+            <span className="flex items-center gap-1 text-xs font-medium text-white/60">
+              <Server className="h-3 w-3" /> Server:
+            </span>
+            <Select value={currentServer} onValueChange={handleServerChange}>
+              <SelectTrigger className="h-8 w-full max-w-xs shrink-0 border-white/20 bg-zinc-900 text-xs text-white sm:w-72">
+                <SelectValue placeholder="Pilih server" />
+              </SelectTrigger>
+              <SelectContent>
+                {servers.map((srv) => (
+                  <SelectItem
+                    key={srv.id}
+                    value={String(srv.id)}
+                    className="text-xs"
+                  >
+                    {srv.title}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <span className="ml-auto text-[10px] text-white/40">
+              {servers.length} server tersedia
+            </span>
           </div>
         )}
 
