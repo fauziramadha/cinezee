@@ -379,7 +379,12 @@ export function DetailModal() {
   };
 
   // ============================================================
-  // Derived
+  // Guard awal — cegah crash saat selectedMedia null
+  // ============================================================
+  if (!selectedMedia) return null;
+
+  // ============================================================
+  // Derived (aman diakses karena selectedMedia sudah pasti tidak null)
   // ============================================================
   const title = content?.title || selectedMedia.title;
   const year = content?.release_year ? String(content.release_year) : "";
@@ -415,8 +420,6 @@ export function DetailModal() {
     }
     return [];
   }, [content?.recommendations]);
-
-  if (!selectedMedia) return null;
 
   return (
     <>
