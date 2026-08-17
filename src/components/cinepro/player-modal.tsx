@@ -115,6 +115,245 @@ async function getStreamInfo(
 }
 
 // ============================================================
+// VideoPlayer - isolated component with key-based remount
+// ============================================================
+// FIX BUG #1: Component ini di-remount (bukan di-reuse) saat streamUrl berubah.
+// Cara: parent kasih key={streamUrl}. React akan buang instance lama,
+// browser otomatis cleanup video element + HLS instance, lalu buat baru.
+// Tidak ada race condition, tidak ada manual destroy yang bisa stuck.
+
+interface VideoPlayerProps {
+  streamUrl: string;
+  subtitles: StreamInfo["subtitles"];
+  defaultSubtitleIdx: number;
+  onManifestParsed: (hls: Hls) => void;
+  onError: (msg: string) => void;
+}
+
+function VideoPlayer({
+  streamUrl,
+  subtitles,
+  defaultSubtitleIdx,
+  onManifestParsed,
+  onError,
+}: VideoPlayerProps) {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const hlsRef = useRef<Hls | null>(null);
+  const [audioTracks, setAudioTracks] = useState<Hls.AudioTrack[]>([]);
+  const [currentAudioTrack, setCurrentAudioTrack] = useState<number>(-1);
+  const [qualityLevels, setQualityLevels] = useState<Hls.Level[]>([]);
+  const [currentQuality, setCurrentQuality] = useState<number>(-1);
+  const [showSettings, setShowSettings] = useState(false);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    // FIX BUG #1: Tidak perlu cleanup instance lama - component di-remount via key
+    // Jadi di sini pasti video element baru + hlsRef null
+    if (Hls.isSupported()) {
+      const hls = new Hls({
+        enableWorker: true,
+        lowLatencyMode: false,
+        startLevel: -1,
+        maxBufferLength: 30,
+        maxMaxBufferLength: 60,
+        fragLoadingMaxRetry: 6,
+        fragLoadingRetryDelay: 500,
+        manifestLoadingMaxRetry: 4,
+        levelLoadingMaxRetry: 4,
+      });
+
+      hlsRef.current = hls;
+
+      hls.loadSource(streamUrl);
+      hls.attachMedia(video);
+
+      hls.on(Hls.Events.MANIFEST_PARSED, () => {
+        video.play().catch(() => {});
+        onManifestParsed(hls);
+
+        setAudioTracks(hls.audioTracks || []);
+        const indoTrack = (hls.audioTracks || []).findIndex(
+          (t) =>
+            t.name?.toLowerCase().includes("indonesia") ||
+            t.lang?.toLowerCase().includes("id")
+        );
+        if (indoTrack >= 0) {
+          hls.audioTrack = indoTrack;
+          setCurrentAudioTrack(indoTrack);
+        }
+
+        setQualityLevels(hls.levels || []);
+        setCurrentQuality(-1);
+      });
+
+      hls.on(Hls.Events.AUDIO_TRACKS_UPDATED, () => {
+        setAudioTracks(hls.audioTracks || []);
+      });
+
+      hls.on(Hls.Events.LEVELS_UPDATED, () => {
+        setQualityLevels(hls.levels || []);
+      });
+
+      hls.on(Hls.Events.ERROR, (event, data) => {
+        if (data.fatal) {
+          switch (data.type) {
+            case Hls.ErrorTypes.NETWORK_ERROR:
+              hls.startLoad();
+              break;
+            case Hls.ErrorTypes.MEDIA_ERROR:
+              hls.recoverMediaError();
+              break;
+            default:
+              onError("Stream error. Please try again.");
+              hls.destroy();
+              break;
+          }
+        }
+      });
+    }
+
+    // Cleanup: destroy HLS saat component unmount
+    // Ini aman karena component benar-benar di-buang, bukan di-reuse
+    return () => {
+      if (hlsRef.current) {
+        try {
+          hlsRef.current.destroy();
+        } catch (e) {
+          console.error("HLS destroy on unmount:", e);
+        }
+        hlsRef.current = null;
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Empty deps - only run once on mount
+
+  const handleAudioTrackChange = (trackId: string) => {
+    const idx = parseInt(trackId);
+    if (hlsRef.current) {
+      hlsRef.current.audioTrack = idx;
+      setCurrentAudioTrack(idx);
+    }
+  };
+
+  const handleQualityChange = (levelId: string) => {
+    const idx = parseInt(levelId);
+    if (hlsRef.current) {
+      hlsRef.current.currentLevel = idx;
+      setCurrentQuality(idx);
+    }
+  };
+
+  const hasSettings = audioTracks.length > 1 || qualityLevels.length > 1;
+
+  return (
+    <div className="relative aspect-video w-full bg-black">
+      <video
+        ref={videoRef}
+        className="h-full w-full"
+        controls
+        autoPlay
+        playsInline
+        referrerPolicy="no-referrer"
+        crossOrigin="anonymous"
+      >
+        {subtitles.map((sub, idx) => {
+          const isDefault = idx === defaultSubtitleIdx;
+          const isIndo =
+            sub.name.toLowerCase().includes("indonesia") ||
+            sub.name.toLowerCase().includes("malay");
+          const subUrl = `${VPS_API_BASE}/api/subtitle?url=${encodeURIComponent(sub.url)}`;
+          return (
+            <track
+              key={`${sub.url}-${idx}`}
+              kind="subtitles"
+              src={subUrl}
+              srcLang={isIndo ? "id" : "en"}
+              label={sub.name}
+              default={isDefault}
+            />
+          );
+        })}
+      </video>
+
+      {hasSettings && (
+        <div className="absolute right-12 top-2 z-30">
+          <button
+            onClick={() => setShowSettings(!showSettings)}
+            className="flex h-8 w-8 items-center justify-center rounded-full bg-black/50 text-white backdrop-blur-sm transition hover:bg-black/70"
+            aria-label="Settings"
+          >
+            <Settings className="h-4 w-4" />
+          </button>
+
+          {showSettings && (
+            <div className="absolute top-10 right-0 flex flex-col gap-2 rounded-lg bg-black/90 p-3 backdrop-blur-md">
+              {audioTracks.length > 1 && (
+                <div className="flex flex-col gap-1">
+                  <label className="flex items-center gap-1 text-[10px] text-white/60">
+                    <Volume2 className="h-3 w-3" /> Audio
+                  </label>
+                  <Select
+                    value={String(currentAudioTrack)}
+                    onValueChange={handleAudioTrackChange}
+                  >
+                    <SelectTrigger className="h-7 w-40 border-white/20 bg-zinc-900 text-xs text-white">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {audioTracks.map((track, idx) => (
+                        <SelectItem
+                          key={idx}
+                          value={String(idx)}
+                          className="text-xs"
+                        >
+                          {track.name || track.lang || `Track ${idx + 1}`}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+
+              {qualityLevels.length > 1 && (
+                <div className="flex flex-col gap-1">
+                  <label className="text-[10px] text-white/60">
+                    Quality
+                  </label>
+                  <Select
+                    value={String(currentQuality)}
+                    onValueChange={handleQualityChange}
+                  >
+                    <SelectTrigger className="h-7 w-40 border-white/20 bg-zinc-900 text-xs text-white">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="-1" className="text-xs">
+                        Auto
+                      </SelectItem>
+                      {qualityLevels.map((level, idx) => (
+                        <SelectItem
+                          key={idx}
+                          value={String(idx)}
+                          className="text-xs"
+                        >
+                          {level.height}p
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ============================================================
 // PLAYER MODAL
 // ============================================================
 export function PlayerModal() {
@@ -141,13 +380,7 @@ export function PlayerModal() {
   const [currentEpisode, setCurrentEpisode] = useState<string>("");
   const [currentServer, setCurrentServer] = useState<string>("");
 
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const hlsRef = useRef<Hls | null>(null);
-  const [audioTracks, setAudioTracks] = useState<Hls.AudioTrack[]>([]);
-  const [currentAudioTrack, setCurrentAudioTrack] = useState<number>(-1);
-  const [qualityLevels, setQualityLevels] = useState<Hls.Level[]>([]);
-  const [currentQuality, setCurrentQuality] = useState<number>(-1);
-  const [showSettings, setShowSettings] = useState(false);
+  const videoTimeRef = useRef<{ id: string | number; currentTime: number; duration: number } | null>(null);
 
   // === Initial load (modal open) ===
   useEffect(() => {
@@ -219,7 +452,7 @@ export function PlayerModal() {
     };
   }, [playerMedia]);
 
-  // === FIX BUG #2: Refetch streamInfo saat ganti episode (untuk subtitle per-episode) ===
+  // === Refetch streamInfo saat ganti episode (untuk subtitle per-episode) ===
   useEffect(() => {
     if (!cinemacityData || !streamInfo) return;
     if (cinemacityData.type !== "tv") return;
@@ -228,6 +461,7 @@ export function PlayerModal() {
     let cancelled = false;
 
     async function refetchSubtitles() {
+      setSwitching(true);
       try {
         const freshInfo = await getStreamInfo(
           cinemacityData.cinemacity_id,
@@ -235,7 +469,6 @@ export function PlayerModal() {
           currentEpisode
         );
         if (cancelled) return;
-        // Update subtitles + episodes (preserve servers)
         setStreamInfo((prev) =>
           prev
             ? {
@@ -247,6 +480,8 @@ export function PlayerModal() {
         );
       } catch (e) {
         console.error("Refetch subtitles failed:", e);
+      } finally {
+        if (!cancelled) setSwitching(false);
       }
     }
 
@@ -278,145 +513,21 @@ export function PlayerModal() {
     return `${VPS_API_BASE}/api/stream/play/${cinemacityData.cinemacity_id}?${params.toString()}`;
   }, [cinemacityData, streamInfo, currentSeason, currentEpisode, currentServer]);
 
-  // === FIX BUG #1: HLS cleanup yang aman saat ganti server/episode ===
+  // FIX BUG #1: Tandai switching saat streamUrl berubah (ganti server/episode)
+  // VideoPlayer akan di-remount via key, jadi tidak perlu manual HLS cleanup
   useEffect(() => {
-    if (!streamUrl || !videoRef.current) return;
-
-    const video = videoRef.current;
-
-    // Tandai sedang switching (untuk loading indicator)
-    setSwitching(true);
-
-    // Cleanup instance lama dengan benar
-    const oldHls = hlsRef.current;
-    if (oldHls) {
-      try {
-        oldHls.detachMedia();
-        oldHls.destroy();
-      } catch (e) {
-        console.error("HLS destroy error:", e);
-      }
-      hlsRef.current = null;
+    if (streamUrl) {
+      setSwitching(true);
     }
-
-    // Reset video element
-    try {
-      video.removeAttribute("src");
-      video.load();
-    } catch (e) {}
-
-    // Beri delay kecil supaya cleanup selesai sebelum instance baru dibuat
-    const initTimer = setTimeout(() => {
-      if (Hls.isSupported()) {
-        const hls = new Hls({
-          enableWorker: true,
-          lowLatencyMode: false,
-          startLevel: -1,
-          maxBufferLength: 30,
-          maxMaxBufferLength: 60,
-          fragLoadingMaxRetry: 6,
-          fragLoadingRetryDelay: 500,
-          manifestLoadingMaxRetry: 4,
-          levelLoadingMaxRetry: 4,
-        });
-
-        hlsRef.current = hls;
-
-        hls.loadSource(streamUrl);
-        hls.attachMedia(video);
-
-        hls.on(Hls.Events.MANIFEST_PARSED, () => {
-          video.play().catch(() => {});
-          setSwitching(false);
-
-          setAudioTracks(hls.audioTracks || []);
-          const indoTrack = (hls.audioTracks || []).findIndex(
-            (t) =>
-              t.name?.toLowerCase().includes("indonesia") ||
-              t.lang?.toLowerCase().includes("id")
-          );
-          if (indoTrack >= 0) {
-            hls.audioTrack = indoTrack;
-            setCurrentAudioTrack(indoTrack);
-          }
-
-          setQualityLevels(hls.levels || []);
-          setCurrentQuality(-1);
-        });
-
-        hls.on(Hls.Events.AUDIO_TRACKS_UPDATED, () => {
-          setAudioTracks(hls.audioTracks || []);
-        });
-
-        hls.on(Hls.Events.LEVELS_UPDATED, () => {
-          setQualityLevels(hls.levels || []);
-        });
-
-        hls.on(Hls.Events.ERROR, (event, data) => {
-          if (data.fatal) {
-            switch (data.type) {
-              case Hls.ErrorTypes.NETWORK_ERROR:
-                hls.startLoad();
-                break;
-              case Hls.ErrorTypes.MEDIA_ERROR:
-                hls.recoverMediaError();
-                break;
-              default:
-                setError("Stream error. Please try again.");
-                setSwitching(false);
-                hls.destroy();
-                break;
-            }
-          }
-        });
-      } else {
-        setSwitching(false);
-      }
-    }, 150);
-
-    return () => {
-      clearTimeout(initTimer);
-      if (hlsRef.current) {
-        try {
-          hlsRef.current.destroy();
-        } catch (e) {}
-        hlsRef.current = null;
-      }
-    };
   }, [streamUrl]);
 
-  useEffect(() => {
-    const video = videoRef.current;
-    if (!video || !playerMedia) return;
-
-    const handleTimeUpdate = () => {
-      if (video.currentTime > 0 && video.duration > 0) {
-        updateHistoryProgress(
-          playerMedia.id,
-          video.currentTime,
-          video.duration
-        );
-      }
-    };
-
-    video.addEventListener("timeupdate", handleTimeUpdate);
-    return () => video.removeEventListener("timeupdate", handleTimeUpdate);
-  }, [playerMedia, updateHistoryProgress, streamUrl]);
-
-  const handleAudioTrackChange = (trackId: string) => {
-    const idx = parseInt(trackId);
-    if (hlsRef.current) {
-      hlsRef.current.audioTrack = idx;
-      setCurrentAudioTrack(idx);
-    }
+  const handleManifestParsed = () => {
+    setSwitching(false);
   };
 
-  const handleQualityChange = (levelId: string) => {
-    const idx = parseInt(levelId);
-    if (hlsRef.current) {
-      hlsRef.current.currentLevel = idx;
-      setCurrentQuality(idx);
-    }
+  const handlePlayerError = (msg: string) => {
+    setError(msg);
+    setSwitching(false);
   };
 
   const handleServerChange = (serverId: string) => {
@@ -450,10 +561,9 @@ export function PlayerModal() {
     );
   }, [currentSeasonEpisodes, currentEpisode]);
 
-  const hasSettings = audioTracks.length > 1 || qualityLevels.length > 1;
   const hasMultipleServers = servers.length > 1;
 
-  // FIX: Pilih subtitle default — prefer Indonesia, fallback ke English Full, fallback ke pertama
+  // Pilih subtitle default — prefer Indonesia, fallback ke English Full, fallback ke pertama
   const defaultSubtitleIdx = useMemo(() => {
     if (subtitles.length === 0) return -1;
     const indoIdx = subtitles.findIndex(
@@ -509,114 +619,24 @@ export function PlayerModal() {
 
         {!loading && !error && streamUrl && (
           <div className="relative aspect-video w-full bg-black">
-            <video
-              ref={videoRef}
-              className="h-full w-full"
-              controls
-              autoPlay
-              playsInline
-              referrerPolicy="no-referrer"
-              crossOrigin="anonymous"
-            >
-              {subtitles.map((sub, idx) => {
-                const isDefault = idx === defaultSubtitleIdx;
-                const isIndo =
-                  sub.name.toLowerCase().includes("indonesia") ||
-                  sub.name.toLowerCase().includes("malay");
-                const subUrl = `${VPS_API_BASE}/api/subtitle?url=${encodeURIComponent(sub.url)}`;
-                return (
-                  <track
-                    key={`${sub.url}-${idx}`}
-                    kind="subtitles"
-                    src={subUrl}
-                    srcLang={isIndo ? "id" : "en"}
-                    label={sub.name}
-                    default={isDefault}
-                  />
-                );
-              })}
-            </video>
+            {/* FIX BUG #1: key={streamUrl} forces React to remount VideoPlayer component
+                setiap kali streamUrl berubah. Tidak ada manual HLS cleanup yang bisa stuck. */}
+            <VideoPlayer
+              key={streamUrl}
+              streamUrl={streamUrl}
+              subtitles={subtitles}
+              defaultSubtitleIdx={defaultSubtitleIdx}
+              onManifestParsed={handleManifestParsed}
+              onError={handlePlayerError}
+            />
 
-            {/* FIX BUG #1: Switching indicator saat ganti server/episode */}
+            {/* Switching indicator */}
             {switching && (
-              <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+              <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center bg-black/60 backdrop-blur-sm">
                 <div className="flex flex-col items-center gap-2">
                   <Loader2 className="h-8 w-8 animate-spin text-white" />
                   <p className="text-xs text-white/70">Switching...</p>
                 </div>
-              </div>
-            )}
-
-            {hasSettings && (
-              <div className="absolute right-12 top-2 z-30">
-                <button
-                  onClick={() => setShowSettings(!showSettings)}
-                  className="flex h-8 w-8 items-center justify-center rounded-full bg-black/50 text-white backdrop-blur-sm transition hover:bg-black/70"
-                  aria-label="Settings"
-                >
-                  <Settings className="h-4 w-4" />
-                </button>
-
-                {showSettings && (
-                  <div className="absolute top-10 right-0 flex flex-col gap-2 rounded-lg bg-black/90 p-3 backdrop-blur-md">
-                    {audioTracks.length > 1 && (
-                      <div className="flex flex-col gap-1">
-                        <label className="flex items-center gap-1 text-[10px] text-white/60">
-                          <Volume2 className="h-3 w-3" /> Audio
-                        </label>
-                        <Select
-                          value={String(currentAudioTrack)}
-                          onValueChange={handleAudioTrackChange}
-                        >
-                          <SelectTrigger className="h-7 w-40 border-white/20 bg-zinc-900 text-xs text-white">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {audioTracks.map((track, idx) => (
-                              <SelectItem
-                                key={idx}
-                                value={String(idx)}
-                                className="text-xs"
-                              >
-                                {track.name || track.lang || `Track ${idx + 1}`}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    )}
-
-                    {qualityLevels.length > 1 && (
-                      <div className="flex flex-col gap-1">
-                        <label className="text-[10px] text-white/60">
-                          Quality
-                        </label>
-                        <Select
-                          value={String(currentQuality)}
-                          onValueChange={handleQualityChange}
-                        >
-                          <SelectTrigger className="h-7 w-40 border-white/20 bg-zinc-900 text-xs text-white">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="-1" className="text-xs">
-                              Auto
-                            </SelectItem>
-                            {qualityLevels.map((level, idx) => (
-                              <SelectItem
-                                key={idx}
-                                value={String(idx)}
-                                className="text-xs"
-                              >
-                                {level.height}p
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    )}
-                  </div>
-                )}
               </div>
             )}
           </div>
