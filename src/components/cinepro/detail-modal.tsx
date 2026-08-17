@@ -379,19 +379,17 @@ export function DetailModal() {
   };
 
   // ============================================================
-  // Guard awal — cegah crash saat selectedMedia null
+  // Derived (use optional chaining — aman saat selectedMedia null)
+  // NOTE: JANGAN taruh `if (!selectedMedia) return null;` di sini,
+  // karena useMemo di bawah harus selalu dipanggil (Rules of Hooks).
+  // Guard ada di akhir, setelah semua hook selesai.
   // ============================================================
-  if (!selectedMedia) return null;
-
-  // ============================================================
-  // Derived (aman diakses karena selectedMedia sudah pasti tidak null)
-  // ============================================================
-  const title = content?.title || selectedMedia.title;
+  const title = content?.title || selectedMedia?.title || "Untitled";
   const year = content?.release_year ? String(content.release_year) : "";
   const ratingNum = content?.rating ? parseFloat(String(content.rating)) : 0;
   const rating = ratingNum > 0 ? ratingNum.toFixed(1) : "N/A";
   const overview = content?.description || "No overview available.";
-  const isTV = (content?.type || selectedMedia.type) === "tv";
+  const isTV = (content?.type || selectedMedia?.type) === "tv";
 
   const allEpisodes = useMemo(
     () => parseEpisodes(content?.stream_data || null),
@@ -420,6 +418,9 @@ export function DetailModal() {
     }
     return [];
   }, [content?.recommendations]);
+
+  // Guard setelah semua hook selesai — aman, tidak melanggar Rules of Hooks
+  if (!selectedMedia) return null;
 
   return (
     <>
