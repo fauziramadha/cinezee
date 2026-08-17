@@ -186,6 +186,24 @@ function VideoPlayer({
 
         setQualityLevels(hls.levels || []);
         setCurrentQuality(-1);
+
+        // FIX: Force enable default subtitle via TextTracks API
+        // HTML <track default> tidak reliable di React - perlu set mode 'showing' manual
+        if (defaultSubtitleIdx >= 0) {
+          const enableDefaultSub = () => {
+            const tracks = video.textTracks;
+            if (tracks && tracks.length > defaultSubtitleIdx) {
+              // Disable semua dulu, lalu enable yang default
+              for (let i = 0; i < tracks.length; i++) {
+                tracks[i].mode = i === defaultSubtitleIdx ? "showing" : "disabled";
+              }
+            }
+          };
+          // Coba langsung, dan juga setelah delay (track belum tentu sudah load)
+          enableDefaultSub();
+          setTimeout(enableDefaultSub, 500);
+          setTimeout(enableDefaultSub, 1500);
+        }
       });
 
       hls.on(Hls.Events.AUDIO_TRACKS_UPDATED, () => {
@@ -256,7 +274,6 @@ function VideoPlayer({
         autoPlay
         playsInline
         referrerPolicy="no-referrer"
-        crossOrigin="anonymous"
       >
         {subtitles.map((sub, idx) => {
           const isDefault = idx === defaultSubtitleIdx;
