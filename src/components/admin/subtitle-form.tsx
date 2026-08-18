@@ -1,10 +1,10 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Loader2, Upload } from "lucide-react";
+import { Loader2, Upload, FileText } from "lucide-react";
 import { saveSubtitle } from "@/lib/admin-api";
 import type { MediaResult } from "./subtitle-search";
 
@@ -28,8 +28,9 @@ export function SubtitleForm({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [fileName, setFileName] = useState("");
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Auto-fill dari media yang dipilih (struktur MediaResult baru)
   useEffect(() => {
     if (selectedMedia) {
       setTitle(selectedMedia.title || "");
@@ -42,6 +43,7 @@ export function SubtitleForm({
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    setFileName(file.name);
     const reader = new FileReader();
     reader.onload = (event) => {
       const text = event.target?.result as string;
@@ -54,6 +56,11 @@ export function SubtitleForm({
       if (!releaseName) setReleaseName(file.name.replace(/\.(srt|vtt|txt)$/i, ""));
     };
     reader.readAsText(file);
+  };
+
+  // FIX: Trigger file input via button (iOS Safari compatible)
+  const handleBrowseClick = () => {
+    fileInputRef.current?.click();
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -82,6 +89,7 @@ export function SubtitleForm({
         setSuccess(result.message || "Subtitle saved");
         setSubtitleText(""); setReleaseName(""); setOffsetSeconds("");
         setSeason(""); setEpisode(""); setQuality("");
+        setFileName("");
         onSaved();
       } else {
         setError(result.error || "Failed to save");
@@ -171,12 +179,34 @@ export function SubtitleForm({
         </div>
       </div>
 
+      {/* FIX: Native file input + button trigger (iOS Safari compatible) */}
       <div>
-        <Label htmlFor="file">Upload .srt File</Label>
-        <Input id="file" type="file" accept="*/*" onChange={handleFileUpload} className="cursor-pointer" />
-        <p className="mt-1 text-xs text-muted-foreground">
-          Atau paste SRT text langsung di bawah.
-        </p>
+        <Label>Pilih File .srt / .vtt</Label>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".srt,.vtt,text/plain"
+          onChange={handleFileUpload}
+          className="sr-only"
+          tabIndex={-1}
+        />
+        <button
+          type="button"
+          onClick={handleBrowseClick}
+          className="mt-1 flex w-full items-center gap-3 rounded-md border border-dashed border-input bg-background px-4 py-3 text-left transition hover:bg-muted/50"
+        >
+          <div className="flex h-10 w-10 items-center justify-center rounded-md bg-muted">
+            {fileName ? <FileText className="h-5 w-5 text-primary" /> : <Upload className="h-5 w-5 text-muted-foreground" />}
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-sm font-medium">
+              {fileName || "Klik untuk pilih file .srt / .vtt"}
+            </p>
+            <p className="text-xs text-muted-foreground">
+              {fileName ? "File dipilih. Bisa juga paste text langsung di bawah." : "Atau paste SRT text langsung di bawah."}
+            </p>
+          </div>
+        </button>
       </div>
 
       <div>
