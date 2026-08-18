@@ -89,6 +89,18 @@ export async function getManualSubtitle(params: {
 }
 
 // ============================================================
+// GET by ID - untuk edit mode (FIX C: tambah function ini)
+// ============================================================
+export async function getManualSubtitleById(id: number): Promise<ManualSubtitle | null> {
+  const d1 = await getD1();
+  const result = await d1
+    .prepare(`SELECT * FROM manual_subtitles WHERE id = ?`)
+    .bind(id)
+    .first<ManualSubtitle>();
+  return result || null;
+}
+
+// ============================================================
 // UPSERT
 // ============================================================
 export async function upsertManualSubtitle(data: {
@@ -170,13 +182,10 @@ export async function deleteManualSubtitle(id: number): Promise<void> {
 
 // ============================================================
 // APPLY OFFSET: geser semua timestamp di SRT/VTT
-// offset_ms > 0 → subtitle mundur (delay, kalau subtitle terlalu cepat)
-// offset_ms < 0 → subtitle maju (advance, kalau subtitle terlalu lambat)
 // ============================================================
 export function applySubtitleOffset(text: string, offsetMs: number): string {
   if (!offsetMs || offsetMs === 0) return text;
 
-  // Pattern: HH:MM:SS,mmm (SRT) atau HH:MM:SS.mmm (VTT)
   const timestampPattern = /(\d{2}):(\d{2}):(\d{2})[.,](\d{3})/g;
 
   return text.replace(timestampPattern, (match, h, m, s, ms) => {
@@ -187,14 +196,13 @@ export function applySubtitleOffset(text: string, offsetMs: number): string {
       Number(ms) +
       offsetMs;
 
-    if (totalMs < 0) return "00:00:00,000"; // jangan negatif
+    if (totalMs < 0) return "00:00:00,000";
 
     const newH = Math.floor(totalMs / 3600000);
     const newM = Math.floor((totalMs % 3600000) / 60000);
     const newS = Math.floor((totalMs % 60000) / 1000);
     const newMs = totalMs % 1000;
 
-    // Preserve separator (, untuk SRT, . untuk VTT)
     const separator = match.includes(",") ? "," : ".";
     return (
       String(newH).padStart(2, "0") + ":" +
