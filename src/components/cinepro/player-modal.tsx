@@ -18,18 +18,11 @@ import {
 } from "@/components/ui/select";
 import { useAppStore } from "@/lib/store";
 
-// ============================================================
-// Config
-// ============================================================
 const VPS_API_BASE =
   process.env.NEXT_PUBLIC_API_URL || "https://api.cinestream.my.id";
 
-// FIX: Timeout untuk switching state - kalau manifest tidak parse dalam 12 detik, anggap stuck
 const SWITCHING_TIMEOUT_MS = 12000;
 
-// ============================================================
-// Types
-// ============================================================
 interface ServerInfo {
   id: number;
   title: string;
@@ -58,9 +51,14 @@ interface StreamInfo {
   expires_at: string;
 }
 
-// ============================================================
-// Helpers
-// ============================================================
+// FIX B: Subtitle source - bisa dari manual (admin upload) atau dari cinemacity
+interface SubtitleTrack {
+  name: string;
+  url: string;        // Full URL ke subtitle proxy
+  isManual: boolean;  // true kalau dari admin upload
+  isIndo: boolean;
+}
+
 async function findCinemacityContent(
   media: any
 ): Promise<{ cinemacity_id: string; slug: string; type: string } | null> {
@@ -117,17 +115,47 @@ async function getStreamInfo(
   return data.data;
 }
 
-// ============================================================
-// VideoPlayer - isolated component with key-based remount
-// ============================================================
-// FIX BUG #1: Component ini di-remount (bukan di-reuse) saat streamUrl berubah.
-// Cara: parent kasih key={streamUrl}. React akan buang instance lama,
-// browser otomatis cleanup video element + HLS instance, lalu buat baru.
-// Tidak ada race condition, tidak ada manual destroy yang bisa stuck.
+// FIX B: Check manual subtitle di /api/subtitle/manual
+// Return null kalau tidak ada, return SubtitleTrack kalau ada
+async function checkManualSubtitle(
+  title: string,
+  type: string,
+  season?: string,
+  episode?: string
+): Promise<SubtitleTrack | null> {
+  try {
+    const params = new URLSearchParams({
+      title,
+      type,
+      format: "vtt",
+    });
+    if (season) params.set("season", season);
+    if (episode) params.set("episode", episode);
+
+    const url = `/api/subtitle/manual?${params.toString()}`;
+    const res = await fetch(url, { method: "HEAD" });
+    if (res.ok) {
+      // Cek header X-Subtitle-Source untuk konfirmasi
+      const source = res.headers.get("X-Subtitle-Source");
+      if (source === "manual") {
+        return {
+          name: "Indonesia (Manual)",
+          url: url,
+          isManual: true,
+          isIndo: true,
+        };
+      }
+    }
+    return null;
+  } catch (e) {
+    console.error("Check manual subtitle failed:", e);
+    return null;
+  }
+}
 
 interface VideoPlayerProps {
   streamUrl: string;
-  subtitles: StreamInfo["subtitles"];
+  subtitles: SubtitleTrack[];
   defaultSubtitleIdx: number;
   onSwitchingChange: (switching: boolean) => void;
   onError: (msg: string) => void;
@@ -150,7 +178,6 @@ function VideoPlayer({
   const [currentQuality, setCurrentQuality] = useState<number>(-1);
   const [showSettings, setShowSettings] = useState(false);
 
-  // Stable callback untuk reset switching
   const handleSwitchingDone = useCallback(() => {
     onSwitchingChange(false);
     if (timeoutRef.current) {
@@ -163,12 +190,10 @@ function VideoPlayer({
     const video = videoRef.current;
     if (!video) return;
 
-    // FIX: Tandai switching=true saat mulai load
     onSwitchingChange(true);
 
-    // FIX: Timeout fallback - kalau manifest tidak parse dalam 12 detik, anggap stuck
     timeoutRef.current = setTimeout(() => {
-      console.error("[Player] Switching timeout - manifest not parsed in 12s");
+      console.error("[Player] Switching timeout");
       onError("Loading terlalu lama. Coba server/episode lain atau refresh halaman.");
       handleSwitchingDone();
     }, SWITCHING_TIMEOUT_MS);
@@ -188,14 +213,11 @@ function VideoPlayer({
       });
 
       hlsRef.current = hls;
-
       hls.loadSource(streamUrl);
       hls.attachMedia(video);
 
       hls.on(Hls.Events.MANIFEST_PARSED, () => {
-        // FIX: Manifest parsed = switching selesai
         handleSwitchingDone();
-
         video.play().catch(() => {});
 
         setAudioTracks(hls.audioTracks || []);
@@ -212,7 +234,6 @@ function VideoPlayer({
         setQualityLevels(hls.levels || []);
         setCurrentQuality(-1);
 
-        // FIX: Force enable default subtitle via TextTracks API
         if (defaultSubtitleIdx >= 0) {
           const enableDefaultSub = () => {
             const tracks = video.textTracks;
@@ -239,22 +260,16 @@ function VideoPlayer({
 
       hls.on(Hls.Events.ERROR, (event, data) => {
         if (data.fatal) {
-          // FIX: Semua fatal error reset switching state
           handleSwitchingDone();
-
           switch (data.type) {
             case Hls.ErrorTypes.NETWORK_ERROR:
-              // Coba retry satu kali, kalau masih gagal show error
-              console.warn("[Player] Network error, retrying...", data.details);
               hls.startLoad();
-              // Set timeout lagi untuk retry
               timeoutRef.current = setTimeout(() => {
                 onError("Network error. Coba server/episode lain.");
                 hls.destroy();
               }, 8000);
               break;
             case Hls.ErrorTypes.MEDIA_ERROR:
-              console.warn("[Player] Media error, recovering...", data.details);
               hls.recoverMediaError();
               timeoutRef.current = setTimeout(() => {
                 onError("Media error. Coba server/episode lain.");
@@ -270,7 +285,6 @@ function VideoPlayer({
       });
     }
 
-    // Cleanup: destroy HLS + clear timers saat component unmount
     return () => {
       if (timeoutRef.current) {
         clearTimeout(timeoutRef.current);
@@ -289,7 +303,7 @@ function VideoPlayer({
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // Empty deps - only run once on mount
+  }, []);
 
   const handleAudioTrackChange = (trackId: string) => {
     const idx = parseInt(trackId);
@@ -321,16 +335,12 @@ function VideoPlayer({
       >
         {subtitles.map((sub, idx) => {
           const isDefault = idx === defaultSubtitleIdx;
-          const isIndo =
-            sub.name.toLowerCase().includes("indonesia") ||
-            sub.name.toLowerCase().includes("malay");
-          const subUrl = `${VPS_API_BASE}/api/subtitle?url=${encodeURIComponent(sub.url)}`;
           return (
             <track
               key={`${sub.url}-${idx}`}
               kind="subtitles"
-              src={subUrl}
-              srcLang={isIndo ? "id" : "en"}
+              src={sub.url}
+              srcLang={sub.isIndo ? "id" : "en"}
               label={sub.name}
               default={isDefault}
             />
@@ -412,9 +422,6 @@ function VideoPlayer({
   );
 }
 
-// ============================================================
-// PLAYER MODAL
-// ============================================================
 export function PlayerModal() {
   const {
     playerMedia,
@@ -439,7 +446,9 @@ export function PlayerModal() {
   const [currentEpisode, setCurrentEpisode] = useState<string>("");
   const [currentServer, setCurrentServer] = useState<string>("");
 
-  // === Initial load (modal open) ===
+  // FIX B: State untuk manual subtitle (dari admin upload)
+  const [manualSubtitle, setManualSubtitle] = useState<SubtitleTrack | null>(null);
+
   useEffect(() => {
     if (!playerMedia) {
       setStreamInfo(null);
@@ -447,6 +456,7 @@ export function PlayerModal() {
       setError(null);
       setLoading(true);
       setCurrentServer("");
+      setManualSubtitle(null);
       return;
     }
 
@@ -509,8 +519,7 @@ export function PlayerModal() {
     };
   }, [playerMedia]);
 
-  // === Refetch streamInfo saat ganti episode (untuk subtitle per-episode) ===
-  // FIX: Tidak set switching di sini - biar VideoPlayer yang handle via onSwitchingChange
+  // FIX B: Refetch streamInfo + check manual subtitle saat ganti episode
   useEffect(() => {
     if (!cinemacityData || !streamInfo) return;
     if (cinemacityData.type !== "tv") return;
@@ -548,7 +557,34 @@ export function PlayerModal() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentSeason, currentEpisode]);
 
-  // Build stream URL
+  // FIX B: Check manual subtitle saat streamInfo berubah atau episode berubah
+  useEffect(() => {
+    if (!streamInfo?.content?.title) {
+      setManualSubtitle(null);
+      return;
+    }
+
+    let cancelled = false;
+
+    async function checkManual() {
+      const manual = await checkManualSubtitle(
+        streamInfo!.content.title,
+        streamInfo!.content.type,
+        currentSeason || undefined,
+        currentEpisode || undefined
+      );
+      if (cancelled) return;
+      setManualSubtitle(manual);
+    }
+
+    checkManual();
+
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [streamInfo, currentSeason, currentEpisode]);
+
   const streamUrl = useMemo(() => {
     if (!cinemacityData || !streamInfo) return "";
 
@@ -568,8 +604,6 @@ export function PlayerModal() {
     return `${VPS_API_BASE}/api/stream/play/${cinemacityData.cinemacity_id}?${params.toString()}`;
   }, [cinemacityData, streamInfo, currentSeason, currentEpisode, currentServer]);
 
-  // FIX: VideoPlayer handle switching state sendiri via onSwitchingChange callback
-  // Hapus useEffect [streamUrl] yang set switching=true (caused race condition)
   const handleSwitchingChange = useCallback((isSwitching: boolean) => {
     setSwitching(isSwitching);
   }, []);
@@ -580,12 +614,12 @@ export function PlayerModal() {
   }, []);
 
   const handleServerChange = (serverId: string) => {
-    setError(null); // Clear error saat ganti server
+    setError(null);
     setCurrentServer(serverId);
   };
 
   const handleEpisodeChange = (episode: string) => {
-    setError(null); // Clear error saat ganti episode
+    setError(null);
     setCurrentEpisode(episode);
   };
 
@@ -597,8 +631,32 @@ export function PlayerModal() {
   };
 
   const episodes = streamInfo?.episodes || [];
-  const subtitles = streamInfo?.subtitles || [];
+  const vpsSubtitles = streamInfo?.subtitles || [];
   const servers = streamInfo?.servers || [];
+
+  // FIX B: Combine manual subtitle (PRIORITY) + VPS subtitles
+  // Manual subtitle selalu di index 0, jadi jadi default
+  const subtitles: SubtitleTrack[] = useMemo(() => {
+    const combined: SubtitleTrack[] = [];
+
+    if (manualSubtitle) {
+      combined.push(manualSubtitle);
+    }
+
+    vpsSubtitles.forEach((s) => {
+      const isIndo =
+        s.name.toLowerCase().includes("indonesia") ||
+        s.name.toLowerCase().includes("malay");
+      combined.push({
+        name: s.name + (manualSubtitle ? "" : ""),
+        url: `${VPS_API_BASE}/api/subtitle?url=${encodeURIComponent(s.url)}`,
+        isManual: false,
+        isIndo,
+      });
+    });
+
+    return combined;
+  }, [manualSubtitle, vpsSubtitles]);
 
   const seasons = useMemo(() => {
     const set = new Set<string>();
@@ -618,23 +676,26 @@ export function PlayerModal() {
 
   const hasMultipleServers = servers.length > 1;
 
-  // Pilih subtitle default — prefer Indonesia, fallback ke English Full, fallback ke pertama
+  // FIX B: Default subtitle - kalau ada manual, pakai manual (idx 0)
+  // Kalau tidak, prefer Indonesia, fallback English Full, fallback pertama
   const defaultSubtitleIdx = useMemo(() => {
     if (subtitles.length === 0) return -1;
+    if (manualSubtitle) return 0; // Manual selalu default
+
     const indoIdx = subtitles.findIndex(
-      (s) =>
-        s.name.toLowerCase().includes("indonesia") ||
-        s.name.toLowerCase().includes("malay")
+      (s) => s.isIndo
     );
     if (indoIdx >= 0) return indoIdx;
+
     const englishFullIdx = subtitles.findIndex(
       (s) =>
         s.name.toLowerCase().includes("english") &&
         s.name.toLowerCase().includes("full")
     );
     if (englishFullIdx >= 0) return englishFullIdx;
+
     return 0;
-  }, [subtitles]);
+  }, [subtitles, manualSubtitle]);
 
   if (!playerMedia) return null;
 
@@ -676,7 +737,6 @@ export function PlayerModal() {
                   size="sm"
                   onClick={() => {
                     setError(null);
-                    // Switch to next server
                     const next = (parseInt(currentServer || "0") + 1) % servers.length;
                     handleServerChange(String(next));
                   }}
