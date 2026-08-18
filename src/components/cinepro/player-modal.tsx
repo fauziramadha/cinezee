@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useMemo, useRef } from "react";
+import { useEffect, useState, useMemo, useRef, useCallback } from "react";
 import Hls from "hls.js";
 import { X, AlertCircle, Loader2, Settings, Volume2, Server } from "lucide-react";
 import {
@@ -23,6 +23,9 @@ import { useAppStore } from "@/lib/store";
 // ============================================================
 const VPS_API_BASE =
   process.env.NEXT_PUBLIC_API_URL || "https://api.cinestream.my.id";
+
+// FIX: Timeout untuk switching state - kalau manifest tidak parse dalam 12 detik, anggap stuck
+const SWITCHING_TIMEOUT_MS = 12000;
 
 // ============================================================
 // Types
@@ -126,7 +129,7 @@ interface VideoPlayerProps {
   streamUrl: string;
   subtitles: StreamInfo["subtitles"];
   defaultSubtitleIdx: number;
-  onManifestParsed: (hls: Hls) => void;
+  onSwitchingChange: (switching: boolean) => void;
   onError: (msg: string) => void;
 }
 
@@ -134,23 +137,42 @@ function VideoPlayer({
   streamUrl,
   subtitles,
   defaultSubtitleIdx,
-  onManifestParsed,
+  onSwitchingChange,
   onError,
 }: VideoPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const hlsRef = useRef<Hls | null>(null);
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const subtitleTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
   const [audioTracks, setAudioTracks] = useState<Hls.AudioTrack[]>([]);
   const [currentAudioTrack, setCurrentAudioTrack] = useState<number>(-1);
   const [qualityLevels, setQualityLevels] = useState<Hls.Level[]>([]);
   const [currentQuality, setCurrentQuality] = useState<number>(-1);
   const [showSettings, setShowSettings] = useState(false);
 
+  // Stable callback untuk reset switching
+  const handleSwitchingDone = useCallback(() => {
+    onSwitchingChange(false);
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+      timeoutRef.current = null;
+    }
+  }, [onSwitchingChange]);
+
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
 
-    // FIX BUG #1: Tidak perlu cleanup instance lama - component di-remount via key
-    // Jadi di sini pasti video element baru + hlsRef null
+    // FIX: Tandai switching=true saat mulai load
+    onSwitchingChange(true);
+
+    // FIX: Timeout fallback - kalau manifest tidak parse dalam 12 detik, anggap stuck
+    timeoutRef.current = setTimeout(() => {
+      console.error("[Player] Switching timeout - manifest not parsed in 12s");
+      onError("Loading terlalu lama. Coba server/episode lain atau refresh halaman.");
+      handleSwitchingDone();
+    }, SWITCHING_TIMEOUT_MS);
+
     if (Hls.isSupported()) {
       const hls = new Hls({
         enableWorker: true,
@@ -161,6 +183,7 @@ function VideoPlayer({
         fragLoadingMaxRetry: 6,
         fragLoadingRetryDelay: 500,
         manifestLoadingMaxRetry: 4,
+        manifestLoadingRetryDelay: 500,
         levelLoadingMaxRetry: 4,
       });
 
@@ -170,8 +193,10 @@ function VideoPlayer({
       hls.attachMedia(video);
 
       hls.on(Hls.Events.MANIFEST_PARSED, () => {
+        // FIX: Manifest parsed = switching selesai
+        handleSwitchingDone();
+
         video.play().catch(() => {});
-        onManifestParsed(hls);
 
         setAudioTracks(hls.audioTracks || []);
         const indoTrack = (hls.audioTracks || []).findIndex(
@@ -188,21 +213,19 @@ function VideoPlayer({
         setCurrentQuality(-1);
 
         // FIX: Force enable default subtitle via TextTracks API
-        // HTML <track default> tidak reliable di React - perlu set mode 'showing' manual
         if (defaultSubtitleIdx >= 0) {
           const enableDefaultSub = () => {
             const tracks = video.textTracks;
             if (tracks && tracks.length > defaultSubtitleIdx) {
-              // Disable semua dulu, lalu enable yang default
               for (let i = 0; i < tracks.length; i++) {
                 tracks[i].mode = i === defaultSubtitleIdx ? "showing" : "disabled";
               }
             }
           };
-          // Coba langsung, dan juga setelah delay (track belum tentu sudah load)
           enableDefaultSub();
-          setTimeout(enableDefaultSub, 500);
-          setTimeout(enableDefaultSub, 1500);
+          const t1 = setTimeout(enableDefaultSub, 500);
+          const t2 = setTimeout(enableDefaultSub, 1500);
+          subtitleTimersRef.current.push(t1, t2);
         }
       });
 
@@ -216,15 +239,30 @@ function VideoPlayer({
 
       hls.on(Hls.Events.ERROR, (event, data) => {
         if (data.fatal) {
+          // FIX: Semua fatal error reset switching state
+          handleSwitchingDone();
+
           switch (data.type) {
             case Hls.ErrorTypes.NETWORK_ERROR:
+              // Coba retry satu kali, kalau masih gagal show error
+              console.warn("[Player] Network error, retrying...", data.details);
               hls.startLoad();
+              // Set timeout lagi untuk retry
+              timeoutRef.current = setTimeout(() => {
+                onError("Network error. Coba server/episode lain.");
+                hls.destroy();
+              }, 8000);
               break;
             case Hls.ErrorTypes.MEDIA_ERROR:
+              console.warn("[Player] Media error, recovering...", data.details);
               hls.recoverMediaError();
+              timeoutRef.current = setTimeout(() => {
+                onError("Media error. Coba server/episode lain.");
+                hls.destroy();
+              }, 8000);
               break;
             default:
-              onError("Stream error. Please try again.");
+              onError("Stream error. Coba server/episode lain.");
               hls.destroy();
               break;
           }
@@ -232,9 +270,15 @@ function VideoPlayer({
       });
     }
 
-    // Cleanup: destroy HLS saat component unmount
-    // Ini aman karena component benar-benar di-buang, bukan di-reuse
+    // Cleanup: destroy HLS + clear timers saat component unmount
     return () => {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+        timeoutRef.current = null;
+      }
+      subtitleTimersRef.current.forEach((t) => clearTimeout(t));
+      subtitleTimersRef.current = [];
+
       if (hlsRef.current) {
         try {
           hlsRef.current.destroy();
@@ -335,9 +379,7 @@ function VideoPlayer({
 
               {qualityLevels.length > 1 && (
                 <div className="flex flex-col gap-1">
-                  <label className="text-[10px] text-white/60">
-                    Quality
-                  </label>
+                  <label className="text-[10px] text-white/60">Quality</label>
                   <Select
                     value={String(currentQuality)}
                     onValueChange={handleQualityChange}
@@ -396,8 +438,6 @@ export function PlayerModal() {
   const [currentSeason, setCurrentSeason] = useState<string>("");
   const [currentEpisode, setCurrentEpisode] = useState<string>("");
   const [currentServer, setCurrentServer] = useState<string>("");
-
-  const videoTimeRef = useRef<{ id: string | number; currentTime: number; duration: number } | null>(null);
 
   // === Initial load (modal open) ===
   useEffect(() => {
@@ -470,6 +510,7 @@ export function PlayerModal() {
   }, [playerMedia]);
 
   // === Refetch streamInfo saat ganti episode (untuk subtitle per-episode) ===
+  // FIX: Tidak set switching di sini - biar VideoPlayer yang handle via onSwitchingChange
   useEffect(() => {
     if (!cinemacityData || !streamInfo) return;
     if (cinemacityData.type !== "tv") return;
@@ -478,7 +519,6 @@ export function PlayerModal() {
     let cancelled = false;
 
     async function refetchSubtitles() {
-      setSwitching(true);
       try {
         const freshInfo = await getStreamInfo(
           cinemacityData.cinemacity_id,
@@ -497,8 +537,6 @@ export function PlayerModal() {
         );
       } catch (e) {
         console.error("Refetch subtitles failed:", e);
-      } finally {
-        if (!cancelled) setSwitching(false);
       }
     }
 
@@ -530,25 +568,32 @@ export function PlayerModal() {
     return `${VPS_API_BASE}/api/stream/play/${cinemacityData.cinemacity_id}?${params.toString()}`;
   }, [cinemacityData, streamInfo, currentSeason, currentEpisode, currentServer]);
 
-  // FIX BUG #1: Tandai switching saat streamUrl berubah (ganti server/episode)
-  // VideoPlayer akan di-remount via key, jadi tidak perlu manual HLS cleanup
-  useEffect(() => {
-    if (streamUrl) {
-      setSwitching(true);
-    }
-  }, [streamUrl]);
+  // FIX: VideoPlayer handle switching state sendiri via onSwitchingChange callback
+  // Hapus useEffect [streamUrl] yang set switching=true (caused race condition)
+  const handleSwitchingChange = useCallback((isSwitching: boolean) => {
+    setSwitching(isSwitching);
+  }, []);
 
-  const handleManifestParsed = () => {
-    setSwitching(false);
-  };
-
-  const handlePlayerError = (msg: string) => {
+  const handlePlayerError = useCallback((msg: string) => {
     setError(msg);
     setSwitching(false);
-  };
+  }, []);
 
   const handleServerChange = (serverId: string) => {
+    setError(null); // Clear error saat ganti server
     setCurrentServer(serverId);
+  };
+
+  const handleEpisodeChange = (episode: string) => {
+    setError(null); // Clear error saat ganti episode
+    setCurrentEpisode(episode);
+  };
+
+  const handleSeasonChange = (season: string) => {
+    setError(null);
+    setCurrentSeason(season);
+    const firstEp = episodes.find((e) => String(e.season) === season);
+    if (firstEp) setCurrentEpisode(String(firstEp.episode));
   };
 
   const episodes = streamInfo?.episodes || [];
@@ -564,13 +609,6 @@ export function PlayerModal() {
   const currentSeasonEpisodes = useMemo(() => {
     return episodes.filter((e) => String(e.season) === currentSeason);
   }, [episodes, currentSeason]);
-
-  const handleEpisodeChange = (episode: string) => setCurrentEpisode(episode);
-  const handleSeasonChange = (season: string) => {
-    setCurrentSeason(season);
-    const firstEp = episodes.find((e) => String(e.season) === season);
-    if (firstEp) setCurrentEpisode(String(firstEp.episode));
-  };
 
   const currentEpisodeIdx = useMemo(() => {
     return currentSeasonEpisodes.findIndex(
@@ -628,31 +666,44 @@ export function PlayerModal() {
           <div className="flex aspect-video flex-col items-center justify-center gap-3 bg-black p-6 text-center">
             <AlertCircle className="h-10 w-10 text-red-500" />
             <p className="text-sm text-white/90">{error}</p>
-            <Button variant="secondary" size="sm" onClick={closePlayer}>
-              Close
-            </Button>
+            <div className="flex gap-2">
+              <Button variant="secondary" size="sm" onClick={closePlayer}>
+                Close
+              </Button>
+              {hasMultipleServers && (
+                <Button
+                  variant="default"
+                  size="sm"
+                  onClick={() => {
+                    setError(null);
+                    // Switch to next server
+                    const next = (parseInt(currentServer || "0") + 1) % servers.length;
+                    handleServerChange(String(next));
+                  }}
+                >
+                  Coba Server Lain
+                </Button>
+              )}
+            </div>
           </div>
         )}
 
         {!loading && !error && streamUrl && (
           <div className="relative aspect-video w-full bg-black">
-            {/* FIX BUG #1: key={streamUrl} forces React to remount VideoPlayer component
-                setiap kali streamUrl berubah. Tidak ada manual HLS cleanup yang bisa stuck. */}
             <VideoPlayer
               key={streamUrl}
               streamUrl={streamUrl}
               subtitles={subtitles}
               defaultSubtitleIdx={defaultSubtitleIdx}
-              onManifestParsed={handleManifestParsed}
+              onSwitchingChange={handleSwitchingChange}
               onError={handlePlayerError}
             />
 
-            {/* Switching indicator */}
             {switching && (
               <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center bg-black/60 backdrop-blur-sm">
                 <div className="flex flex-col items-center gap-2">
                   <Loader2 className="h-8 w-8 animate-spin text-white" />
-                  <p className="text-xs text-white/70">Switching...</p>
+                  <p className="text-xs text-white/70">Loading...</p>
                 </div>
               </div>
             )}
