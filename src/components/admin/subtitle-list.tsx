@@ -3,13 +3,20 @@
 import { useState, useEffect } from "react";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Trash2, FileText, Search, X } from "lucide-react";
-import { fetchSubtitles, deleteSubtitle, type SubtitleEntry } from "@/lib/admin-api";
+import { Loader2, Trash2, FileText, Search, X, Pencil } from "lucide-react";
+import { fetchSubtitles, type SubtitleEntry } from "@/lib/admin-api";
 
-export function SubtitleList({ apiKey, refreshKey }: { apiKey: string; refreshKey: number }) {
+interface SubtitleListProps {
+  apiKey: string;
+  refreshKey: number;
+  onEdit: (id: number) => void;  // FIX C: callback untuk edit
+}
+
+export function SubtitleList({ apiKey, refreshKey, onEdit }: SubtitleListProps) {
   const [entries, setEntries] = useState<SubtitleEntry[]>([]);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
+  const [editingId, setEditingId] = useState<number | null>(null);
 
   const load = async () => {
     setLoading(true);
@@ -24,8 +31,14 @@ export function SubtitleList({ apiKey, refreshKey }: { apiKey: string; refreshKe
 
   const handleDelete = async (id: number) => {
     if (!confirm("Delete this subtitle?")) return;
+    const { deleteSubtitle } = await import("@/lib/admin-api");
     const ok = await deleteSubtitle(apiKey, id);
     if (ok) load();
+  };
+
+  const handleEditClick = (id: number) => {
+    setEditingId(id);
+    onEdit(id);
   };
 
   return (
@@ -67,7 +80,12 @@ export function SubtitleList({ apiKey, refreshKey }: { apiKey: string; refreshKe
       ) : (
         <div className="space-y-2">
           {entries.map((entry) => (
-            <div key={entry.id} className="flex items-center gap-3 rounded-lg border bg-card p-3">
+            <div
+              key={entry.id}
+              className={`flex items-center gap-3 rounded-lg border bg-card p-3 transition ${
+                editingId === entry.id ? "ring-2 ring-primary" : ""
+              }`}
+            >
               <FileText className="h-5 w-5 shrink-0 text-primary" />
               <div className="min-w-0 flex-1">
                 <p className="truncate font-medium">{entry.title}</p>
@@ -83,9 +101,20 @@ export function SubtitleList({ apiKey, refreshKey }: { apiKey: string; refreshKe
                   )}
                 </div>
               </div>
+
+              {/* FIX C: Tombol Edit */}
+              <button
+                onClick={() => handleEditClick(entry.id)}
+                className="shrink-0 rounded-md p-2 text-muted-foreground hover:bg-primary/10 hover:text-primary"
+                aria-label="Edit subtitle"
+              >
+                <Pencil className="h-4 w-4" />
+              </button>
+
               <button
                 onClick={() => handleDelete(entry.id)}
                 className="shrink-0 rounded-md p-2 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                aria-label="Delete subtitle"
               >
                 <Trash2 className="h-4 w-4" />
               </button>
