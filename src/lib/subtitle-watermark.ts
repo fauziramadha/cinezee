@@ -1,25 +1,26 @@
 /**
- * Subtitle Watermark Helper v2
+ * Subtitle Watermark Helper v3
  *
- * Fix v1 bugs:
- * - Cue ID format tidak konsisten → pakai NOTE sebagai pembatas, bukan cue ID
- * - Watermark 5 menit tidak muncul → pakai absolute time tracking
- * - Teks bocor antar cue → pakai cue terpisah dengan timing yang tidak overlap
+ * Fix v2 bugs:
+ * - Cue settings kompleks (align/position/line/size) tidak didukung konsisten
+ *   oleh semua player (Safari iOS) → watermark overlap dengan subtitle asli
+ *
+ * v3 approach:
+ * - Hapus cue settings, pakai posisi default player (bottom center)
+ * - Watermark muncul di slot waktu yang TIDAK overlap dengan subtitle asli
+ * - Pakai NOTE sebagai pembatas untuk clarity
  */
 
 const WATERMARK_TEXT = "nonton streaming film terupdate hanya di cinestream.my.id";
 const WATERMARK_INTERVAL_SEC = 300; // 5 menit
 
-/**
- * Tambah watermark ke VTT subtitle.
- */
 export function addWatermarkToVtt(vtt: string): string {
   if (!vtt || !vtt.trim()) return vtt;
 
   const lines = vtt.split(/\r?\n/);
   const result: string[] = [];
 
-  // Pastikan header WEBVTT ada
+  // Header
   if (lines[0]?.trim() === "WEBVTT") {
     result.push(lines[0]);
     result.push("");
@@ -28,72 +29,68 @@ export function addWatermarkToVtt(vtt: string): string {
     result.push("");
   }
 
-  // Watermark di awal (0-1.5 detik)
+  // NOTE untuk branding (tidak ditampilkan player, tapi metadata)
+  result.push("NOTE");
+  result.push("Watermarked by CineStream - cinestream.my.id");
+  result.push("");
+
+  // Watermark di awal (0-1.5 detik) - pakai timing yang tidak overlap
   result.push("00:00:00.000 --> 00:00:01.500");
-  result.push("align:center position:50%,90% line:90% size:60%");
   result.push(WATERMARK_TEXT);
   result.push("");
 
   // Track absolute time untuk watermark berikutnya
-  let nextWatermarkSec = WATERMARK_INTERVAL_SEC; // 5 menit
-  let i = 1; // skip WEBVTT header
+  let nextWatermarkSec = WATERMARK_INTERVAL_SEC;
+  let i = 1;
 
   while (i < lines.length) {
     const line = lines[i];
 
-    // Skip cue identifiers (lines before --> that are not blank)
     if (line.includes("-->")) {
-      const match = line.match(/(\d{2}):(\d{2}):(\d{2})\.(\d{3})\s*-->\s*(\d{2}):(\d{2}):(\d{2})\.(\d{3})/);
+      const match = line.match(/(\d{2}):(\d{2}):(\d{2})[.,](\d{3})\s*-->\s*(\d{2}):(\d{2}):(\d{2})[.,](\d{3})/);
       if (match) {
         const [, h1, m1, s1, ms1, h2, m2, s2, ms2] = match;
         const startSec = Number(h1) * 3600 + Number(m1) * 60 + Number(s1) + Number(ms1) / 1000;
         const endSec = Number(h2) * 3600 + Number(m2) * 60 + Number(s2) + Number(ms2) / 1000;
 
-        // FIX: Insert watermark kalau start cue melewati nextWatermarkSec
-        // Dan pastikan watermark TIDAK overlap dengan cue ini
+        // Insert watermark kalau ada slot sebelum cue ini
         while (startSec >= nextWatermarkSec + 0.6) {
-          // Slot watermark: 0.5 detik sebelum cue ini, atau di nextWatermarkSec (mana yang lebih awal)
           const wmStart = nextWatermarkSec;
           const wmEnd = nextWatermarkSec + 0.5;
-          // Pastikan tidak overlap dengan cue
           if (wmEnd <= startSec) {
             result.push(`${formatTime(wmStart)} --> ${formatTime(wmEnd)}`);
-            result.push("align:center position:50%,90% line:90% size:60%");
             result.push(WATERMARK_TEXT);
             result.push("");
           }
           nextWatermarkSec += WATERMARK_INTERVAL_SEC;
         }
 
-        // Update nextWatermarkSec kalau cue ini melewati beberapa interval
+        // Skip interval yang sudah lewat
         while (endSec >= nextWatermarkSec) {
           nextWatermarkSec += WATERMARK_INTERVAL_SEC;
         }
       }
 
-      // Push timing line as-is
-      result.push(line);
+      // Push timing line (normalize koma ke titik untuk VTT)
+      result.push(line.replace(/,(\d{3})/g, ".$1"));
       i++;
+
       // Push cue content sampai blank line
       while (i < lines.length && lines[i].trim() !== "") {
         result.push(lines[i]);
         i++;
       }
       if (i < lines.length) {
-        result.push(""); // blank line
+        result.push("");
         i++;
       }
     } else if (line.trim() === "") {
-      i++; // skip extra blank lines
+      i++;
     } else {
-      // Could be cue identifier or NOTE - push as-is
-      result.push(line);
+      // Skip cue identifiers (SRT numbers) - VTT tidak butuh
       i++;
     }
   }
-
-  // Watermark di akhir video (kalau ada sisa) - optional, hanya kalau total > 5 menit
-  // Tidak perlu, biarkan subtitle original
 
   return result.join("\n");
 }
