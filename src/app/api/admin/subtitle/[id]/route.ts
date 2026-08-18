@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { deleteManualSubtitle } from "@/lib/manual-subtitle";
+import { deleteManualSubtitle, getManualSubtitleById } from "@/lib/manual-subtitle";
 
-// FIX: Tambah session-based auth (sama seperti route POST/GET)
-// Sebelumnya hanya cek API key, jadi admin yang login via web tidak bisa delete
 async function requireAdmin(request: NextRequest): Promise<boolean> {
   const apiKey = request.headers.get("x-admin-api-key");
   const expectedKey = process.env.ADMIN_API_KEY;
@@ -16,6 +14,26 @@ async function requireAdmin(request: NextRequest): Promise<boolean> {
     }
   } catch {}
   return false;
+}
+
+// FIX C: GET handler - fetch single subtitle by ID (untuk edit mode)
+export async function GET(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  if (!(await requireAdmin(request))) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  const { id } = await params;
+  const idNum = Number(id);
+  if (Number.isNaN(idNum)) {
+    return NextResponse.json({ error: "Invalid id" }, { status: 400 });
+  }
+  const subtitle = await getManualSubtitleById(idNum);
+  if (!subtitle) {
+    return NextResponse.json({ error: "Subtitle not found" }, { status: 404 });
+  }
+  return NextResponse.json({ success: true, subtitle });
 }
 
 export async function DELETE(
