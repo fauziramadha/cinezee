@@ -1,8 +1,11 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import Link from "next/link";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Button } from "@/components/ui/button";
+import { Sparkles } from "lucide-react";
 import { SubtitleSearch, type MediaResult } from "@/components/admin/subtitle-search";
 import { SubtitleForm } from "@/components/admin/subtitle-form";
 import { SubtitleList } from "@/components/admin/subtitle-list";
@@ -11,7 +14,7 @@ export default function AdminSubtitlePage() {
   const [apiKey, setApiKey] = useState("");
   const [selectedMedia, setSelectedMedia] = useState<MediaResult | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
-  const [editingId, setEditingId] = useState<number | null>(null);  // FIX C: state untuk edit mode
+  const [editingId, setEditingId] = useState<number | null>(null);
 
   useEffect(() => {
     const saved = localStorage.getItem("admin_api_key");
@@ -25,20 +28,17 @@ export default function AdminSubtitlePage() {
   const handleSaved = () => {
     setRefreshKey(prev => prev + 1);
     setSelectedMedia(null);
-    setEditingId(null);  // FIX C: reset edit mode setelah save
+    setEditingId(null);
   };
 
-  // FIX C: Handler saat user klik tombol Edit di list
   const handleEdit = (id: number) => {
-    setSelectedMedia(null);  // clear selected media (jangan bentrok)
+    setSelectedMedia(null);
     setEditingId(id);
-    // Scroll to form
     setTimeout(() => {
       window.scrollTo({ top: 0, behavior: "smooth" });
     }, 100);
   };
 
-  // FIX C: Handler saat user cancel edit
   const handleCancelEdit = () => {
     setEditingId(null);
   };
@@ -46,11 +46,19 @@ export default function AdminSubtitlePage() {
   return (
     <div className="min-h-screen bg-background p-4 sm:p-6">
       <div className="mx-auto max-w-4xl space-y-6">
-        <div>
-          <h1 className="text-2xl font-bold">Subtitle Manager</h1>
-          <p className="text-sm text-muted-foreground">
-            Upload, edit, dan kelola subtitle manual (no expiry, replace kapan saja)
-          </p>
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-bold">Subtitle Manager</h1>
+            <p className="text-sm text-muted-foreground">
+              Upload, edit, dan kelola subtitle manual (no expiry, replace kapan saja)
+            </p>
+          </div>
+          <Link href="/admin/subtitle/generate">
+            <Button variant="outline" size="sm">
+              <Sparkles className="mr-1 h-4 w-4" />
+              Auto-Generate
+            </Button>
+          </Link>
         </div>
 
         {!apiKey ? (
@@ -66,7 +74,6 @@ export default function AdminSubtitlePage() {
           </div>
         ) : (
           <>
-            {/* FIX C: Hide search saat mode edit (karena title di-disable) */}
             {!editingId && (
               <SubtitleSearch onSelect={setSelectedMedia} />
             )}
