@@ -11,6 +11,7 @@ export default function AdminSubtitlePage() {
   const [apiKey, setApiKey] = useState("");
   const [selectedMedia, setSelectedMedia] = useState<MediaResult | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [editingId, setEditingId] = useState<number | null>(null);  // FIX C: state untuk edit mode
 
   useEffect(() => {
     const saved = localStorage.getItem("admin_api_key");
@@ -24,6 +25,22 @@ export default function AdminSubtitlePage() {
   const handleSaved = () => {
     setRefreshKey(prev => prev + 1);
     setSelectedMedia(null);
+    setEditingId(null);  // FIX C: reset edit mode setelah save
+  };
+
+  // FIX C: Handler saat user klik tombol Edit di list
+  const handleEdit = (id: number) => {
+    setSelectedMedia(null);  // clear selected media (jangan bentrok)
+    setEditingId(id);
+    // Scroll to form
+    setTimeout(() => {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }, 100);
+  };
+
+  // FIX C: Handler saat user cancel edit
+  const handleCancelEdit = () => {
+    setEditingId(null);
   };
 
   return (
@@ -32,7 +49,7 @@ export default function AdminSubtitlePage() {
         <div>
           <h1 className="text-2xl font-bold">Subtitle Manager</h1>
           <p className="text-sm text-muted-foreground">
-            Upload subtitle Indonesia manual (no expiry, replace kapan saja)
+            Upload, edit, dan kelola subtitle manual (no expiry, replace kapan saja)
           </p>
         </div>
 
@@ -49,13 +66,24 @@ export default function AdminSubtitlePage() {
           </div>
         ) : (
           <>
-            <SubtitleSearch onSelect={setSelectedMedia} />
-            <SubtitleForm 
-              apiKey={apiKey} 
-              selectedMedia={selectedMedia} 
+            {/* FIX C: Hide search saat mode edit (karena title di-disable) */}
+            {!editingId && (
+              <SubtitleSearch onSelect={setSelectedMedia} />
+            )}
+
+            <SubtitleForm
+              apiKey={apiKey}
+              selectedMedia={selectedMedia}
               onSaved={handleSaved}
+              editingId={editingId}
+              onCancelEdit={handleCancelEdit}
             />
-            <SubtitleList apiKey={apiKey} refreshKey={refreshKey} />
+
+            <SubtitleList
+              apiKey={apiKey}
+              refreshKey={refreshKey}
+              onEdit={handleEdit}
+            />
           </>
         )}
       </div>
