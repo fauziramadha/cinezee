@@ -23,12 +23,27 @@ export interface SubtitleEntry {
   updated_at: string;
 }
 
+// FIX C: Full subtitle with text (untuk edit mode)
+export interface FullSubtitle extends SubtitleEntry {
+  subtitle_text: string;
+  language: string;
+  created_at: string;
+}
+
 export async function fetchSubtitles(apiKey: string, search?: string): Promise<SubtitleEntry[]> {
   const url = search ? `/api/admin/subtitle?search=${encodeURIComponent(search)}` : "/api/admin/subtitle";
   const res = await adminFetch(url, {}, apiKey);
   if (!res.ok) return [];
   const data = await res.json();
   return data.subtitles || [];
+}
+
+// FIX C: Fetch single subtitle by ID (dengan text, untuk edit)
+export async function fetchSubtitleById(apiKey: string, id: number): Promise<FullSubtitle | null> {
+  const res = await adminFetch(`/api/admin/subtitle/${id}`, {}, apiKey);
+  if (!res.ok) return null;
+  const data = await res.json();
+  return data.subtitle || null;
 }
 
 export async function deleteSubtitle(apiKey: string, id: number): Promise<boolean> {
@@ -52,12 +67,10 @@ export async function saveSubtitle(apiKey: string, data: {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data),
   }, apiKey);
-  
-  if (res.ok) {
-    const result = await res.json();
-    return { ok: true, message: result.message || "Subtitle saved" };
-  } else {
-    const err = await res.json().catch(() => ({}));
-    return { ok: false, error: err.error || "Failed to save" };
-  }
+  const json = await res.json();
+  return {
+    ok: res.ok,
+    message: json.message,
+    error: json.error,
+  };
 }
