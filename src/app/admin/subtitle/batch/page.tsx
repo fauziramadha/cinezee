@@ -50,7 +50,6 @@ export default function BatchSubtitlePage() {
   const [apiKey, setApiKey] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Load API Key
   useState(() => {
     const saved = localStorage.getItem("admin_api_key");
     if (saved) setApiKey(saved);
@@ -60,7 +59,6 @@ export default function BatchSubtitlePage() {
     if (!searchQuery.trim()) return;
     setSearching(true);
     try {
-      // FIX: Pakai VPS API /api/search (bukan /api/tmdb/search/tv yang tidak ada)
       const res = await fetch(`${VPS_API_BASE}/api/search?q=${encodeURIComponent(searchQuery)}`);
       if (res.ok) {
         const json = await res.json();
@@ -105,6 +103,13 @@ export default function BatchSubtitlePage() {
       }
     }
     setFiles(prev => [...prev, ...subtitleFiles]);
+    // FIX: Reset input value supaya bisa pilih file yang sama lagi
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  // FIX: Trigger file input via button (iOS Safari compatible)
+  const handleBrowseClick = () => {
+    fileInputRef.current?.click();
   };
 
   const removeFile = (idx: number) => {
@@ -236,7 +241,6 @@ export default function BatchSubtitlePage() {
                   </div>
                 </div>
 
-                {/* Default Season — hanya untuk TV */}
                 {selectedShow.type === "tv" && (
                   <div className="flex items-center gap-2">
                     <label className="text-sm text-zinc-400">Default Season:</label>
@@ -249,26 +253,29 @@ export default function BatchSubtitlePage() {
                   </div>
                 )}
 
-                <div className="rounded-lg border-2 border-dashed border-zinc-700 p-6 text-center">
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept=".srt,.vtt"
-                    multiple
-                    onChange={handleFileSelect}
-                    className="hidden"
-                  />
-                  <button
-                    onClick={() => fileInputRef?.current?.click()}
-                    className="flex flex-col items-center gap-2"
-                  >
+                {/* FIX: Native file input dengan sr-only (bukan hidden) - iOS Safari compatible */}
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".srt,.vtt"
+                  multiple
+                  onChange={handleFileSelect}
+                  className="sr-only"
+                  tabIndex={-1}
+                />
+                <button
+                  onClick={handleBrowseClick}
+                  type="button"
+                  className="w-full rounded-lg border-2 border-dashed border-zinc-700 p-6 text-center transition hover:border-zinc-600 hover:bg-zinc-900"
+                >
+                  <div className="flex flex-col items-center gap-2">
                     <div className="flex h-12 w-12 items-center justify-center rounded-full bg-zinc-800">
                       <Upload className="h-6 w-6 text-white" />
                     </div>
-                    <span className="text-sm text-white">Pilih file subtitle (.srt / .vtt)</span>
-                    <span className="text-xs text-zinc-500">Bisa pilih multiple file sekaligus</span>
-                  </button>
-                </div>
+                    <span className="text-sm text-white">Klik untuk pilih file subtitle</span>
+                    <span className="text-xs text-zinc-500">Format .srt / .vtt — bisa pilih multiple file</span>
+                  </div>
+                </button>
 
                 {files.length > 0 && (
                   <div className="space-y-2">
@@ -303,7 +310,6 @@ export default function BatchSubtitlePage() {
                           {f.error && <p className="text-xs text-red-400">{f.error}</p>}
                         </div>
 
-                        {/* Season + Episode input hanya untuk TV */}
                         {selectedShow.type === "tv" && (
                           <>
                             <input
