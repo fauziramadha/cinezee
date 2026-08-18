@@ -8,12 +8,12 @@ import { Loader2, Upload } from "lucide-react";
 import { saveSubtitle } from "@/lib/admin-api";
 import type { MediaResult } from "./subtitle-search";
 
-export function SubtitleForm({ 
-  apiKey, 
-  selectedMedia, 
-  onSaved 
-}: { 
-  apiKey: string; 
+export function SubtitleForm({
+  apiKey,
+  selectedMedia,
+  onSaved
+}: {
+  apiKey: string;
   selectedMedia: MediaResult | null;
   onSaved: () => void;
 }) {
@@ -29,11 +29,11 @@ export function SubtitleForm({
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
-  // Auto-fill dari media yang dipilih
+  // Auto-fill dari media yang dipilih (struktur MediaResult baru)
   useEffect(() => {
     if (selectedMedia) {
-      setTitle(selectedMedia.name || selectedMedia.title || "");
-      setType(selectedMedia.media_type === "tv" ? "tv" : "movie");
+      setTitle(selectedMedia.title || "");
+      setType(selectedMedia.type === "tv" ? "tv" : "movie");
       setSeason("");
       setEpisode("");
     }
@@ -67,7 +67,6 @@ export function SubtitleForm({
     setSuccess(null);
 
     try {
-      // Kirim langsung sebagai JSON ke /api/admin/subtitle
       const result = await saveSubtitle(apiKey, {
         title: title.trim(),
         type,
@@ -78,10 +77,9 @@ export function SubtitleForm({
         release_name: releaseName || null,
         offset_seconds: Number(offsetSeconds) || 0,
       });
-      
+
       if (result.ok) {
         setSuccess(result.message || "Subtitle saved");
-        // Reset form
         setSubtitleText(""); setReleaseName(""); setOffsetSeconds("");
         setSeason(""); setEpisode(""); setQuality("");
         onSaved();
