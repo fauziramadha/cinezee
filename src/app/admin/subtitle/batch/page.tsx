@@ -5,6 +5,9 @@ import { Upload, Loader2, Check, X, Search, Film } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
+const VPS_API_BASE =
+  process.env.NEXT_PUBLIC_API_URL || "https://api.cinestream.my.id";
+
 interface SubtitleFile {
   file: File;
   text: string;
@@ -12,6 +15,15 @@ interface SubtitleFile {
   episode: string;
   status: "pending" | "uploading" | "success" | "error";
   error?: string;
+}
+
+interface MediaResult {
+  cinemacity_id: string;
+  slug: string;
+  title: string;
+  type: "movie" | "tv";
+  poster_url: string | null;
+  release_year: number | null;
 }
 
 function parseFilename(filename: string): { season?: string; episode?: string } {
@@ -29,8 +41,8 @@ function parseFilename(filename: string): { season?: string; episode?: string } 
 
 export default function BatchSubtitlePage() {
   const [searchQuery, setSearchQuery] = useState("");
-  const [searchResults, setSearchResults] = useState<any[]>([]);
-  const [selectedShow, setSelectedShow] = useState<any>(null);
+  const [searchResults, setSearchResults] = useState<MediaResult[]>([]);
+  const [selectedShow, setSelectedShow] = useState<MediaResult | null>(null);
   const [searching, setSearching] = useState(false);
   const [files, setFiles] = useState<SubtitleFile[]>([]);
   const [uploading, setUploading] = useState(false);
@@ -48,10 +60,19 @@ export default function BatchSubtitlePage() {
     if (!searchQuery.trim()) return;
     setSearching(true);
     try {
-      const res = await fetch(`/api/tmdb/search/tv?q=${encodeURIComponent(searchQuery)}`);
+      // FIX: Pakai VPS API /api/search (bukan /api/tmdb/search/tv yang tidak ada)
+      const res = await fetch(`${VPS_API_BASE}/api/search?q=${encodeURIComponent(searchQuery)}`);
       if (res.ok) {
-        const data = await res.json();
-        setSearchResults(data.results?.slice(0, 10) || []);
+        const json = await res.json();
+        const items = (json.data?.results || []).slice(0, 10).map((item: any): MediaResult => ({
+          cinemacity_id: String(item.cinemacity_id || item.id),
+          slug: item.slug || "",
+          title: item.title || "Untitled",
+          type: item.type === "tv" ? "tv" : "movie",
+          poster_url: item.poster_url || null,
+          release_year: item.release_year || null,
+        }));
+        setSearchResults(items);
       }
     } catch {}
     setSearching(false);
@@ -100,7 +121,7 @@ export default function BatchSubtitlePage() {
 
     for (let i = 0; i < files.length; i++) {
       if (files[i].status === "success") continue;
-      
+
       setFiles(prev => prev.map((f, idx) => idx === i ? { ...f, status: "uploading" } : f));
 
       try {
@@ -111,10 +132,10 @@ export default function BatchSubtitlePage() {
             "X-Admin-API-Key": apiKey,
           },
           body: JSON.stringify({
-            title: selectedShow.name || selectedShow.title,
-            type: "tv",
-            season: files[i].season,
-            episode: files[i].episode || String(i + 1),
+            title: selectedShow.title,
+            type: selectedShow.type,
+            season: selectedShow.type === "tv" ? files[i].season : null,
+            episode: selectedShow.type === "tv" ? (files[i].episode || String(i + 1)) : null,
             subtitle_text: files[i].text,
             offset_seconds: 0,
           }),
@@ -139,7 +160,6 @@ export default function BatchSubtitlePage() {
       <div className="mx-auto max-w-4xl">
         <h1 className="mb-6 text-2xl font-bold text-white">Batch Upload Subtitle</h1>
 
-        {/* API Key Input (kalau belum ada) */}
         {!apiKey && (
           <div className="mb-4 rounded-lg border border-yellow-500/30 bg-yellow-500/5 p-4">
             <label className="text-sm font-semibold text-white">Admin API Key</label>
@@ -155,12 +175,11 @@ export default function BatchSubtitlePage() {
 
         {apiKey && (
           <>
-            {/* Step 1: Search TV Show */}
             {!selectedShow && (
               <div className="space-y-4">
                 <div className="flex gap-2">
                   <Input
-                    placeholder="Cari judul TV Series..."
+                    placeholder="Cari judul Film / TV Series..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     onKeyDown={(e) => e.key === "Enter" && handleSearch()}
@@ -174,20 +193,22 @@ export default function BatchSubtitlePage() {
                 <div className="space-y-2">
                   {searchResults.map(show => (
                     <button
-                      key={show.id}
+                      key={`${show.cinemacity_id}-${show.type}`}
                       onClick={() => setSelectedShow(show)}
                       className="flex w-full items-center gap-3 rounded-lg bg-zinc-900 p-3 text-left transition hover:bg-zinc-800"
                     >
-                      {show.poster_path ? (
-                        <img src={`https://image.tmdb.org/t/p/w92${show.poster_path}`} alt="" className="h-16 w-12 rounded object-cover" />
+                      {show.poster_url ? (
+                        <img src={`${VPS_API_BASE}/api/image?url=${encodeURIComponent(show.poster_url)}`} alt="" className="h-16 w-12 rounded object-cover" />
                       ) : (
                         <div className="flex h-16 w-12 items-center justify-center rounded bg-zinc-800">
                           <Film className="h-6 w-6 text-zinc-600" />
                         </div>
                       )}
                       <div>
-                        <p className="font-medium text-white">{show.name}</p>
-                        <p className="text-xs text-zinc-400">{show.first_air_date?.slice(0, 4)}</p>
+                        <p className="font-medium text-white">{show.title}</p>
+                        <p className="text-xs text-zinc-400">
+                          {show.type === "tv" ? "TV Series" : "Movie"}{show.release_year ? ` · ${show.release_year}` : ""}
+                        </p>
                       </div>
                     </button>
                   ))}
@@ -195,33 +216,38 @@ export default function BatchSubtitlePage() {
               </div>
             )}
 
-            {/* Step 2: Upload Files */}
             {selectedShow && (
               <div className="space-y-4">
                 <div className="flex items-center gap-3 rounded-lg bg-zinc-900 p-3">
-                  {selectedShow.poster_path && (
-                    <img src={`https://image.tmdb.org/t/p/w92${selectedShow.poster_path}`} alt="" className="h-16 w-12 rounded object-cover" />
+                  {selectedShow.poster_url && (
+                    <img src={`${VPS_API_BASE}/api/image?url=${encodeURIComponent(selectedShow.poster_url)}`} alt="" className="h-16 w-12 rounded object-cover" />
                   )}
                   <div className="flex-1">
-                    <p className="font-medium text-white">{selectedShow.name}</p>
+                    <p className="font-medium text-white">{selectedShow.title}</p>
+                    <p className="text-xs text-zinc-400">
+                      {selectedShow.type === "tv" ? "TV Series" : "Movie"}{selectedShow.release_year ? ` · ${selectedShow.release_year}` : ""}
+                    </p>
                     <button
                       onClick={() => { setSelectedShow(null); setFiles([]); }}
                       className="text-xs text-red-400 hover:underline"
                     >
-                      Ganti Series
+                      Ganti Pilihan
                     </button>
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2">
-                  <label className="text-sm text-zinc-400">Default Season:</label>
-                  <Input
-                    type="number"
-                    value={defaultSeason}
-                    onChange={(e) => setDefaultSeason(e.target.value)}
-                    className="w-20 bg-zinc-900 text-white"
-                  />
-                </div>
+                {/* Default Season — hanya untuk TV */}
+                {selectedShow.type === "tv" && (
+                  <div className="flex items-center gap-2">
+                    <label className="text-sm text-zinc-400">Default Season:</label>
+                    <Input
+                      type="number"
+                      value={defaultSeason}
+                      onChange={(e) => setDefaultSeason(e.target.value)}
+                      className="w-20 bg-zinc-900 text-white"
+                    />
+                  </div>
+                )}
 
                 <div className="rounded-lg border-2 border-dashed border-zinc-700 p-6 text-center">
                   <input
@@ -277,22 +303,27 @@ export default function BatchSubtitlePage() {
                           {f.error && <p className="text-xs text-red-400">{f.error}</p>}
                         </div>
 
-                        <input
-                          type="number"
-                          value={f.season}
-                          onChange={(e) => updateFile(idx, "season", e.target.value)}
-                          disabled={f.status === "success"}
-                          className="w-12 rounded bg-zinc-800 px-1 py-1 text-center text-xs text-white disabled:opacity-50"
-                          placeholder="S"
-                        />
-                        <input
-                          type="number"
-                          value={f.episode}
-                          onChange={(e) => updateFile(idx, "episode", e.target.value)}
-                          disabled={f.status === "success"}
-                          className="w-12 rounded bg-zinc-800 px-1 py-1 text-center text-xs text-white disabled:opacity-50"
-                          placeholder="E"
-                        />
+                        {/* Season + Episode input hanya untuk TV */}
+                        {selectedShow.type === "tv" && (
+                          <>
+                            <input
+                              type="number"
+                              value={f.season}
+                              onChange={(e) => updateFile(idx, "season", e.target.value)}
+                              disabled={f.status === "success"}
+                              className="w-12 rounded bg-zinc-800 px-1 py-1 text-center text-xs text-white disabled:opacity-50"
+                              placeholder="S"
+                            />
+                            <input
+                              type="number"
+                              value={f.episode}
+                              onChange={(e) => updateFile(idx, "episode", e.target.value)}
+                              disabled={f.status === "success"}
+                              className="w-12 rounded bg-zinc-800 px-1 py-1 text-center text-xs text-white disabled:opacity-50"
+                              placeholder="E"
+                            />
+                          </>
+                        )}
 
                         {f.status !== "uploading" && (
                           <button
