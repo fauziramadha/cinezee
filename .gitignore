@@ -31,7 +31,12 @@ yarn-error.log*
 .pnpm-debug.log*
 
 # env files (can opt-in for committing if needed)
-.env*
+.env
+.env.local
+.env.development
+.env.development.local
+# NOTE: .env.production TIDAK di-exclude — berisi NEXT_PUBLIC_API_URL untuk build
+# (hanya domain publik, bukan secret)
 
 # vercel
 .vercel
