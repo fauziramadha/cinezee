@@ -205,11 +205,12 @@ function VideoPlayer({
         startLevel: -1,
         maxBufferLength: 30,
         maxMaxBufferLength: 60,
-        fragLoadingMaxRetry: 6,
-        fragLoadingRetryDelay: 500,
-        manifestLoadingMaxRetry: 4,
-        manifestLoadingRetryDelay: 500,
-        levelLoadingMaxRetry: 4,
+        fragLoadingMaxRetry: 10,
+        fragLoadingRetryDelay: 1000,
+        manifestLoadingMaxRetry: 6,
+        manifestLoadingRetryDelay: 1000,
+        levelLoadingMaxRetry: 6,
+        levelLoadingRetryDelay: 1000,
       });
 
       hlsRef.current = hls;
@@ -258,29 +259,85 @@ function VideoPlayer({
         setQualityLevels(hls.levels || []);
       });
 
+      // FIX v2: Retry counter untuk fatal errors
+      let retryCount = 0;
+      const MAX_RETRIES = 3;
+
       hls.on(Hls.Events.ERROR, (event, data) => {
-        if (data.fatal) {
+        if (!data.fatal) return;
+
+        retryCount++;
+        console.warn(`[Player] Fatal error #${retryCount}/${MAX_RETRIES}:`, data.type, data.details);
+
+        if (retryCount > MAX_RETRIES) {
           handleSwitchingDone();
-          switch (data.type) {
-            case Hls.ErrorTypes.NETWORK_ERROR:
-              hls.startLoad();
-              timeoutRef.current = setTimeout(() => {
-                onError("Network error. Coba server/episode lain.");
+          onError("Stream error setelah 3x retry. Coba server/episode lain atau refresh halaman.");
+          hls.destroy();
+          return;
+        }
+
+        // Set switching=true lagi saat retry
+        onSwitchingChange(true);
+
+        switch (data.type) {
+          case Hls.ErrorTypes.NETWORK_ERROR:
+            // Coba startLoad dulu
+            console.log("[Player] Network error, retrying with startLoad...");
+            hls.startLoad();
+            // Kalau masih gagal dalam 10 detik, destroy + recreate
+            timeoutRef.current = setTimeout(() => {
+              console.log("[Player] startLoad failed, recreating HLS instance...");
+              try {
                 hls.destroy();
-              }, 8000);
-              break;
-            case Hls.ErrorTypes.MEDIA_ERROR:
-              hls.recoverMediaError();
-              timeoutRef.current = setTimeout(() => {
-                onError("Media error. Coba server/episode lain.");
-                hls.destroy();
-              }, 8000);
-              break;
-            default:
-              onError("Stream error. Coba server/episode lain.");
-              hls.destroy();
-              break;
-          }
+              } catch {}
+              // Recreate HLS instance
+              const newHls = new Hls({
+                enableWorker: true,
+                lowLatencyMode: false,
+                startLevel: -1,
+                maxBufferLength: 30,
+                maxMaxBufferLength: 60,
+                fragLoadingMaxRetry: 10,
+                fragLoadingRetryDelay: 1000,
+                manifestLoadingMaxRetry: 6,
+                manifestLoadingRetryDelay: 1000,
+                levelLoadingMaxRetry: 6,
+                levelLoadingRetryDelay: 1000,
+              });
+              hlsRef.current = newHls;
+              newHls.loadSource(streamUrl);
+              newHls.attachMedia(video);
+              // Re-register events for new instance
+              newHls.on(Hls.Events.MANIFEST_PARSED, () => {
+                handleSwitchingDone();
+                video.play().catch(() => {});
+              });
+              newHls.on(Hls.Events.ERROR, (evt2, data2) => {
+                if (data2.fatal) {
+                  retryCount++;
+                  if (retryCount > MAX_RETRIES) {
+                    handleSwitchingDone();
+                    onError("Stream error setelah retry. Coba server/episode lain.");
+                    newHls.destroy();
+                  } else {
+                    newHls.startLoad();
+                  }
+                }
+              });
+            }, 10000);
+            break;
+          case Hls.ErrorTypes.MEDIA_ERROR:
+            console.log("[Player] Media error, recovering...");
+            hls.recoverMediaError();
+            timeoutRef.current = setTimeout(() => {
+              handleSwitchingDone();
+            }, 5000);
+            break;
+          default:
+            handleSwitchingDone();
+            onError("Stream error. Coba server/episode lain.");
+            hls.destroy();
+            break;
         }
       });
     }
@@ -454,7 +511,7 @@ export function PlayerModal() {
       setStreamInfo(null);
       setCinemacityData(null);
       setError(null);
-      setLoading(false);
+      setLoading(true);
       setCurrentServer("");
       setManualSubtitle(null);
       return;
