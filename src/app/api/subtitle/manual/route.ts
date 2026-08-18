@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getManualSubtitle, srtToVtt, applySubtitleOffset } from "@/lib/manual-subtitle";
+import { addWatermarkToVtt } from "@/lib/subtitle-watermark";
 
 export async function GET(request: NextRequest) {
   const url = new URL(request.url);
@@ -8,10 +9,10 @@ export async function GET(request: NextRequest) {
   const season = url.searchParams.get("season") || undefined;
   const episode = url.searchParams.get("episode") || undefined;
   const server = url.searchParams.get("server") || undefined;
-  const format = url.searchParams.get("format") || "srt";
+  const format = url.searchParams.get("format") || "vtt";
 
   if (!title) {
-    return NextResponse.json({ error: "Missing 'title'" }, { status: 400 });
+    return NextResponse.json({ error: "Missing \'title\'" }, { status: 400 });
   }
 
   try {
@@ -20,18 +21,20 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Subtitle not found" }, { status: 404 });
     }
 
-    // ============================================================
-    // APPLY OFFSET ke subtitle text
-    // ============================================================
+    // Apply offset
     let text = subtitle.subtitle_text;
     if (subtitle.offset_ms && subtitle.offset_ms !== 0) {
-      console.log(`[Subtitle] Applying offset: ${subtitle.offset_ms}ms`);
       text = applySubtitleOffset(text, subtitle.offset_ms);
     }
 
-    // Convert ke VTT kalau diminta
-    const body = format === "vtt" ? srtToVtt(text) : text;
-    const contentType = format === "vtt" ? "text/vtt; charset=utf-8" : "text/srt; charset=utf-8";
+    // Convert ke VTT
+    let vttText = srtToVtt(text);
+
+    // FIX: Tambah watermark anti-pencurian
+    vttText = addWatermarkToVtt(vttText);
+
+    const body = format === "srt" ? text : vttText;
+    const contentType = format === "srt" ? "text/srt; charset=utf-8" : "text/vtt; charset=utf-8";
 
     return new NextResponse(body, {
       status: 200,
@@ -41,6 +44,7 @@ export async function GET(request: NextRequest) {
         "Access-Control-Allow-Origin": "*",
         "X-Subtitle-Source": "manual",
         "X-Subtitle-Offset": String(subtitle.offset_ms || 0),
+        "X-Subtitle-Watermarked": "1",
       },
     });
   } catch (error) {
