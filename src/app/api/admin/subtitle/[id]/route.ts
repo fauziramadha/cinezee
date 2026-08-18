@@ -1,10 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
 import { deleteManualSubtitle } from "@/lib/manual-subtitle";
 
+// FIX: Tambah session-based auth (sama seperti route POST/GET)
+// Sebelumnya hanya cek API key, jadi admin yang login via web tidak bisa delete
 async function requireAdmin(request: NextRequest): Promise<boolean> {
   const apiKey = request.headers.get("x-admin-api-key");
   const expectedKey = process.env.ADMIN_API_KEY;
   if (apiKey && expectedKey && apiKey === expectedKey) return true;
+  try {
+    const { getServerSession } = await import("next-auth");
+    const authMod = await import("@/lib/auth").catch(() => null);
+    if (authMod?.authOptions) {
+      const session = await getServerSession(authMod.authOptions);
+      if (session?.user && (session.user as any).role === "admin") return true;
+    }
+  } catch {}
   return false;
 }
 
