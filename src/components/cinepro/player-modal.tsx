@@ -454,7 +454,7 @@ export function PlayerModal() {
       setStreamInfo(null);
       setCinemacityData(null);
       setError(null);
-      setLoading(true);
+      setLoading(false);
       setCurrentServer("");
       setManualSubtitle(null);
       return;
