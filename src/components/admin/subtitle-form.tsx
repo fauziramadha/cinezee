@@ -4,19 +4,25 @@ import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Loader2, Upload, FileText } from "lucide-react";
-import { saveSubtitle } from "@/lib/admin-api";
+import { Loader2, Upload, FileText, X, Pencil } from "lucide-react";
+import { saveSubtitle, fetchSubtitleById, type FullSubtitle } from "@/lib/admin-api";
 import type { MediaResult } from "./subtitle-search";
+
+interface SubtitleFormProps {
+  apiKey: string;
+  selectedMedia: MediaResult | null;
+  onSaved: () => void;
+  editingId: number | null;     // FIX C: ID subtitle yang sedang di-edit
+  onCancelEdit: () => void;     // FIX C: callback untuk cancel edit mode
+}
 
 export function SubtitleForm({
   apiKey,
   selectedMedia,
-  onSaved
-}: {
-  apiKey: string;
-  selectedMedia: MediaResult | null;
-  onSaved: () => void;
-}) {
+  onSaved,
+  editingId,
+  onCancelEdit,
+}: SubtitleFormProps) {
   const [title, setTitle] = useState("");
   const [type, setType] = useState<"movie" | "tv">("movie");
   const [season, setSeason] = useState("");
@@ -26,27 +32,75 @@ export function SubtitleForm({
   const [releaseName, setReleaseName] = useState("");
   const [offsetSeconds, setOffsetSeconds] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [loadingEdit, setLoadingEdit] = useState(false);  // FIX C: loading saat fetch data edit
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [fileName, setFileName] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // FIX C: Saat selectedMedia berubah (dari search), pre-fill form (mode create)
   useEffect(() => {
-    if (selectedMedia) {
+    if (selectedMedia && !editingId) {
       setTitle(selectedMedia.title || "");
       setType(selectedMedia.type === "tv" ? "tv" : "movie");
       setSeason("");
       setEpisode("");
     }
-  }, [selectedMedia]);
+  }, [selectedMedia, editingId]);
 
-  // FIX: Hapus accept attribute - iOS Safari gray out .srt/.vtt karena tidak ada MIME type registered
-  // Validasi dilakukan di JS setelah file dipilih
+  // FIX C: Saat editingId berubah, fetch data subtitle untuk pre-fill form (mode edit)
+  useEffect(() => {
+    if (!editingId) {
+      // Reset form ke mode create
+      if (!selectedMedia) {
+        setTitle("");
+        setType("movie");
+      }
+      setSeason("");
+      setEpisode("");
+      setQuality("");
+      setSubtitleText("");
+      setReleaseName("");
+      setOffsetSeconds("");
+      setFileName("");
+      return;
+    }
+
+    // Mode edit: fetch subtitle by ID
+    let cancelled = false;
+    setLoadingEdit(true);
+    setError(null);
+
+    async function loadForEdit() {
+      const sub = await fetchSubtitleById(apiKey, editingId!);
+      if (cancelled) return;
+      if (sub) {
+        setTitle(sub.title);
+        setType(sub.type === "tv" ? "tv" : "movie");
+        setSeason(sub.season || "");
+        setEpisode(sub.episode || "");
+        setQuality(sub.quality || "");
+        setSubtitleText(sub.subtitle_text);
+        setReleaseName(sub.release_name || "");
+        setOffsetSeconds(sub.offset_ms ? String(sub.offset_ms / 1000) : "");
+        setFileName("(existing subtitle)");
+      } else {
+        setError("Failed to load subtitle for edit");
+      }
+      setLoadingEdit(false);
+    }
+
+    loadForEdit();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [editingId, apiKey]);
+
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // Validasi extension di JS
     const fileNameLower = file.name.toLowerCase();
     const isValidExt = fileNameLower.endsWith(".srt") || fileNameLower.endsWith(".vtt") || fileNameLower.endsWith(".txt");
     if (!isValidExt) {
@@ -75,6 +129,19 @@ export function SubtitleForm({
     fileInputRef.current?.click();
   };
 
+  // FIX C: Cancel edit mode - reset form + call onCancelEdit
+  const handleCancelEdit = () => {
+    onCancelEdit();
+    setSubtitleText("");
+    setReleaseName("");
+    setOffsetSeconds("");
+    setQuality("");
+    setFileName("");
+    setError(null);
+    setSuccess(null);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim() || !subtitleText.trim()) {
@@ -99,10 +166,18 @@ export function SubtitleForm({
 
       if (result.ok) {
         setSuccess(result.message || "Subtitle saved");
-        setSubtitleText(""); setReleaseName(""); setOffsetSeconds("");
-        setSeason(""); setEpisode(""); setQuality("");
+        setSubtitleText("");
+        setReleaseName("");
+        setOffsetSeconds("");
+        setSeason("");
+        setEpisode("");
+        setQuality("");
         setFileName("");
         if (fileInputRef.current) fileInputRef.current.value = "";
+        // FIX C: Kalau mode edit, exit edit mode
+        if (editingId) {
+          onCancelEdit();
+        }
         onSaved();
       } else {
         setError(result.error || "Failed to save");
@@ -114,19 +189,72 @@ export function SubtitleForm({
     }
   };
 
+  // FIX C: Header berubah tergantung mode
+  const isEditMode = !!editingId;
+
   return (
     <form onSubmit={handleSubmit} className="space-y-4 rounded-lg border bg-card p-4">
-      <h2 className="text-lg font-semibold">2. Upload Subtitle</h2>
+      <div className="flex items-center justify-between">
+        <h2 className="flex items-center gap-2 text-lg font-semibold">
+          {isEditMode ? (
+            <>
+              <Pencil className="h-5 w-5 text-primary" />
+              Edit Subtitle
+            </>
+          ) : (
+            <>
+              <Upload className="h-5 w-5" />
+              Upload Subtitle
+            </>
+          )}
+        </h2>
+
+        {isEditMode && (
+          <button
+            type="button"
+            onClick={handleCancelEdit}
+            className="flex items-center gap-1 rounded-md px-2 py-1 text-xs text-muted-foreground hover:bg-muted hover:text-foreground"
+          >
+            <X className="h-3 w-3" />
+            Cancel Edit
+          </button>
+        )}
+      </div>
+
+      {/* FIX C: Loading indicator saat fetch data edit */}
+      {loadingEdit && (
+        <div className="flex items-center gap-2 rounded-md bg-muted p-3 text-sm">
+          <Loader2 className="h-4 w-4 animate-spin" />
+          Loading subtitle data...
+        </div>
+      )}
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div>
           <Label htmlFor="title">Title *</Label>
-          <Input id="title" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Cari film di atas dulu..." required />
+          <Input
+            id="title"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder="Cari film di atas dulu..."
+            required
+            disabled={isEditMode}  // FIX C: disable title di mode edit (key untuk upsert)
+          />
+          {isEditMode && (
+            <p className="mt-1 text-[10px] text-muted-foreground">
+              Title tidak bisa diubah saat edit (digunakan sebagai key untuk update)
+            </p>
+          )}
         </div>
         <div>
           <Label htmlFor="type">Type</Label>
-          <select id="type" value={type} onChange={(e) => setType(e.target.value as "movie" | "tv")}
-            className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm">
+          <select
+            id="type"
+            value={type}
+            onChange={(e) => setType(e.target.value as "movie" | "tv")}
+            className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+            disabled={isEditMode}  // FIX C: disable type di mode edit
+          >
             <option value="movie">Movie</option>
             <option value="tv">TV Series</option>
           </select>
@@ -137,11 +265,25 @@ export function SubtitleForm({
         <div className="grid grid-cols-2 gap-3 rounded-md border border-blue-500/30 bg-blue-500/5 p-3">
           <div>
             <Label htmlFor="season">Season</Label>
-            <Input id="season" type="number" value={season} onChange={(e) => setSeason(e.target.value)} placeholder="1" />
+            <Input
+              id="season"
+              type="number"
+              value={season}
+              onChange={(e) => setSeason(e.target.value)}
+              placeholder="1"
+              disabled={isEditMode}  // FIX C: disable season/episode di mode edit
+            />
           </div>
           <div>
             <Label htmlFor="episode">Episode</Label>
-            <Input id="episode" type="number" value={episode} onChange={(e) => setEpisode(e.target.value)} placeholder="1" />
+            <Input
+              id="episode"
+              type="number"
+              value={episode}
+              onChange={(e) => setEpisode(e.target.value)}
+              placeholder="1"
+              disabled={isEditMode}
+            />
           </div>
         </div>
       )}
@@ -149,11 +291,21 @@ export function SubtitleForm({
       <div className="grid grid-cols-2 gap-3">
         <div>
           <Label htmlFor="quality">Quality</Label>
-          <Input id="quality" value={quality} onChange={(e) => setQuality(e.target.value)} placeholder="WEB-DL" />
+          <Input
+            id="quality"
+            value={quality}
+            onChange={(e) => setQuality(e.target.value)}
+            placeholder="WEB-DL"
+          />
         </div>
         <div>
           <Label htmlFor="releaseName">Release Name</Label>
-          <Input id="releaseName" value={releaseName} onChange={(e) => setReleaseName(e.target.value)} placeholder="..." />
+          <Input
+            id="releaseName"
+            value={releaseName}
+            onChange={(e) => setReleaseName(e.target.value)}
+            placeholder="..."
+          />
         </div>
       </div>
 
@@ -192,9 +344,9 @@ export function SubtitleForm({
         </div>
       </div>
 
-      {/* FIX: No accept attribute - iOS Safari compatible. Validate in JS. */}
+      {/* File upload */}
       <div>
-        <Label>Pilih File Subtitle</Label>
+        <Label>Pilih File Subtitle {isEditMode && "(opsional - biarkan untuk pakai text yang ada)"}</Label>
         <input
           ref={fileInputRef}
           type="file"
@@ -215,7 +367,7 @@ export function SubtitleForm({
               {fileName || "Klik untuk pilih file (.srt / .vtt / .txt)"}
             </p>
             <p className="text-xs text-muted-foreground">
-              {fileName ? "File dipilih. Bisa juga paste text langsung di bawah." : "Atau paste SRT text langsung di bawah."}
+              {fileName ? "File dipilih. Atau edit text langsung di bawah." : "Atau paste SRT text langsung di bawah."}
             </p>
           </div>
         </button>
@@ -223,17 +375,32 @@ export function SubtitleForm({
 
       <div>
         <Label htmlFor="subtitleText">Subtitle Text *</Label>
-        <textarea id="subtitleText" value={subtitleText} onChange={(e) => setSubtitleText(e.target.value)}
+        <textarea
+          id="subtitleText"
+          value={subtitleText}
+          onChange={(e) => setSubtitleText(e.target.value)}
           placeholder={"1\n00:00:01,000 --> 00:00:04,000\nSubtitle text here..."}
-          className="min-h-[200px] w-full rounded-md border border-input bg-background px-3 py-2 font-mono text-xs" required />
+          className="min-h-[200px] w-full rounded-md border border-input bg-background px-3 py-2 font-mono text-xs"
+          required
+        />
       </div>
 
       {error && <p className="text-sm text-destructive">{error}</p>}
       {success && <p className="text-sm text-green-600">{success}</p>}
 
-      <Button type="submit" disabled={submitting} className="w-full">
-        {submitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Upload className="mr-2 h-4 w-4" />}
-        {submitting ? "Saving..." : "Save Subtitle"}
+      <Button type="submit" disabled={submitting || loadingEdit} className="w-full">
+        {submitting ? (
+          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+        ) : isEditMode ? (
+          <Pencil className="mr-2 h-4 w-4" />
+        ) : (
+          <Upload className="mr-2 h-4 w-4" />
+        )}
+        {submitting
+          ? "Saving..."
+          : isEditMode
+          ? "Update Subtitle"
+          : "Save Subtitle"}
       </Button>
     </form>
   );
