@@ -48,6 +48,7 @@ export default function BatchSubtitlePage() {
   const [uploading, setUploading] = useState(false);
   const [defaultSeason, setDefaultSeason] = useState("1");
   const [apiKey, setApiKey] = useState("");
+  const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useState(() => {
@@ -85,29 +86,41 @@ export default function BatchSubtitlePage() {
     });
   };
 
+  // FIX: Hapus accept attribute - iOS Safari gray out .srt/.vtt
+  // Validasi extension di JS
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFiles = Array.from(e.target.files || []);
     const subtitleFiles: SubtitleFile[] = [];
+    const invalidFiles: string[] = [];
 
     for (const file of selectedFiles) {
-      if (file.name.endsWith(".srt") || file.name.endsWith(".vtt")) {
-        const text = await readFileAsText(file);
-        const parsed = parseFilename(file.name);
-        subtitleFiles.push({
-          file,
-          text,
-          season: parsed.season || defaultSeason,
-          episode: parsed.episode || "",
-          status: "pending",
-        });
+      const fileNameLower = file.name.toLowerCase();
+      const isValidExt = fileNameLower.endsWith(".srt") || fileNameLower.endsWith(".vtt");
+      if (!isValidExt) {
+        invalidFiles.push(file.name);
+        continue;
       }
+      const text = await readFileAsText(file);
+      const parsed = parseFilename(file.name);
+      subtitleFiles.push({
+        file,
+        text,
+        season: parsed.season || defaultSeason,
+        episode: parsed.episode || "",
+        status: "pending",
+      });
     }
+
+    if (invalidFiles.length > 0) {
+      setError(`${invalidFiles.length} file di-skip (bukan .srt/.vtt): ${invalidFiles.join(", ")}`);
+    } else {
+      setError(null);
+    }
+
     setFiles(prev => [...prev, ...subtitleFiles]);
-    // FIX: Reset input value supaya bisa pilih file yang sama lagi
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
-  // FIX: Trigger file input via button (iOS Safari compatible)
   const handleBrowseClick = () => {
     fileInputRef.current?.click();
   };
@@ -253,11 +266,10 @@ export default function BatchSubtitlePage() {
                   </div>
                 )}
 
-                {/* FIX: Native file input dengan sr-only (bukan hidden) - iOS Safari compatible */}
+                {/* FIX: No accept attribute - iOS Safari compatible */}
                 <input
                   ref={fileInputRef}
                   type="file"
-                  accept=".srt,.vtt"
                   multiple
                   onChange={handleFileSelect}
                   className="sr-only"
@@ -276,6 +288,12 @@ export default function BatchSubtitlePage() {
                     <span className="text-xs text-zinc-500">Format .srt / .vtt — bisa pilih multiple file</span>
                   </div>
                 </button>
+
+                {error && (
+                  <div className="rounded-md border border-yellow-500/30 bg-yellow-500/5 p-3 text-xs text-yellow-600">
+                    {error}
+                  </div>
+                )}
 
                 {files.length > 0 && (
                   <div className="space-y-2">
