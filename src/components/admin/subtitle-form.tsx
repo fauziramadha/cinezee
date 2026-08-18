@@ -40,17 +40,30 @@ export function SubtitleForm({
     }
   }, [selectedMedia]);
 
+  // FIX: Hapus accept attribute - iOS Safari gray out .srt/.vtt karena tidak ada MIME type registered
+  // Validasi dilakukan di JS setelah file dipilih
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+
+    // Validasi extension di JS
+    const fileNameLower = file.name.toLowerCase();
+    const isValidExt = fileNameLower.endsWith(".srt") || fileNameLower.endsWith(".vtt") || fileNameLower.endsWith(".txt");
+    if (!isValidExt) {
+      setError(`File "${file.name}" bukan format subtitle. Hanya .srt, .vtt, .txt yang didukung.`);
+      setFileName("");
+      setSubtitleText("");
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      return;
+    }
+
     setFileName(file.name);
+    setError(null);
     const reader = new FileReader();
     reader.onload = (event) => {
       const text = event.target?.result as string;
       if (!text.match(/\d{2}:\d{2}:\d{2}/)) {
-        setError("File tidak terlihat sebagai SRT/VTT valid.");
-      } else {
-        setError(null);
+        setError("File tidak terlihat sebagai SRT/VTT valid (tidak ada timestamp).");
       }
       setSubtitleText(text);
       if (!releaseName) setReleaseName(file.name.replace(/\.(srt|vtt|txt)$/i, ""));
@@ -58,7 +71,6 @@ export function SubtitleForm({
     reader.readAsText(file);
   };
 
-  // FIX: Trigger file input via button (iOS Safari compatible)
   const handleBrowseClick = () => {
     fileInputRef.current?.click();
   };
@@ -90,6 +102,7 @@ export function SubtitleForm({
         setSubtitleText(""); setReleaseName(""); setOffsetSeconds("");
         setSeason(""); setEpisode(""); setQuality("");
         setFileName("");
+        if (fileInputRef.current) fileInputRef.current.value = "";
         onSaved();
       } else {
         setError(result.error || "Failed to save");
@@ -179,13 +192,12 @@ export function SubtitleForm({
         </div>
       </div>
 
-      {/* FIX: Native file input + button trigger (iOS Safari compatible) */}
+      {/* FIX: No accept attribute - iOS Safari compatible. Validate in JS. */}
       <div>
-        <Label>Pilih File .srt / .vtt</Label>
+        <Label>Pilih File Subtitle</Label>
         <input
           ref={fileInputRef}
           type="file"
-          accept=".srt,.vtt,text/plain"
           onChange={handleFileUpload}
           className="sr-only"
           tabIndex={-1}
@@ -200,7 +212,7 @@ export function SubtitleForm({
           </div>
           <div className="min-w-0 flex-1">
             <p className="truncate text-sm font-medium">
-              {fileName || "Klik untuk pilih file .srt / .vtt"}
+              {fileName || "Klik untuk pilih file (.srt / .vtt / .txt)"}
             </p>
             <p className="text-xs text-muted-foreground">
               {fileName ? "File dipilih. Bisa juga paste text langsung di bawah." : "Atau paste SRT text langsung di bawah."}
