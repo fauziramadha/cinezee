@@ -55,8 +55,6 @@ export function SubtitleGenerate() {
     if (isTV && episode) streamParams.set("episode", episode);
     const streamUrl = `${VPS_API_BASE}/api/stream/play/${cinemacityId}?${streamParams.toString()}`;
 
-    // FIX: Array approach - setiap baris adalah string terpisah
-    // Tidak ada \n di dalam string Python, jadi tidak bisa ke-interpretasi sebagai newline literal
     const lines = [
       "# ============================================================",
       "# CINESTREAM SUBTITLE GENERATOR",
@@ -69,7 +67,7 @@ export function SubtitleGenerate() {
       "# Model: Whisper small (Indonesia)",
       "# ============================================================",
       "",
-      "# === CONFIGURATION (auto-filled) ===",
+      "# === CONFIGURATION ===",
       `STREAM_URL = "${streamUrl}"`,
       `TITLE = ${JSON.stringify(title)}`,
       `TYPE = "${type}"`,
@@ -86,32 +84,90 @@ export function SubtitleGenerate() {
       "subprocess.check_call([sys.executable, '-m', 'pip', 'install', '-q', 'openai-whisper'])",
       "print('Whisper installed')",
       "",
-      "# === STEP 2: Download audio from stream ===",
-      "# ffmpeg sudah pre-installed di Google Colab",
-      "# FIX: Tambah User-Agent (Cloudflare block ffmpeg default UA 'Lavf/...')",
-      "#      + reconnect flags + timeout supaya tidak hang",
-      "#      + progress output supaya user lihat progress",
-      "print('Downloading audio from stream...')",
-      "print(f'Stream URL: {STREAM_URL}')",
-      "print('This may take 5-15 minutes depending on film length...')",
+      "# === STEP 2: Download audio via Python requests (bukan ffmpeg langsung) ===",
+      "# ffmpeg HTTP handling bermasalah dengan Cloudflare proxy.",
+      "# Pakai Python requests untuk download HLS segments, lalu ffmpeg extract audio lokal.",
+      "import requests",
+      "import os",
+      "import re",
+      "",
+      "HEADERS = {",
+      "    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',",
+      "    'Origin': 'https://cinestream.biz.id',",
+      "    'Referer': 'https://cinestream.biz.id/',",
+      "}",
+      "",
+      "BASE = 'https://api.cinestream.biz.id'",
+      "",
+      "print('Fetching m3u8 playlist...')",
+      "resp = requests.get(STREAM_URL, headers=HEADERS, timeout=30)",
+      "print(f'Status: {resp.status_code}')",
+      "if resp.status_code != 200:",
+      "    raise Exception(f'Failed to fetch m3u8: HTTP {resp.status_code}')",
+      "m3u8_text = resp.text",
+      "",
+      "# Cari sub-playlist URL (kalau ada EXT-X-STREAM-INF)",
+      "sub_url = None",
+      "for line in m3u8_text.split(chr(10)):",
+      "    line = line.strip()",
+      "    if line and not line.startswith('#'):",
+      "        sub_url = line",
+      "        break",
+      "",
+      "if sub_url:",
+      "    if sub_url.startswith('http'):",
+      "        sub_full = sub_url",
+      "    else:",
+      "        sub_full = BASE + sub_url",
+      "    print(f'Fetching sub-playlist: {sub_full[:80]}...')",
+      "    resp2 = requests.get(sub_full, headers=HEADERS, timeout=30)",
+      "    m3u8_text = resp2.text",
+      "",
+      "# Parse segment URLs",
+      "segments = []",
+      "for line in m3u8_text.split(chr(10)):",
+      "    line = line.strip()",
+      "    if line and not line.startswith('#'):",
+      "        if line.startswith('http'):",
+      "            segments.append(line)",
+      "        else:",
+      "            segments.append(BASE + line)",
+      "",
+      "total = len(segments)",
+      "print(f'Found {total} segments')",
+      "if total == 0:",
+      "    raise Exception('No segments found in m3u8')",
+      "",
+      "# Download semua segments dan gabung jadi 1 file TS",
+      "print(f'Downloading {total} segments...')",
+      "with open('video.ts', 'wb') as f:",
+      "    for i, seg_url in enumerate(segments):",
+      "        seg_resp = requests.get(seg_url, headers=HEADERS, timeout=60)",
+      "        if seg_resp.status_code == 200:",
+      "            f.write(seg_resp.content)",
+      "        else:",
+      "            print(f'  WARNING: segment {i+1} failed (HTTP {seg_resp.status_code})')",
+      "        if (i + 1) % 50 == 0:",
+      "            pct = int((i + 1) / total * 100)",
+      "            print(f'  Progress: {i+1}/{total} ({pct}%)')",
+      "print(f'Downloaded {total} segments')",
+      "",
+      "# Extract audio dengan ffmpeg dari file lokal (tidak ada HTTP request)",
+      "print('Extracting audio from video.ts...')",
       "subprocess.run([",
       "    'ffmpeg', '-y',",
-      "    '-user_agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',",
-      "    '-headers', 'Origin: https://cinestream.biz.id' + chr(13) + chr(10),",
-      "    '-reconnect', '1',",
-      "    '-reconnect_streamed', '1',",
-      "    '-reconnect_at_eof', '1',",
-      "    '-reconnect_delay_max', '10',",
-      "    '-rw_timeout', '60000000',",
-      "    '-i', STREAM_URL,",
+      "    '-i', 'video.ts',",
       "    '-vn',",
       "    '-acodec', 'pcm_s16le',",
       "    '-ar', '16000',",
       "    '-ac', '1',",
-      "    '-progress', 'pipe:1',",
       "    'audio.wav'",
-      "], check=True)",
-      "print('Audio downloaded: audio.wav')",
+      "], check=True, capture_output=True)",
+      "print('Audio extracted: audio.wav')",
+      "",
+      "# Cleanup video.ts (hemat storage Colab)",
+      "os.remove('video.ts')",
+      "print('Cleaned up video.ts')",
       "",
       "# === STEP 3: Run Whisper transcription ===",
       "import whisper",
@@ -136,9 +192,9 @@ export function SubtitleGenerate() {
       "vtt_lines.append('00:00:00.000 --> 00:00:01.500')",
       "vtt_lines.append(WATERMARK)",
       "vtt_lines.append('')",
-      "segments = result['segments']",
+      "segments_list = result['segments']",
       "next_wm = 300",
-      "for seg in segments:",
+      "for seg in segments_list:",
       "    start = seg['start']",
       "    end = seg['end']",
       "    text = seg['text'].strip()",
@@ -154,13 +210,12 @@ export function SubtitleGenerate() {
       "    vtt_lines.append(text)",
       "    vtt_lines.append('')",
       "vtt_content = NL.join(vtt_lines)",
-      "print(f'VTT generated ({len(vtt_content)} chars, {len(segments)} cues)')",
+      "print(f'VTT generated ({len(vtt_content)} chars, {len(segments_list)} cues)')",
       "with open('subtitle.vtt', 'w', encoding='utf-8') as f:",
       "    f.write(vtt_content)",
       "print('Saved to subtitle.vtt (backup)')",
       "",
       "# === STEP 5: Upload ke CineStream API ===",
-      "import requests",
       "print('Uploading subtitle to CineStream...')",
       "resp = requests.post(",
       "    f'{WORKER_URL}/api/admin/subtitle',",
@@ -239,23 +294,11 @@ export function SubtitleGenerate() {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <Label htmlFor="season">Season</Label>
-                  <Input
-                    id="season"
-                    type="number"
-                    value={season}
-                    onChange={(e) => setSeason(e.target.value)}
-                    placeholder="1"
-                  />
+                  <Input id="season" type="number" value={season} onChange={(e) => setSeason(e.target.value)} placeholder="1" />
                 </div>
                 <div>
                   <Label htmlFor="episode">Episode</Label>
-                  <Input
-                    id="episode"
-                    type="number"
-                    value={episode}
-                    onChange={(e) => setEpisode(e.target.value)}
-                    placeholder="1"
-                  />
+                  <Input id="episode" type="number" value={episode} onChange={(e) => setEpisode(e.target.value)} placeholder="1" />
                 </div>
               </div>
             </div>
@@ -267,26 +310,18 @@ export function SubtitleGenerate() {
                 <Sparkles className="h-5 w-5 text-primary" />
                 {isTV ? "3. Generate Colab Command" : "2. Generate Colab Command"}
               </h2>
-
               <div className="rounded-md bg-muted/50 p-3 text-sm">
                 <div className="flex items-center gap-2">
                   <Film className="h-4 w-4 text-muted-foreground" />
                   <span className="font-medium">{selectedMedia.title}</span>
                 </div>
                 <div className="mt-2 flex flex-wrap gap-1">
-                  <Badge variant="secondary" className="text-[10px]">
-                    {selectedMedia.type === "tv" ? "TV Series" : "Movie"}
-                  </Badge>
-                  {isTV && season && (
-                    <Badge variant="outline" className="text-[10px]">S{season}</Badge>
-                  )}
-                  {isTV && episode && (
-                    <Badge variant="outline" className="text-[10px]">E{episode}</Badge>
-                  )}
+                  <Badge variant="secondary" className="text-[10px]">{selectedMedia.type === "tv" ? "TV Series" : "Movie"}</Badge>
+                  {isTV && season && <Badge variant="outline" className="text-[10px]">S{season}</Badge>}
+                  {isTV && episode && <Badge variant="outline" className="text-[10px]">E{episode}</Badge>}
                   <Badge variant="outline" className="text-[10px]">ID: {selectedMedia.cinemacity_id}</Badge>
                 </div>
               </div>
-
               <Button onClick={handleGenerate} className="w-full" size="lg">
                 <Sparkles className="mr-2 h-4 w-4" />
                 Generate Colab Command
@@ -302,61 +337,30 @@ export function SubtitleGenerate() {
                   {isTV ? "4. Copy & Paste ke Colab" : "3. Copy & Paste ke Colab"}
                 </h2>
                 <Button onClick={handleCopy} size="sm" variant={copied ? "default" : "outline"}>
-                  {copied ? (
-                    <>
-                      <Check className="mr-1 h-3 w-3" />
-                      Copied!
-                    </>
-                  ) : (
-                    <>
-                      <Copy className="mr-1 h-3 w-3" />
-                      Copy
-                    </>
-                  )}
+                  {copied ? (<><Check className="mr-1 h-3 w-3" />Copied!</>) : (<><Copy className="mr-1 h-3 w-3" />Copy</>)}
                 </Button>
               </div>
-
               <div className="rounded-md border border-blue-500/30 bg-blue-500/5 p-3 text-sm space-y-2">
                 <p className="font-semibold">Cara pakai:</p>
                 <ol className="list-decimal list-inside space-y-1 text-xs text-muted-foreground">
-                  <li>
-                    Buka{" "}
-                    <a
-                      href="https://colab.research.google.com"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-blue-500 underline inline-flex items-center gap-0.5"
-                    >
-                      Google Colab <ExternalLink className="h-3 w-3" />
-                    </a>
-                  </li>
+                  <li>Buka <a href="https://colab.research.google.com" target="_blank" rel="noopener noreferrer" className="text-blue-500 underline inline-flex items-center gap-0.5">Google Colab <ExternalLink className="h-3 w-3" /></a></li>
                   <li>Buat notebook baru (New Notebook)</li>
-                  <li>Paste command di bawah ke cell pertama</li>
-                  <li>Klik Run (atau Shift+Enter)</li>
-                  <li>Tunggu ~10-15 menit (download audio + Whisper transcription)</li>
+                  <li>Paste command ke cell pertama</li>
+                  <li>Runtime → Change runtime type → T4 GPU</li>
+                  <li>Klik Run (Shift+Enter)</li>
+                  <li>Tunggu ~10-20 menit (download segments + transcribe)</li>
                   <li>Subtitle otomatis ter-upload ke CineStream</li>
                 </ol>
               </div>
-
               <div className="rounded-md border border-orange-500/30 bg-orange-500/5 p-3 text-xs text-orange-600">
                 <p className="flex items-start gap-2">
                   <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
-                  <span>
-                    <strong>Penting:</strong> Pastikan Colab pakai GPU runtime
-                    (Runtime → Change runtime type → T4 GPU) untuk kecepatan optimal.
-                    Tanpa GPU, Whisper small butuh 30-60 menit per film.
-                  </span>
+                  <span><strong>Penting:</strong> Pakai GPU runtime (T4) untuk kecepatan optimal. Download segments ~5-10 menit, transcribe ~5-10 menit.</span>
                 </p>
               </div>
-
               <div>
                 <Label>Python Command (copy semua)</Label>
-                <textarea
-                  readOnly
-                  value={command}
-                  className="mt-1 min-h-[400px] w-full rounded-md border border-input bg-zinc-950 px-3 py-2 font-mono text-xs text-green-400"
-                  onClick={(e) => (e.target as HTMLTextAreaElement).select()}
-                />
+                <textarea readOnly value={command} className="mt-1 min-h-[400px] w-full rounded-md border border-input bg-zinc-950 px-3 py-2 font-mono text-xs text-green-400" onClick={(e) => (e.target as HTMLTextAreaElement).select()} />
               </div>
             </div>
           )}
