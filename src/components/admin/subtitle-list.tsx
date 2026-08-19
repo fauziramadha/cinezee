@@ -94,6 +94,7 @@ export function SubtitleList({ apiKey, refreshKey, onEdit }: SubtitleListProps) 
                   {entry.season && <Badge variant="outline" className="text-[10px]">S{entry.season}</Badge>}
                   {entry.episode && <Badge variant="outline" className="text-[10px]">E{entry.episode}</Badge>}
                   {entry.quality && <Badge variant="outline" className="text-[10px]">{entry.quality}</Badge>}
+                  {entry.server && <Badge variant="outline" className="text-[10px] text-purple-600">Server {entry.server}</Badge>}
                   {entry.offset_ms && entry.offset_ms !== 0 && (
                     <Badge variant="outline" className="text-[10px] text-orange-600">
                       {entry.offset_ms > 0 ? "+" : ""}{(entry.offset_ms / 1000).toFixed(1)}s
