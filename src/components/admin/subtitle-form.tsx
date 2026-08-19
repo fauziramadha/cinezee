@@ -11,8 +11,6 @@ import type { MediaResult } from "./subtitle-search";
 const VPS_API_BASE =
   process.env.NEXT_PUBLIC_API_URL || "https://api.cinestream.biz.id";
 
-const VPS_API_BASE =
-  process.env.NEXT_PUBLIC_API_URL || "https://api.cinestream.biz.id";
 
 interface SubtitleFormProps {
   apiKey: string;
