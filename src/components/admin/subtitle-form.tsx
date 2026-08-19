@@ -8,6 +8,12 @@ import { Loader2, Upload, FileText, X, Pencil } from "lucide-react";
 import { saveSubtitle, fetchSubtitleById, type FullSubtitle } from "@/lib/admin-api";
 import type { MediaResult } from "./subtitle-search";
 
+const VPS_API_BASE =
+  process.env.NEXT_PUBLIC_API_URL || "https://api.cinestream.biz.id";
+
+const VPS_API_BASE =
+  process.env.NEXT_PUBLIC_API_URL || "https://api.cinestream.biz.id";
+
 interface SubtitleFormProps {
   apiKey: string;
   selectedMedia: MediaResult | null;
@@ -31,6 +37,8 @@ export function SubtitleForm({
   const [subtitleText, setSubtitleText] = useState("");
   const [releaseName, setReleaseName] = useState("");
   const [offsetSeconds, setOffsetSeconds] = useState("");
+  const [server, setServer] = useState("");
+  const [availableServers, setAvailableServers] = useState<{id: number; title: string}[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [loadingEdit, setLoadingEdit] = useState(false);  // FIX C: loading saat fetch data edit
   const [error, setError] = useState<string | null>(null);
@@ -45,6 +53,21 @@ export function SubtitleForm({
       setType(selectedMedia.type === "tv" ? "tv" : "movie");
       setSeason("");
       setEpisode("");
+      setServer("");
+      setAvailableServers([]);
+      // Fetch servers list dari VPS API
+      const fetchServers = async () => {
+        try {
+          const res = await fetch(`${VPS_API_BASE}/api/stream/info/${selectedMedia.cinemacity_id}?slug=${selectedMedia.slug}&type=${selectedMedia.type}`);
+          if (res.ok) {
+            const data = await res.json();
+            if (data.success && data.data?.servers?.length > 1) {
+              setAvailableServers(data.data.servers);
+            }
+          }
+        } catch {}
+      };
+      fetchServers();
     }
   }, [selectedMedia, editingId]);
 
@@ -83,6 +106,7 @@ export function SubtitleForm({
         setSubtitleText(sub.subtitle_text);
         setReleaseName(sub.release_name || "");
         setOffsetSeconds(sub.offset_ms ? String(sub.offset_ms / 1000) : "");
+        setServer(sub.server || "");
         setFileName("(existing subtitle)");
       } else {
         setError("Failed to load subtitle for edit");
@@ -136,6 +160,8 @@ export function SubtitleForm({
     setReleaseName("");
     setOffsetSeconds("");
     setQuality("");
+    setServer("");
+    setAvailableServers([]);
     setFileName("");
     setError(null);
     setSuccess(null);
@@ -158,6 +184,7 @@ export function SubtitleForm({
         type,
         season: season || null,
         episode: episode || null,
+        server: server || null,
         quality: quality || null,
         subtitle_text: subtitleText,
         release_name: releaseName || null,
@@ -172,6 +199,8 @@ export function SubtitleForm({
         setSeason("");
         setEpisode("");
         setQuality("");
+        setServer("");
+        setAvailableServers([]);
         setFileName("");
         if (fileInputRef.current) fileInputRef.current.value = "";
         // FIX C: Kalau mode edit, exit edit mode
