@@ -116,7 +116,7 @@ async function getStreamInfo(
 }
 
 // FIX B: Check manual subtitle di /api/subtitle/manual
-// Return null kalau tidak ada, return SubtitleTrack kalau ada
+// Return null jika tidak ada, return SubtitleTrack jika ada
 async function checkManualSubtitle(
   title: string,
   type: string,
