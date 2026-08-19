@@ -22,7 +22,7 @@ export function SubtitleGenerate() {
   const [selectedMedia, setSelectedMedia] = useState<MediaResult | null>(null);
   const [season, setSeason] = useState("1");
   const [episode, setEpisode] = useState("1");
-  const [model, setModel] = useState("medium");  // FIX: default medium (lebih akurat dari small)
+  const [model, setModel] = useState("large-v3");  // OPTIMIZATION: default large-v3 (paling akurat)
   const [command, setCommand] = useState("");
   const [copied, setCopied] = useState(false);
 
@@ -203,8 +203,22 @@ export function SubtitleGenerate() {
       "print('First run akan download model, tunggu sebentar...')",
       "model = whisper.load_model(MODEL_NAME)",
       "print('Model loaded')",
-      "print('Transcribing audio (language=id)...')",
-      "result = model.transcribe('audio.wav', language='id', task='transcribe', verbose=False)",
+      "print('Transcribing audio (language=id, optimized for accuracy)...')",
+      "# OPTIMIZATION: initial_prompt kasih Whisper contoh bahasa Indonesia formal",
+      "# supaya dia paham konteks bahasa (bukan campur Melayu/Korea/English random)",
+      "INITIAL_PROMPT = 'Berikut adalah subtitle dalam bahasa Indonesia untuk film. Karakter berbicara dengan bahasa Indonesia yang jelas dan formal.'",
+      "result = model.transcribe(",
+      "    'audio.wav',",
+      "    language='id',",
+      "    task='transcribe',",
+      "    verbose=False,",
+      "    beam_size=10,                       # lebih teliti (default 5)",
+      "    condition_on_previous_text=True,     # pakai context segment sebelumnya",
+      "    initial_prompt=INITIAL_PROMPT,       # guide ke bahasa Indonesia",
+      "    temperature=[0.0, 0.2, 0.4, 0.6],    # fallback kalau ada segment sulit",
+      "    compression_ratio_threshold=2.4,     # filter segment yang terlalu repetitif",
+      "    no_speech_threshold=0.6,             # deteksi segment tanpa speech",
+      ")",
       "segments_list = result['segments']  # FIX: pakai string key",
       "print(f'Transcribed {len(segments_list)} segments')",
       "",
