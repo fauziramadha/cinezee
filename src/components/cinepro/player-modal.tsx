@@ -508,11 +508,6 @@ export function PlayerModal() {
   // FIX B: State untuk manual subtitle (dari admin upload)
   const [manualSubtitle, setManualSubtitle] = useState<SubtitleTrack | null>(null);
 
-  // FIX: Counter untuk force remount VideoPlayer setiap kali player buka
-  // Tanpa ini, kalau user tutup player dan buka lagi film yang SAMA,
-  // streamUrl tidak berubah → VideoPlayer tidak remount → HLS instance lama stuck → loading forever
-  const [mountKey, setMountKey] = useState(0);
-
   useEffect(() => {
     if (!playerMedia) {
       setStreamInfo(null);
@@ -524,12 +519,14 @@ export function PlayerModal() {
       return;
     }
 
-    // FIX: Increment mountKey setiap kali playerMedia berubah
-    setMountKey(prev => prev + 1);
-
     let cancelled = false;
 
     async function init() {
+      // FIX: Reset streamInfo ke null dulu supaya streamUrl jadi ""
+      // Saat streamUrl kosong, VideoPlayer unmount (HLS destroy)
+      // Setelah fetch selesai, streamUrl dapat nilai baru → VideoPlayer mount fresh
+      setStreamInfo(null);
+      setCinemacityData(null);
       setLoading(true);
       setError(null);
 
@@ -819,7 +816,7 @@ export function PlayerModal() {
         {!loading && !error && streamUrl && (
           <div className="relative aspect-video w-full bg-black">
             <VideoPlayer
-              key={`${streamUrl}-${mountKey}`}
+              key={streamUrl}
               streamUrl={streamUrl}
               subtitles={subtitles}
               defaultSubtitleIdx={defaultSubtitleIdx}
