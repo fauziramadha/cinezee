@@ -116,13 +116,12 @@ async function getStreamInfo(
 }
 
 // FIX B: Check manual subtitle di /api/subtitle/manual
-// Return null jika tidak ada, return SubtitleTrack jika ada
+// Return null kalau tidak ada, return SubtitleTrack kalau ada
 async function checkManualSubtitle(
   title: string,
   type: string,
   season?: string,
-  episode?: string,
-  server?: string
+  episode?: string
 ): Promise<SubtitleTrack | null> {
   try {
     const params = new URLSearchParams({
@@ -132,7 +131,6 @@ async function checkManualSubtitle(
     });
     if (season) params.set("season", season);
     if (episode) params.set("episode", episode);
-    if (server) params.set("server", server);
 
     const url = `/api/subtitle/manual?${params.toString()}`;
     const res = await fetch(url, { method: "HEAD" });
@@ -508,6 +506,11 @@ export function PlayerModal() {
   // FIX B: State untuk manual subtitle (dari admin upload)
   const [manualSubtitle, setManualSubtitle] = useState<SubtitleTrack | null>(null);
 
+  // FIX: Counter untuk force remount VideoPlayer setiap kali player buka
+  // Tanpa ini, kalau user tutup player dan buka lagi film yang SAMA,
+  // streamUrl tidak berubah → VideoPlayer tidak remount → HLS instance lama stuck → loading forever
+  const [mountKey, setMountKey] = useState(0);
+
   useEffect(() => {
     if (!playerMedia) {
       setStreamInfo(null);
@@ -519,14 +522,12 @@ export function PlayerModal() {
       return;
     }
 
+    // FIX: Increment mountKey setiap kali playerMedia berubah
+    setMountKey(prev => prev + 1);
+
     let cancelled = false;
 
     async function init() {
-      // FIX: Reset streamInfo ke null dulu supaya streamUrl jadi ""
-      // Saat streamUrl kosong, VideoPlayer unmount (HLS destroy)
-      // Setelah fetch selesai, streamUrl dapat nilai baru → VideoPlayer mount fresh
-      setStreamInfo(null);
-      setCinemacityData(null);
       setLoading(true);
       setError(null);
 
@@ -635,8 +636,7 @@ export function PlayerModal() {
         streamInfo!.content.title,
         streamInfo!.content.type,
         currentSeason || undefined,
-        currentEpisode || undefined,
-        currentServer || undefined
+        currentEpisode || undefined
       );
       if (cancelled) return;
       setManualSubtitle(manual);
@@ -816,7 +816,7 @@ export function PlayerModal() {
         {!loading && !error && streamUrl && (
           <div className="relative aspect-video w-full bg-black">
             <VideoPlayer
-              key={streamUrl}
+              key={`${streamUrl}-${mountKey}`}
               streamUrl={streamUrl}
               subtitles={subtitles}
               defaultSubtitleIdx={defaultSubtitleIdx}
