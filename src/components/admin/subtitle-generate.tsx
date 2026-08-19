@@ -87,7 +87,7 @@ export function SubtitleGenerate() {
       `WATERMARK = "nonton streaming film terupdate hanya di cinestream.biz.id"`,
       `MODEL_NAME = "${model}"`,
       `AUDIO_LANG = ${audioLang === "auto" ? "None" : "'" + audioLang + "'"}  # None = auto-detect, or 'en', 'id'`,
-      `TRANSLATE_TO_ID = ${translateToId}  # True = translate ke Indonesia kalau bahasa asli bukan id`,
+      `TRANSLATE_TO_ID = ${translateToId ? "True" : "False"}  # True = translate ke Indonesia kalau bahasa asli bukan id`,
       "",
       "# === STEP 1: Install Whisper ===",
       "import subprocess",
