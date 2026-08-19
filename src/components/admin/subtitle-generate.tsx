@@ -22,7 +22,9 @@ export function SubtitleGenerate() {
   const [selectedMedia, setSelectedMedia] = useState<MediaResult | null>(null);
   const [season, setSeason] = useState("1");
   const [episode, setEpisode] = useState("1");
-  const [model, setModel] = useState("large-v3");  // OPTIMIZATION: default large-v3 (paling akurat)
+  const [model, setModel] = useState("large-v3");
+  const [audioLang, setAudioLang] = useState("auto");  // FIX: auto-detect bahasa audio
+  const [translateToId, setTranslateToId] = useState(true);  // FIX: translate ke Indonesia kalau bukan Indonesia
   const [command, setCommand] = useState("");
   const [copied, setCopied] = useState(false);
 
@@ -84,6 +86,8 @@ export function SubtitleGenerate() {
       `WORKER_URL = "https://cinestream.biz.id"`,
       `WATERMARK = "nonton streaming film terupdate hanya di cinestream.biz.id"`,
       `MODEL_NAME = "${model}"`,
+      `AUDIO_LANG = ${audioLang === "auto" ? "None" : `'${audioLang}'`}  # None = auto-detect, or 'en', 'id'`,
+      `TRANSLATE_TO_ID = ${translateToId}  # True = translate ke Indonesia kalau bahasa asli bukan id`,
       "",
       "# === STEP 1: Install Whisper ===",
       "import subprocess",
@@ -203,24 +207,42 @@ export function SubtitleGenerate() {
       "print('First run akan download model, tunggu sebentar...')",
       "model = whisper.load_model(MODEL_NAME)",
       "print('Model loaded')",
-      "print('Transcribing audio (language=id, optimized for accuracy)...')",
-      "# OPTIMIZATION: initial_prompt kasih Whisper contoh bahasa Indonesia formal",
-      "# supaya dia paham konteks bahasa (bukan campur Melayu/Korea/English random)",
-      "INITIAL_PROMPT = 'Berikut adalah subtitle dalam bahasa Indonesia untuk film. Karakter berbicara dengan bahasa Indonesia yang jelas dan formal.'",
+      "print(f'Transcribing audio (language={AUDIO_LANG}, optimized for accuracy)...')",
+      "# FIX: Tidak pakai initial_prompt (terlalu dominan, bikin Whisper generate teks random)",
+      "# FIX: Tidak pakai condition_on_previous_text (bisa cascade error kalau 1 segment salah)",
       "result = model.transcribe(",
       "    'audio.wav',",
-      "    language='id',",
+      `    language=${AUDIO_LANG === "auto" ? "None" : `'${AUDIO_LANG}'`},   # None = auto-detect`,
       "    task='transcribe',",
       "    verbose=False,",
-      "    beam_size=10,                       # lebih teliti (default 5)",
-      "    condition_on_previous_text=True,     # pakai context segment sebelumnya",
-      "    initial_prompt=INITIAL_PROMPT,       # guide ke bahasa Indonesia",
-      "    temperature=[0.0, 0.2, 0.4, 0.6],    # fallback kalau ada segment sulit",
-      "    compression_ratio_threshold=2.4,     # filter segment yang terlalu repetitif",
-      "    no_speech_threshold=0.6,             # deteksi segment tanpa speech",
+      "    beam_size=10,",
+      "    condition_on_previous_text=False,   # avoid cascade error",
+      "    temperature=[0.0, 0.2, 0.4, 0.6],",
+      "    compression_ratio_threshold=2.4,",
+      "    no_speech_threshold=0.6,",
       ")",
-      "segments_list = result['segments']  # FIX: pakai string key",
-      "print(f'Transcribed {len(segments_list)} segments')",
+      "segments_list = result['segments']",
+      `detected_lang = result.get('language', 'unknown')`,
+      `print(f'Transcribed {len(segments_list)} segments (detected language: {detected_lang})')`,
+      "",
+      "# === STEP 3b: Translate ke Indonesia kalau perlu ===",
+      `if TRANSLATE_TO_ID and detected_lang != 'id':`,
+      "    print(f'Translating from {detected_lang} to Indonesian...')",
+      "    subprocess.check_call([sys.executable, '-m', 'pip', 'install', '-q', 'deep-translator'])",
+      "    from deep_translator import GoogleTranslator",
+      "    translator = GoogleTranslator(source='auto', target='id')",
+      "    for seg in segments_list:",
+      "        original = seg['text'].strip()",
+      "        if original:",
+      "            try:",
+      "                translated = translator.translate(original)",
+      "                seg['text'] = translated",
+      "            except Exception as e:",
+      "                print(f'  Translate failed for: {original[:30]}... ({e})')",
+      "        if (segments_list.index(seg) + 1) % 50 == 0:",
+      "            pct = int((segments_list.index(seg) + 1) / len(segments_list) * 100)",
+      "            print(f'  Translate progress: {pct}%')",
+      "    print('Translation complete')",
       "",
       "# === STEP 4: Convert to VTT + add watermark ===",
       "def seconds_to_vtt(sec):",
@@ -360,9 +382,58 @@ export function SubtitleGenerate() {
             </div>
           )}
 
+          {selectedMedia && (
+            <div className="space-y-3 rounded-lg border bg-card p-4">
+              <h2 className="text-lg font-semibold">3. Bahasa Audio & Translate</h2>
+              <div className="space-y-3">
+                <div>
+                  <Label>Bahasa Audio Film</Label>
+                  <p className="text-xs text-muted-foreground mb-2">
+                    Pilih bahasa asli audio film. "Auto-detect" = Whisper deteksi sendiri (paling akurat).
+                  </p>
+                  <div className="grid grid-cols-3 gap-2">
+                    {[
+                      { id: "auto", label: "Auto-detect" },
+                      { id: "en", label: "English" },
+                      { id: "id", label: "Indonesia" },
+                    ].map((lang) => (
+                      <button
+                        key={lang.id}
+                        onClick={() => setAudioLang(lang.id)}
+                        className={`rounded-md border p-2 text-xs font-medium transition ${
+                          audioLang === lang.id
+                            ? "border-primary bg-primary/5"
+                            : "border-input hover:bg-muted/50"
+                        }`}
+                      >
+                        {lang.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 rounded-md bg-muted/50 p-3">
+                  <button
+                    onClick={() => setTranslateToId(!translateToId)}
+                    className={`flex h-5 w-9 items-center rounded-full transition ${
+                      translateToId ? "bg-primary" : "bg-muted"
+                    }`}
+                  >
+                    <div className={`h-4 w-4 rounded-full bg-white transition ${translateToId ? "ml-4" : "ml-0.5"}`} />
+                  </button>
+                  <div>
+                    <p className="text-sm font-medium">Translate ke Indonesia</p>
+                    <p className="text-[10px] text-muted-foreground">
+                      Kalau film bahasa Inggris/asing, otomatis translate ke Indonesia via Google Translate
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
           {selectedMedia && isTV && (
             <div className="space-y-3 rounded-lg border bg-card p-4">
-              <h2 className="text-lg font-semibold">3. Pilih Episode</h2>
+              <h2 className="text-lg font-semibold">4. Pilih Episode</h2>
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <Label htmlFor="season">Season</Label>
@@ -380,7 +451,7 @@ export function SubtitleGenerate() {
             <div className="space-y-3 rounded-lg border bg-card p-4">
               <h2 className="flex items-center gap-2 text-lg font-semibold">
                 <Sparkles className="h-5 w-5 text-primary" />
-                {isTV ? "4. Generate Colab Command" : "3. Generate Colab Command"}
+                {isTV ? "5. Generate Colab Command" : "4. Generate Colab Command"}
               </h2>
               <div className="rounded-md bg-muted/50 p-3 text-sm">
                 <div className="flex items-center gap-2">
@@ -406,7 +477,7 @@ export function SubtitleGenerate() {
               <div className="flex items-center justify-between">
                 <h2 className="flex items-center gap-2 text-lg font-semibold">
                   <Check className="h-5 w-5 text-green-500" />
-                  {isTV ? "5. Copy & Paste ke Colab" : "4. Copy & Paste ke Colab"}
+                  {isTV ? "6. Copy & Paste ke Colab" : "5. Copy & Paste ke Colab"}
                 </h2>
                 <Button onClick={handleCopy} size="sm" variant={copied ? "default" : "outline"}>
                   {copied ? (<><Check className="mr-1 h-3 w-3" />Copied!</>) : (<><Copy className="mr-1 h-3 w-3" />Copy</>)}
