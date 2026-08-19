@@ -121,7 +121,8 @@ async function checkManualSubtitle(
   title: string,
   type: string,
   season?: string,
-  episode?: string
+  episode?: string,
+  server?: string
 ): Promise<SubtitleTrack | null> {
   try {
     const params = new URLSearchParams({
@@ -131,6 +132,7 @@ async function checkManualSubtitle(
     });
     if (season) params.set("season", season);
     if (episode) params.set("episode", episode);
+    if (server) params.set("server", server);
 
     const url = `/api/subtitle/manual?${params.toString()}`;
     const res = await fetch(url, { method: "HEAD" });
@@ -636,7 +638,8 @@ export function PlayerModal() {
         streamInfo!.content.title,
         streamInfo!.content.type,
         currentSeason || undefined,
-        currentEpisode || undefined
+        currentEpisode || undefined,
+        currentServer || undefined
       );
       if (cancelled) return;
       setManualSubtitle(manual);
