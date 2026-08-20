@@ -57,3 +57,11 @@ prompt
 server.log
 # Skills directory
 /skills/
+
+# Cleanup unnecessary files
+tool-results/
+.zscripts/
+mini-services/
+db/
+*.bak
+*.bak.*
