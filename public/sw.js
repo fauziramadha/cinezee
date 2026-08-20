@@ -1,242 +1,67 @@
 /**
- * CineStream Service Worker
- *
- * Strategy:
- * 1. Precache app shell (homepage, manifest, icon) saat install
- * 2. Cache First untuk static assets (JS, CSS, images, fonts)
- * 3. Network First untuk API (selalu fresh, fallback cache saat offline)
- * 4. Stale While Revalidate untuk TMDB images (cepat + update background)
- * 5. Offline fallback page saat semua gagal
+ * CineStream Service Worker v4 (NO-OP)
+ * 
+ * Version ini TIDAK melakukan caching apapun.
+ * Semua request langsung pass-through ke network.
+ * 
+ * Ini untuk mengeliminasi semua bug yang disebabkan oleh SW cache:
+ * - Stuck loading saat reopen
+ * - "Load failed" di page selain homepage
+ * - JS lama ter-cache
+ * 
+ * Setelah SW v4 aktif, dia akan:
+ * 1. Delete semua cache lama (v2, v3)
+ * 2. Tidak intercept request apapun
+ * 3. Browser selalu fetch fresh dari network
  */
 
-const CACHE_VERSION = "cinestream-v3"; // Naikkan versi untuk force update SW
-const OFFLINE_URL = "/offline.html";
-
-// Resources yang di-cache saat install (app shell)
-const PRECACHE_URLS = [
-  "/",
-  "/offline.html",
-  "/manifest.json",
-];
+const CACHE_VERSION = "cinestream-v4";
 
 // ============================================================
-// INSTALL — Precache app shell
+// INSTALL — delete all old caches, skip waiting
 // ============================================================
 self.addEventListener("install", (event) => {
   event.waitUntil(
-    caches
-      .open(CACHE_VERSION)
-      .then((cache) => {
-        console.log("[SW] Precaching app shell");
-        return cache.addAll(PRECACHE_URLS);
-      })
-      .then(() => {
-        // Activate immediately (jangan tunggu old SW release)
-        return self.skipWaiting();
-      })
-      .catch((err) => {
-        console.error("[SW] Precache failed:", err);
-      })
+    caches.keys().then((cacheNames) => {
+      return Promise.all(
+        cacheNames.map((name) => {
+          console.log("[SW v4] Deleting old cache:", name);
+          return caches.delete(name);
+        })
+      );
+    }).then(() => {
+      console.log("[SW v4] All old caches deleted");
+      return self.skipWaiting();
+    })
   );
 });
 
 // ============================================================
-// ACTIVATE — Cleanup old caches
+// ACTIVATE — claim all clients immediately
 // ============================================================
 self.addEventListener("activate", (event) => {
   event.waitUntil(
-    caches
-      .keys()
-      .then((cacheNames) => {
+    Promise.all([
+      // Delete any remaining old caches
+      caches.keys().then((cacheNames) => {
         return Promise.all(
           cacheNames
             .filter((name) => name !== CACHE_VERSION)
-            .map((name) => {
-              console.log("[SW] Deleting old cache:", name);
-              return caches.delete(name);
-            })
+            .map((name) => caches.delete(name))
         );
-      })
-      .then(() => {
-        // Take control of all clients immediately
-        return self.clients.claim();
-      })
-  );
-});
-
-// ============================================================
-// FETCH — Strategy routing
-// ============================================================
-self.addEventListener("fetch", (event) => {
-  const { request } = event;
-  const url = new URL(request.url);
-
-  // ============================================================
-  // WAJIB: Skip Auth routes & POST requests!
-  // NextAuth (login Google) akan break kalau di-intercept SW.
-  // ============================================================
-  if (
-    url.pathname.startsWith("/api/auth/") || 
-    url.pathname.includes("/auth/")
-  ) {
-    return; // Biarkan browser handle langsung ke network
-  }
-
-  // Skip non-GET requests (POST, PUT, DELETE, dll)
-  if (request.method !== "GET") {
-    return;
-  }
-
-  // Skip chrome-extension requests
-  if (url.protocol === "chrome-extension:") {
-    return;
-  }
-
-  // === Strategy 1: Static Assets (Cache First) ===
-  // JS, CSS, fonts, images dari domain sendiri
-  if (
-    url.origin === self.location.origin &&
-    (url.pathname.startsWith("/_next/static/") ||
-      url.pathname.startsWith("/icons/") ||
-      url.pathname.match(/\.(js|css|woff2?|ttf|eot|png|jpg|jpeg|gif|svg|webp|ico)$/))
-  ) {
-    event.respondWith(cacheFirst(request));
-    return;
-  }
-
-  // === Strategy 2: API Routes (Network First) ===
-  // API butuh data fresh, fallback ke cache saat offline
-  if (url.pathname.startsWith("/api/")) {
-    event.respondWith(networkFirst(request));
-    return;
-  }
-
-  // === Strategy 3: TMDB Images (Stale While Revalidate) ===
-  // image.tmdb.org — cache gambar, update di background
-  if (url.hostname === "image.tmdb.org") {
-    event.respondWith(staleWhileRevalidate(request));
-    return;
-  }
-
-  // === Strategy 4: Cinemacity Images Proxy (Cache First) ===
-  if (url.pathname.startsWith("/api/cinemacity/image")) {
-    event.respondWith(cacheFirst(request));
-    return;
-  }
-
-  // === Strategy 5: Navigation requests (Network First with offline fallback) ===
-  // HTML pages — selalu coba network dulu, fallback ke cache/offline
-  if (request.mode === "navigate") {
-    event.respondWith(networkFirstWithOfflineFallback(request));
-    return;
-  }
-
-  // === Default: try network, fallback to cache ===
-  event.respondWith(
-    fetch(request).catch(() => caches.match(request))
-  );
-});
-
-// ============================================================
-// CACHE STRATEGIES
-// ============================================================
-
-// Cache First — pakai cache kalau ada, kalau tidak fetch network
-async function cacheFirst(request) {
-  const cached = await caches.match(request);
-  if (cached) {
-    return cached;
-  }
-  try {
-    const response = await fetch(request);
-    if (response.ok) {
-      const cache = await caches.open(CACHE_VERSION);
-      cache.put(request, response.clone());
-    }
-    return response;
-  } catch (err) {
-    // Return offline fallback kalau ada
-    return caches.match(OFFLINE_URL);
-  }
-}
-
-// Network First — coba network dulu, fallback ke cache
-async function networkFirst(request) {
-  try {
-    const response = await fetch(request);
-    // Hanya cache response GET yang sukses
-    if (response.ok && request.method === "GET") {
-      const cache = await caches.open(CACHE_VERSION);
-      cache.put(request, response.clone());
-    }
-    return response;
-  } catch (err) {
-    // Network gagal (offline) — coba cache
-    const cached = await caches.match(request);
-    if (cached) {
-      return cached;
-    }
-    // Kalau tidak ada cache, return offline response
-    return new Response(
-      JSON.stringify({ error: "Offline", message: "No internet connection" }),
-      {
-        status: 503,
-        headers: { "Content-Type": "application/json" },
-      }
-    );
-  }
-}
-
-// Stale While Revalidate — return cache langsung, update di background
-async function staleWhileRevalidate(request) {
-  const cache = await caches.open(CACHE_VERSION);
-  const cached = await cache.match(request);
-
-  // Fetch di background (untuk update cache)
-  const fetchPromise = fetch(request)
-    .then((response) => {
-      if (response.ok) {
-        cache.put(request, response.clone());
-      }
-      return response;
+      }),
+      // Take control of all clients immediately
+      self.clients.claim(),
+    ]).then(() => {
+      console.log("[SW v4] Activated - no caching, all requests pass-through");
     })
-    .catch(() => cached); // Kalau gagal, pakai cache
-
-  // Return cache langsung kalau ada, kalau tidak tunggu network
-  return cached || fetchPromise;
-}
-
-// Network First with Offline Fallback — untuk navigasi (HTML pages)
-async function networkFirstWithOfflineFallback(request) {
-  try {
-    const response = await fetch(request);
-    // Cache HTML pages
-    if (response.ok) {
-      const cache = await caches.open(CACHE_VERSION);
-      cache.put(request, response.clone());
-    }
-    return response;
-  } catch (err) {
-    // Offline — coba cache halaman yang diminta
-    const cached = await caches.match(request);
-    if (cached) {
-      return cached;
-    }
-    // Fallback ke homepage cache
-    const homepage = await caches.match("/");
-    if (homepage) {
-      return homepage;
-    }
-    // Kalau tidak ada, return offline page
-    return caches.match(OFFLINE_URL);
-  }
-}
-
-// ============================================================
-// MESSAGE — untuk update SW dari client
-// ============================================================
-self.addEventListener("message", (event) => {
-  if (event.data && event.data.type === "SKIP_WAITING") {
-    self.skipWaiting();
-  }
+  );
 });
+
+// ============================================================
+// FETCH — DO NOT INTERCEPT ANYTHING
+// All requests go directly to network.
+// No caching, no offline fallback.
+// ============================================================
+// Intentionally empty - no fetch event listener
+// This means the browser handles all requests normally
