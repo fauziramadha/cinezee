@@ -14,7 +14,7 @@ import { PlayerModal } from "@/components/cinepro/player-modal";
 import { AuthModal } from "@/components/cinepro/auth-modal";
 
 const VPS_API_BASE =
-  process.env.NEXT_PUBLIC_API_URL || "https://api.cinestream.biz.id";
+  process.env.NEXT_PUBLIC_API_URL || "/api/vps";
 
 export default function GenrePage() {
   const params = useParams();

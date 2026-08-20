@@ -13,7 +13,7 @@ import { Button } from "@/components/ui/button";
 import { useAppStore } from "@/lib/store";
 
 const VPS_API_BASE =
-  process.env.NEXT_PUBLIC_API_URL || "https://api.cinestream.biz.id";
+  process.env.NEXT_PUBLIC_API_URL || "/api/vps";
 
 export function TVContent() {
   const setDetailMedia = useAppStore((s) => s.setDetailMedia);

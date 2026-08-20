@@ -18,7 +18,7 @@ import { AuthModal } from "@/components/cinepro/auth-modal";
 import { useAppStore } from "@/lib/store";
 
 const VPS_API_BASE =
-  process.env.NEXT_PUBLIC_API_URL || "https://api.cinestream.biz.id";
+  process.env.NEXT_PUBLIC_API_URL || "/api/vps";
 
 type Category = "all" | "movies" | "anime" | "donghua" | "comic";
 

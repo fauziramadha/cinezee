@@ -9,7 +9,7 @@ import { Loader2, Copy, Check, Sparkles, Film, ExternalLink, AlertCircle } from 
 import { SubtitleSearch, type MediaResult } from "./subtitle-search";
 
 const VPS_API_BASE =
-  process.env.NEXT_PUBLIC_API_URL || "https://api.cinestream.biz.id";
+  process.env.NEXT_PUBLIC_API_URL || "/api/vps";
 
 const MODELS = [
   { id: "small", label: "Small (Cepat, ~500MB, Akurat cukup)", size: "500MB", speed: "5-10 mnt" },

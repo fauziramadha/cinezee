@@ -9,7 +9,7 @@ import { saveSubtitle, fetchSubtitleById, type FullSubtitle } from "@/lib/admin-
 import type { MediaResult } from "./subtitle-search";
 
 const VPS_API_BASE =
-  process.env.NEXT_PUBLIC_API_URL || "https://api.cinestream.biz.id";
+  process.env.NEXT_PUBLIC_API_URL || "/api/vps";
 
 
 interface SubtitleFormProps {

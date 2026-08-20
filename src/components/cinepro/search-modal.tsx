@@ -15,7 +15,7 @@ import { SearchResults } from "@/components/search/search-results";
 import { DrakorKategoriList } from "@/components/drakor/drakor-kategori-list";
 
 const VPS_API_BASE =
-  process.env.NEXT_PUBLIC_API_URL || "https://api.cinestream.biz.id";
+  process.env.NEXT_PUBLIC_API_URL || "/api/vps";
 
 type TabView = "results" | "genres" | "kategori";
 

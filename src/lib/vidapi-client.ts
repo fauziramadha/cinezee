@@ -4,7 +4,7 @@
 // ============================================================
 
 const VPS_API_BASE =
-  process.env.NEXT_PUBLIC_API_URL || "https://api.cinestream.biz.id";
+  process.env.NEXT_PUBLIC_API_URL || "/api/vps";
 
 // ============================================================
 // Types
@@ -55,7 +55,7 @@ async function fetchVPS<T>(path: string): Promise<T> {
 // ============================================================
 function formatItem(item: CinemacityContent): EnrichedMediaItem {
   const type: "movie" | "tv" = item.type === "tv" ? "tv" : "movie";
-  const VPS_API_BASE = process.env.NEXT_PUBLIC_API_URL || "https://api.cinestream.biz.id";
+  const VPS_API_BASE = process.env.NEXT_PUBLIC_API_URL || "/api/vps";
   
   // Proxy poster via VPS (dengan login cookies)
   const posterUrl = item.poster_url 

@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Loader2, Search, X, Film } from "lucide-react";
 
 const VPS_API_BASE =
-  process.env.NEXT_PUBLIC_API_URL || "https://api.cinestream.biz.id";
+  process.env.NEXT_PUBLIC_API_URL || "/api/vps";
 
 // FIX: Pakai VPS API /api/search (sebelumnya pakai /api/tmdb/* yang tidak ada)
 // VPS API return { success, data: { results: [{ cinemacity_id, slug, title, type, poster_url, release_year, rating }] } }

@@ -19,7 +19,7 @@ import {
 import { useAppStore } from "@/lib/store";
 
 const VPS_API_BASE =
-  process.env.NEXT_PUBLIC_API_URL || "https://api.cinestream.biz.id";
+  process.env.NEXT_PUBLIC_API_URL || "/api/vps";
 
 const SWITCHING_TIMEOUT_MS = 12000;
 
