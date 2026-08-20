@@ -9,7 +9,7 @@
  * 5. Offline fallback page saat semua gagal
  */
 
-const CACHE_VERSION = "cinestream-v2"; // Naikkan versi untuk force update SW
+const CACHE_VERSION = "cinestream-v3"; // Naikkan versi untuk force update SW
 const OFFLINE_URL = "/offline.html";
 
 // Resources yang di-cache saat install (app shell)
@@ -17,7 +17,6 @@ const PRECACHE_URLS = [
   "/",
   "/offline.html",
   "/manifest.json",
-  "/icons/AC571102-A8DE-4EB8-9C21-37972F5E3346.png",
 ];
 
 // ============================================================
