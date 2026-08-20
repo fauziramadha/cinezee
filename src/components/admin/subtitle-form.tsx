@@ -336,6 +336,35 @@ export function SubtitleForm({
         </div>
       </div>
 
+      {/* Server Selector - hanya muncul kalau film punya multiple servers */}
+      {availableServers.length > 0 && (
+        <div className="rounded-md border border-purple-500/30 bg-purple-500/5 p-3">
+          <Label htmlFor="server">Server (opsional)</Label>
+          <p className="mb-2 text-xs text-muted-foreground">
+            Pilih server tertentu untuk subtitle ini. Kosongkan kalau subtitle berlaku untuk semua server.
+          </p>
+          <select
+            id="server"
+            value={server}
+            onChange={(e) => setServer(e.target.value)}
+            disabled={isEditMode}
+            className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+          >
+            <option value="">Semua server (default)</option>
+            {availableServers.map((srv) => (
+              <option key={srv.id} value={String(srv.id)}>
+                Server {srv.id + 1}: {srv.title}
+              </option>
+            ))}
+          </select>
+          {isEditMode && (
+            <p className="mt-1 text-[10px] text-muted-foreground">
+              Server tidak bisa diubah saat edit (key untuk upsert)
+            </p>
+          )}
+        </div>
+      )}
+
       {/* Offset */}
       <div className="rounded-md border border-orange-500/30 bg-orange-500/5 p-3">
         <Label htmlFor="offsetSeconds">Subtitle Sync Adjustment (detik)</Label>
