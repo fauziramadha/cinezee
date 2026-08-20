@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
 const VPS_API_BASE =
-  process.env.NEXT_PUBLIC_API_URL || "https://api.cinestream.my.id";
+  process.env.NEXT_PUBLIC_API_URL || "https://api.cinestream.biz.id";
 
 interface SubtitleFile {
   file: File;
