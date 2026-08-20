@@ -11,7 +11,7 @@ import { ComicCard } from "@/components/comic/comic-card";
 import { DrakorCard } from "@/components/drakor/drakor-card";
 
 const VPS_API_BASE =
-  process.env.NEXT_PUBLIC_API_URL || "https://api.cinestream.my.id";
+  process.env.NEXT_PUBLIC_API_URL || "https://api.cinestream.biz.id";
 
 interface Props {
   query: string;
