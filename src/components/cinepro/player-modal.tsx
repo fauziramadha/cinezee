@@ -528,6 +528,8 @@ export function PlayerModal() {
     let cancelled = false;
 
     async function init() {
+      setStreamInfo(null);
+      setCinemacityData(null);
       setLoading(true);
       setError(null);
 
