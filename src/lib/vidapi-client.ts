@@ -1,10 +1,10 @@
 // ============================================================
 // CineStream VPS API Client
-// 100% pakai VPS API (api.cinestream.my.id) - NO TMDB
+// 100% pakai VPS API (api.cinestream.biz.id) - NO TMDB
 // ============================================================
 
 const VPS_API_BASE =
-  process.env.NEXT_PUBLIC_API_URL || "https://api.cinestream.my.id";
+  process.env.NEXT_PUBLIC_API_URL || "https://api.cinestream.biz.id";
 
 // ============================================================
 // Types
@@ -55,7 +55,7 @@ async function fetchVPS<T>(path: string): Promise<T> {
 // ============================================================
 function formatItem(item: CinemacityContent): EnrichedMediaItem {
   const type: "movie" | "tv" = item.type === "tv" ? "tv" : "movie";
-  const VPS_API_BASE = process.env.NEXT_PUBLIC_API_URL || "https://api.cinestream.my.id";
+  const VPS_API_BASE = process.env.NEXT_PUBLIC_API_URL || "https://api.cinestream.biz.id";
   
   // Proxy poster via VPS (dengan login cookies)
   const posterUrl = item.poster_url 
