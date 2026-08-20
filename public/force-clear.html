@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Force Clear All Cache</title>
+    <style>
+        body { font-family: -apple-system, sans-serif; padding: 20px; background: #1a1a1a; color: #fff; }
+        .status { padding: 15px; margin: 10px 0; border-radius: 8px; background: #333; }
+        .ok { background: #1a4733; }
+        .err { background: #4a1a1a; }
+        button { padding: 15px 30px; font-size: 18px; background: #dc2626; color: white; border: none; border-radius: 8px; cursor: pointer; }
+        button:active { background: #991b1b; }
+    </style>
+</head>
+<body>
+    <h1>Force Clear All Cache</h1>
+    <p>Halaman ini akan menghapus SEMUA cache di browser kamu, termasuk Service Worker dan Cache Storage.</p>
+    
+    <div id="log"></div>
+    
+    <button onclick="clearAll()">CLEAR ALL CACHE NOW</button>
+    
+    <script>
+        function log(msg, type) {
+            var div = document.createElement('div');
+            div.className = 'status ' + (type || '');
+            div.innerText = msg;
+            document.getElementById('log').appendChild(div);
+        }
+
+        async function clearAll() {
+            // Step 1: Unregister ALL Service Workers
+            log('Step 1: Unregistering Service Workers...');
+            if ('serviceWorker' in navigator) {
+                try {
+                    var registrations = await navigator.serviceWorker.getRegistrations();
+                    for (var i = 0; i < registrations.length; i++) {
+                        await registrations[i].unregister();
+                        log('  Unregistered: ' + registrations[i].scope, 'ok');
+                    }
+                    if (registrations.length === 0) {
+                        log('  No Service Workers found', 'ok');
+                    }
+                } catch(e) {
+                    log('  Error: ' + e.message, 'err');
+                }
+            }
+
+            // Step 2: Delete ALL Cache Storage
+            log('Step 2: Deleting Cache Storage...');
+            if ('caches' in window) {
+                try {
+                    var keys = await caches.keys();
+                    for (var i = 0; i < keys.length; i++) {
+                        await caches.delete(keys[i]);
+                        log('  Deleted cache: ' + keys[i], 'ok');
+                    }
+                    if (keys.length === 0) {
+                        log('  No caches found', 'ok');
+                    }
+                } catch(e) {
+                    log('  Error: ' + e.message, 'err');
+                }
+            }
+
+            // Step 3: Clear localStorage
+            log('Step 3: Clearing localStorage...');
+            try {
+                localStorage.clear();
+                log('  localStorage cleared', 'ok');
+            } catch(e) {
+                log('  Error: ' + e.message, 'err');
+            }
+
+            // Step 4: Clear sessionStorage
+            log('Step 4: Clearing sessionStorage...');
+            try {
+                sessionStorage.clear();
+                log('  sessionStorage cleared', 'ok');
+            } catch(e) {
+                log('  Error: ' + e.message, 'err');
+            }
+
+            // Step 5: Unregister all Service Workers again (double check)
+            log('Step 5: Final SW check...');
+            if ('serviceWorker' in navigator) {
+                var registrations = await navigator.serviceWorker.getRegistrations();
+                if (registrations.length > 0) {
+                    for (var i = 0; i < registrations.length; i++) {
+                        await registrations[i].unregister();
+                    }
+                    log('  Found and removed ' + registrations.length + ' leftover SWs', 'err');
+                } else {
+                    log('  All clear - no SWs remaining', 'ok');
+                }
+            }
+
+            log('', '');
+            log('=== DONE ===', 'ok');
+            log('Sekarang TUTUP Safari sepenuhnya:', 'ok');
+            log('1. Swipe up dari bawah layar', 'ok');
+            log('2. Swipe Safari away (tutup app)', 'ok');
+            log('3. Buka Safari lagi', 'ok');
+            log('4. Ketik: cinestream.biz.id', 'ok');
+            log('5. Website harusnya jalan normal!', 'ok');
+        }
+    </script>
+</body>
+</html>
