@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
 const VPS_API_BASE =
-  process.env.NEXT_PUBLIC_API_URL || "https://api.cinestream.my.id";
+  process.env.NEXT_PUBLIC_API_URL || "https://api.cinestream.biz.id";
 
 // Edge cache TTL — Cloudflare CDN akan cache response ini selama 5 menit
 // Worker CPU hanya dipakai saat cache miss (1 dari ~100 request)
