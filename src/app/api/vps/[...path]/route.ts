@@ -21,6 +21,82 @@ const VPS_API_BASE = "https://api.cinestream.biz.id";
 
 export const dynamic = "force-dynamic";
 
+const PLAYLIST_CACHE_TTL = 60;
+const SEGMENT_CACHE_TTL = 86400;
+
+/**
+ * Prefetch first N segments from a sub-playlist to warm Cloudflare edge cache.
+ * This reduces requests to s1.cccdn.net (IP protection).
+ *
+ * When user opens player:
+ * 1. Browser fetches master m3u8 (1 request to VPS)
+ * 2. Browser fetches sub-playlist (1 request to VPS)
+ * 3. Worker parses sub-playlist + prefetches first 3 segments in background
+ * 4. When hls.js requests segments, they're already cached (HIT)
+ *
+ * Net effect: 3 fewer requests to s1.cccdn.net per player open
+ * With 500 users/day = 1500 fewer requests to CDN
+ */
+async function prefetchSegments(
+  playlistResponse: Response,
+  origin: string
+): Promise<void> {
+  try {
+    const text = await playlistResponse.text();
+
+    // Extract segment URLs from m3u8 (lines starting with /api/stream/segment)
+    const segmentUrls: string[] = [];
+    const lines = text.split("\n");
+
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (trimmed.startsWith("/api/stream/segment")) {
+        segmentUrls.push(trimmed);
+      }
+    }
+
+    // Prefetch first 3 segments (enough for initial buffer)
+    const prefetchCount = 3;
+    const toPrefetch = segmentUrls.slice(0, prefetchCount);
+
+    const cache = caches.default;
+
+    // Fetch segments in parallel (background)
+    const promises = toPrefetch.map(async (segPath) => {
+      try {
+        // Segment route uses VPS URL as cache key (targetUrl pattern)
+        // segPath = "/api/stream/segment?p=..."
+        // Cache key must match what segment route uses: https://api.cinestream.biz.id/api/stream/segment?p=...
+        const segVpsUrl = `https://api.cinestream.biz.id${segPath.replace("/api/stream/", "/api/stream/")}`;
+        const segCacheKey = new Request(segVpsUrl, { method: "GET" });
+
+        // Check if already cached
+        const existing = await cache.match(segCacheKey);
+        if (existing) return; // Already cached, skip
+
+        // Fetch from Worker (same-origin URL) - this will trigger segment route
+        // which fetches from VPS → s1.cccdn.net
+        const segWorkerUrl = `${origin}${segPath}`;
+        const segRes = await fetch(segWorkerUrl, {
+          signal: AbortSignal.timeout(15000),
+        });
+
+        if (segRes.ok && segRes.body) {
+          // Segment route already caches it, we just need to consume the body
+          // to trigger the fetch. Don't double-cache here.
+          await segRes.arrayBuffer(); // consume body
+        }
+      } catch {
+        // Silent fail - prefetch is best-effort
+      }
+    });
+
+    await Promise.allSettled(promises);
+  } catch {
+    // Silent fail - prefetch is best-effort
+  }
+}
+
 function getCacheTtl(path: string): number {
   // Image proxy - cache lama (gambar tidak berubah)
   if (path.includes("/api/image")) return 86400; // 24 jam
@@ -136,6 +212,16 @@ export async function GET(request: NextRequest) {
       try {
         const { ctx } = getCloudflareContext();
         ctx.waitUntil(cache.put(cacheKey, responseForCache));
+
+        // PREFETCH: If this is a sub-playlist (m3u8 with segment URLs),
+        // preload first 3 segments in background to warm cache
+        // This reduces requests to s1.cccdn.net (IP protection)
+        if (
+          contentType.includes("mpegurl") ||
+          contentType.includes("m3u8")
+        ) {
+          ctx.waitUntil(prefetchSegments(res.clone(), request.nextUrl.origin));
+        }
       } catch {
         cache.put(cacheKey, responseForCache).catch(() => {});
       }
