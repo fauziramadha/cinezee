@@ -4,39 +4,32 @@ import { getCloudflareContext } from "@opennextjs/cloudflare";
 const VPS_API_BASE = "https://api.cinestream.biz.id";
 
 /**
- * Same-origin proxy untuk /api/stream/* endpoints di VPS.
+ * Same-origin proxy untuk /api/stream/* endpoints.
  *
- * CACHING STRATEGY (Cloudflare Cache API - FREE):
- * - TS segments (immutable): cache 24 jam di Cloudflare edge
- * - m3u8 playlists (bisa berubah): cache 60 detik
- * - Range requests (206): TIDAK di-cache (partial content)
- * - Error responses (non-200): TIDAK di-cache
+ * FLOW (optimized):
+ *   Browser → Worker → VPS → s1.cccdn.net (direct, bypass easyproxy)
  *
- * Manfaat caching:
- * - User seek balik → instant (dari edge cache, 0ms latency)
- * - Multiple users nonton film yang sama → share cache (hemat VPS load)
- * - CDN cinemacity drop connection → retry bisa hit cache (no stuck)
- * - Reduces VPS load → VPS lebih responsive untuk request lain
+ * VPS stream.js sudah di-patch untuk fetch langsung dari s1.cccdn.net,
+ * mem-bypass easyproxy (Python single-threaded bottleneck).
  *
- * IMPLEMENTATION:
- * - res.clone() untuk duplicate response (1 untuk client, 1 untuk cache)
- * - ctx.waitUntil(cache.put()) untuk cache di background (tidak block client)
- * - Streaming response tetap dipertahankan (client dapat data secepat mungkin)
+ * Worker tidak mencoba direct fetch ke s1.cccdn.net karena Cloudflare IPs
+ * di-block oleh CDN (403 Forbidden). Hanya VPS IP yang di-allow.
+ *
+ * Caching: Cloudflare Cache API (FREE)
+ * - TS segments: 24h (immutable)
+ * - m3u8 playlists: 60s
  */
 
 export const dynamic = "force-dynamic";
 
-// Cache TTLs (dalam detik)
-const PLAYLIST_CACHE_TTL = 60; // 1 menit untuk m3u8 playlists
-const SEGMENT_CACHE_TTL = 86400; // 24 jam untuk TS segments (immutable)
+const PLAYLIST_CACHE_TTL = 60;
+const SEGMENT_CACHE_TTL = 86400;
 
 export async function GET(request: NextRequest) {
   const path = request.nextUrl.pathname.replace("/api/stream/", "");
   const search = request.nextUrl.search;
   const targetUrl = `${VPS_API_BASE}/api/stream/${path}${search}`;
 
-  // Determine cache TTL based on content type
-  // Segment requests have ?p= param, playlist requests have ?url= or ?hls_url_id=
   const hasSegmentParam = request.nextUrl.searchParams.has("p");
   const cacheTtl = hasSegmentParam ? SEGMENT_CACHE_TTL : PLAYLIST_CACHE_TTL;
 
@@ -47,7 +40,6 @@ export async function GET(request: NextRequest) {
   // === CHECK CACHE FIRST ===
   const cached = await cache.match(cacheKey);
   if (cached) {
-    // Return cached response with CORS + cache hit header
     const headers = new Headers(cached.headers);
     headers.set("Access-Control-Allow-Origin", "*");
     headers.set("X-Cache", "HIT");
@@ -62,7 +54,6 @@ export async function GET(request: NextRequest) {
     const headers = new Headers();
     headers.set("User-Agent", "CineStream-Worker/1.0");
     headers.set("Accept", "*/*");
-    // Forward Range header untuk video segment seek
     const range = request.headers.get("range");
     if (range) {
       headers.set("Range", range);
@@ -75,15 +66,22 @@ export async function GET(request: NextRequest) {
     });
 
     const contentType =
-      res.headers.get("content-type") || "video/mp2t; charset=utf-8";
+      res.headers.get("content-type") || "video/mp2t";
 
     const responseHeaders = new Headers({
       "Content-Type": contentType,
       "Access-Control-Allow-Origin": "*",
       "Cache-Control": `public, max-age=${cacheTtl}`,
+      "X-Cache": "MISS",
     });
 
-    // Forward critical headers for video streaming
+    // Forward X-Source from VPS (CDN-DIRECT or easyproxy fallback)
+    const xSource = res.headers.get("X-Source");
+    if (xSource) {
+      responseHeaders.set("X-Source", xSource);
+    }
+
+    // Forward critical headers
     const contentLength = res.headers.get("content-length");
     if (contentLength) {
       responseHeaders.set("Content-Length", contentLength);
@@ -101,49 +99,39 @@ export async function GET(request: NextRequest) {
     if (etag) {
       responseHeaders.set("ETag", etag);
     }
-    responseHeaders.set("X-Cache", "MISS");
 
-    // Only cache 200 OK responses (not 206 partial, not errors, not range requests)
-    const isCacheable = res.ok && res.status === 200 && !range;
+    // Only cache 200 OK (not 206 partial, not errors, not range requests)
+    const isCacheable = res.ok && res.status === 200 && !range && res.body;
 
-    if (isCacheable && res.body) {
-      // Use tee() to split the stream: 1 for client, 1 for cache
-      // This is more reliable than res.clone() which can cause race conditions
+    if (isCacheable) {
       const [clientStream, cacheStream] = res.body.tee();
-
-      // Create response for cache (will be consumed by cache.put)
       const responseForCache = new NextResponse(cacheStream, {
         status: res.status,
         headers: responseHeaders,
       });
 
-      // Cache in background using waitUntil (doesn't block client response)
       try {
         const { ctx } = getCloudflareContext();
         ctx.waitUntil(cache.put(cacheKey, responseForCache));
       } catch {
-        // Fallback: fire and forget
         cache.put(cacheKey, responseForCache).catch(() => {});
       }
 
-      // Stream to client immediately
       return new NextResponse(clientStream, {
         status: res.status,
         headers: responseHeaders,
       });
     }
 
-    // Non-cacheable (206 partial, error, range request): just stream
+    // Non-cacheable: stream directly
     return new NextResponse(res.body, {
       status: res.status,
       headers: responseHeaders,
     });
   } catch (error: any) {
-    // Jangan log timeout errors (terlalu noisy)
     if (error.name !== "TimeoutError" && error.name !== "AbortError") {
       console.error("[Stream Proxy] Error:", error.message);
     }
-    // Return 502 supaya hls.js retry
     return new NextResponse(null, {
       status: 502,
       headers: {
