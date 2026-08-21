@@ -212,16 +212,6 @@ export async function GET(request: NextRequest) {
       try {
         const { ctx } = getCloudflareContext();
         ctx.waitUntil(cache.put(cacheKey, responseForCache));
-
-        // PREFETCH: If this is a sub-playlist (m3u8 with segment URLs),
-        // preload first 3 segments in background to warm cache
-        // This reduces requests to s1.cccdn.net (IP protection)
-        if (
-          contentType.includes("mpegurl") ||
-          contentType.includes("m3u8")
-        ) {
-          ctx.waitUntil(prefetchSegments(res.clone(), request.nextUrl.origin));
-        }
       } catch {
         cache.put(cacheKey, responseForCache).catch(() => {});
       }
