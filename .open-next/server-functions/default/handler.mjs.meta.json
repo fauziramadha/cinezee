@@ -3905,7 +3905,7 @@
       "format": "cjs"
     },
     ".open-next/server-functions/default/node_modules/next/dist/server/load-manifest.external.js": {
-      "bytes": 559609,
+      "bytes": 559602,
       "imports": [
         {
           "path": "path",
@@ -4829,7 +4829,7 @@
       "format": "cjs"
     },
     ".open-next/server-functions/default/.next/server/chunks/ssr/_739f8e03._.js": {
-      "bytes": 66123,
+      "bytes": 66586,
       "imports": [],
       "format": "cjs"
     },
@@ -9799,7 +9799,7 @@
       "format": "cjs"
     },
     ".open-next/server-functions/default/.next/server/chunks/[root-of-the-server]__4f0d8038._.js": {
-      "bytes": 13288,
+      "bytes": 12963,
       "imports": [
         {
           "path": ".open-next/server-functions/default/node_modules/next/dist/compiled/next-server/app-page-turbo.runtime.prod.js",
@@ -21595,7 +21595,7 @@
           "bytesInOutput": 449
         },
         ".open-next/server-functions/default/node_modules/next/dist/server/load-manifest.external.js": {
-          "bytesInOutput": 485640
+          "bytesInOutput": 485633
         },
         ".open-next/cloudflare-templates/shims/throw.js": {
           "bytesInOutput": 215
@@ -21682,7 +21682,7 @@
           "bytesInOutput": 33889
         },
         ".open-next/server-functions/default/.next/server/chunks/ssr/_739f8e03._.js": {
-          "bytesInOutput": 68064
+          "bytesInOutput": 68551
         },
         ".open-next/server-functions/default/.next/server/chunks/ssr/_aaff45a1._.js": {
           "bytesInOutput": 26784
@@ -22480,7 +22480,7 @@
           "bytesInOutput": 257
         },
         ".open-next/server-functions/default/.next/server/chunks/[root-of-the-server]__4f0d8038._.js": {
-          "bytesInOutput": 13574
+          "bytesInOutput": 13234
         },
         ".open-next/server-functions/default/.next/server/chunks/_next-internal_server_app_api_stream_[___path]_route_actions_556f4f8d.js": {
           "bytesInOutput": 285
@@ -23437,7 +23437,7 @@
           "bytesInOutput": 78376
         }
       },
-      "bytes": 8074571
+      "bytes": 8074711
     }
   }
 }

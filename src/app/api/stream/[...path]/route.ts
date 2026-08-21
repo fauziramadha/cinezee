@@ -16,37 +16,9 @@ const PLAYLIST_CACHE_TTL = 60;
 const SEGMENT_CACHE_TTL = 86400;
 
 async function prefetchSegments(playlistText: string): Promise<void> {
-  try {
-    const segmentPaths: string[] = [];
-    const lines = playlistText.split("\n");
-
-    for (const line of lines) {
-      const trimmed = line.trim();
-      if (trimmed.startsWith("/api/stream/seg/")) {
-        segmentPaths.push(trimmed);
-      }
-    }
-
-    const toPrefetch = segmentPaths.slice(0, 30);
-
-    const promises = toPrefetch.map(async (segPath) => {
-      try {
-        const vpsUrl = `${VPS_API_BASE}${segPath}`;
-        const res = await fetch(vpsUrl, {
-          cf: {
-            cacheTtl: SEGMENT_CACHE_TTL,
-            cacheEverything: true,
-          },
-          signal: AbortSignal.timeout(20000),
-        });
-        await res.arrayBuffer();
-      } catch {
-      }
-    });
-
-    await Promise.allSettled(promises);
-  } catch {
-  }
+  // DISABLED - prefetch was causing Worker CPU overload (Error 1102)
+  // Safari native HLS handles buffering natively and more efficiently
+  return;
 }
 
 export async function GET(request: NextRequest) {

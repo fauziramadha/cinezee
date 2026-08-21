@@ -198,7 +198,41 @@ function VideoPlayer({
       handleSwitchingDone();
     }, SWITCHING_TIMEOUT_MS);
 
-    if (Hls.isSupported()) {
+    // Detect Safari (including iOS Safari) - use native HLS for better performance
+    // Safari's native HLS player handles buffering, prefetch, adaptive bitrate
+    // much better than hls.js on iOS (which causes 6-second stops)
+    const isSafari = /^((?!chrome|android).)*safari/i.test(
+      navigator.userAgent
+    );
+    const canPlayNativeHls = video.canPlayType(
+      "application/vnd.apple.mpegurl"
+    );
+
+    if (isSafari && canPlayNativeHls) {
+      // Use Safari's NATIVE HLS player - much more efficient on iOS
+      // Native player pre-downloads segments based on network speed
+      video.src = streamUrl;
+
+      const onLoadedMeta = () => {
+        handleSwitchingDone();
+        video.play().catch(() => {});
+      };
+      const onVideoError = () => {
+        handleSwitchingDone();
+        onError("Stream error. Coba server/episode lain atau refresh halaman.");
+      };
+      video.addEventListener("loadedmetadata", onLoadedMeta);
+      video.addEventListener("error", onVideoError);
+
+      hlsRef.current = {
+        destroy: () => {
+          video.removeEventListener("loadedmetadata", onLoadedMeta);
+          video.removeEventListener("error", onVideoError);
+          video.removeAttribute("src");
+          video.load();
+        },
+      } as any;
+    } else if (Hls.isSupported()) {
       // Buffer config: prefetch 30 segments at edge, hls.js buffers 120s ahead
       const hls = new Hls({
         enableWorker: true,
