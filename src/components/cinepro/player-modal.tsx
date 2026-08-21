@@ -21,7 +21,7 @@ import { useAppStore } from "@/lib/store";
 const VPS_API_BASE =
   process.env.NEXT_PUBLIC_API_URL || "/api/vps";
 
-const SWITCHING_TIMEOUT_MS = 12000;
+const SWITCHING_TIMEOUT_MS = 20000;
 
 interface ServerInfo {
   id: number;
@@ -199,43 +199,28 @@ function VideoPlayer({
     }, SWITCHING_TIMEOUT_MS);
 
     if (Hls.isSupported()) {
-      // PERFORMANCE: Config tuned untuk streaming yang stabil
-      // - maxBufferLength dinaikin ke 120 (dari 30) supaya buffer lebih tebal
-      //   Segment 1080p = ~2MB per 6s, di koneksi 5Mbps butuh ~3s download
-      //   Dengan buffer 120s = 20 segments ahead = tahan network jitter lama
-      // - maxMaxBufferLength 600 = max 10 menit buffer (kalau koneksi bagus)
-      // - fragLoadingMaxRetry 30 = retry 30x sebelum give up
-      // - fragLoadingRetryDelay 500ms + exponential backoff sampai 64s
-      // - fragLoadingTimeOut 60s = beri waktu lama untuk segment besar (2MB)
+      // REASONABLE retry config - NOT aggressive (was causing 20-min loading)
+      // Old config: 30 retries × 64s backoff = 28 min per failed segment
+      // New config: 4 retries × 8s backoff = ~20s max per failed segment
       const hls = new Hls({
         enableWorker: true,
         lowLatencyMode: false,
         startLevel: -1,
-        // Buffer lebih tebal untuk handle segment besar + network jitter
-        maxBufferLength: 120,
-        maxMaxBufferLength: 600,
-        backBufferLength: 90,
-        // Segment retry - lebih agresif supaya playback tidak stuck
-        fragLoadingMaxRetry: 30,
+        maxBufferLength: 30,
+        maxMaxBufferLength: 60,
+        backBufferLength: 30,
+        fragLoadingMaxRetry: 4,
         fragLoadingRetryDelay: 500,
-        fragLoadingMaxRetryTimeout: 64000,
-        // Manifest/level retry
-        manifestLoadingMaxRetry: 10,
-        manifestLoadingRetryDelay: 1000,
-        manifestLoadingMaxRetryTimeout: 20000,
-        levelLoadingMaxRetry: 10,
-        levelLoadingRetryDelay: 1000,
-        levelLoadingMaxRetryTimeout: 20000,
-        // Timeout lebih lama untuk segment besar (2MB di koneksi lambat)
-        fragLoadingTimeOut: 60000,
-        manifestLoadingTimeOut: 20000,
-        levelLoadingTimeOut: 20000,
-        // Preload lebih banyak segment di background
-        startFragPrefetch: true,
-        // Smooth playback saat network jitter
-        nudgeOffset: 0.1,
-        nudgeMaxRetry: 10,
-        nudgeOnDiscard: true,
+        fragLoadingMaxRetryTimeout: 8000,
+        manifestLoadingMaxRetry: 4,
+        manifestLoadingRetryDelay: 500,
+        manifestLoadingMaxRetryTimeout: 8000,
+        levelLoadingMaxRetry: 4,
+        levelLoadingRetryDelay: 500,
+        levelLoadingMaxRetryTimeout: 8000,
+        fragLoadingTimeOut: 15000,
+        manifestLoadingTimeOut: 10000,
+        levelLoadingTimeOut: 10000,
       });
 
       hlsRef.current = hls;
@@ -376,6 +361,29 @@ function VideoPlayer({
             break;
         }
       });
+    } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
+      // Safari native HLS fallback (iPhone without MSE)
+      video.src = streamUrl;
+
+      const onLoadedMeta = () => {
+        handleSwitchingDone();
+        video.play().catch(() => {});
+      };
+      const onVideoError = () => {
+        handleSwitchingDone();
+        onError("Stream error. Coba server/episode lain atau refresh halaman.");
+      };
+      video.addEventListener("loadedmetadata", onLoadedMeta);
+      video.addEventListener("error", onVideoError);
+
+      hlsRef.current = {
+        destroy: () => {
+          video.removeEventListener("loadedmetadata", onLoadedMeta);
+          video.removeEventListener("error", onVideoError);
+          video.removeAttribute("src");
+          video.load();
+        },
+      } as any;
     }
 
     return () => {
