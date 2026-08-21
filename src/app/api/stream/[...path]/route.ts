@@ -27,7 +27,7 @@ async function prefetchSegments(playlistText: string): Promise<void> {
       }
     }
 
-    const toPrefetch = segmentPaths.slice(0, 10);
+    const toPrefetch = segmentPaths.slice(0, 30);
 
     const promises = toPrefetch.map(async (segPath) => {
       try {

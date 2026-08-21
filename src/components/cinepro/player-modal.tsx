@@ -199,28 +199,30 @@ function VideoPlayer({
     }, SWITCHING_TIMEOUT_MS);
 
     if (Hls.isSupported()) {
-      // REASONABLE retry config - NOT aggressive (was causing 20-min loading)
-      // Old config: 30 retries × 64s backoff = 28 min per failed segment
-      // New config: 4 retries × 8s backoff = ~20s max per failed segment
+      // Buffer config: prefetch 30 segments at edge, hls.js buffers 120s ahead
       const hls = new Hls({
         enableWorker: true,
         lowLatencyMode: false,
         startLevel: -1,
-        maxBufferLength: 30,
-        maxMaxBufferLength: 60,
-        backBufferLength: 30,
-        fragLoadingMaxRetry: 4,
+        // Large buffer = more room for slow MISS segments
+        maxBufferLength: 120,
+        maxMaxBufferLength: 300,
+        backBufferLength: 60,
+        // Retry config (reasonable, not aggressive)
+        fragLoadingMaxRetry: 6,
         fragLoadingRetryDelay: 500,
-        fragLoadingMaxRetryTimeout: 8000,
+        fragLoadingMaxRetryTimeout: 10000,
         manifestLoadingMaxRetry: 4,
         manifestLoadingRetryDelay: 500,
         manifestLoadingMaxRetryTimeout: 8000,
         levelLoadingMaxRetry: 4,
         levelLoadingRetryDelay: 500,
         levelLoadingMaxRetryTimeout: 8000,
-        fragLoadingTimeOut: 15000,
+        fragLoadingTimeOut: 20000,
         manifestLoadingTimeOut: 10000,
         levelLoadingTimeOut: 10000,
+        // Start prefetch immediately
+        startFragPrefetch: true,
       });
 
       hlsRef.current = hls;
