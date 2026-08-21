@@ -1,27 +1,53 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getCloudflareContext } from "@opennextjs/cloudflare";
 
 const VPS_API_BASE = "https://api.cinestream.biz.id";
 
 /**
- * OPTIMIZED stream proxy - minimal Worker CPU, fast streaming
+ * OPTIMIZED stream proxy with prefetch
  *
- * Key insight: Cloudflare automatically caches responses with Cache-Control
- * header. We don't need Cache API (body.tee() adds latency for 2MB segments).
- *
- * Strategy:
- * - Segments: set Cache-Control: max-age=86400 → Cloudflare edge caches
- *   automatically, NO body.tee() needed → faster streaming
- * - Playlists: set Cache-Control: max-age=60 → short cache
- * - Stream body directly from VPS to client (no buffering)
- *
- * Before: 5-8s per segment (body.tee + cache.put overhead)
- * After: 0.5-2s per segment (direct stream + HTTP cache)
+ * When sub-playlist (m3u8) is fetched, prefetch first 10 segments
+ * to warm edge cache. This eliminates buffer underrun on first play.
  */
 
 export const dynamic = "force-dynamic";
 
 const PLAYLIST_CACHE_TTL = 60;
 const SEGMENT_CACHE_TTL = 86400;
+
+async function prefetchSegments(playlistText: string): Promise<void> {
+  try {
+    const segmentPaths: string[] = [];
+    const lines = playlistText.split("\n");
+
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (trimmed.startsWith("/api/stream/seg/")) {
+        segmentPaths.push(trimmed);
+      }
+    }
+
+    const toPrefetch = segmentPaths.slice(0, 10);
+
+    const promises = toPrefetch.map(async (segPath) => {
+      try {
+        const vpsUrl = `${VPS_API_BASE}${segPath}`;
+        const res = await fetch(vpsUrl, {
+          cf: {
+            cacheTtl: SEGMENT_CACHE_TTL,
+            cacheEverything: true,
+          },
+          signal: AbortSignal.timeout(20000),
+        });
+        await res.arrayBuffer();
+      } catch {
+      }
+    });
+
+    await Promise.allSettled(promises);
+  } catch {
+  }
+}
 
 export async function GET(request: NextRequest) {
   const path = request.nextUrl.pathname.replace("/api/stream/", "");
@@ -46,10 +72,9 @@ export async function GET(request: NextRequest) {
       headers,
       redirect: "follow",
       signal: AbortSignal.timeout(25000),
-      // Let Cloudflare cache this response automatically via Cache-Control
       cf: {
         cacheTtl: cacheTtl,
-        cacheEverything: isSegment,
+        cacheEverything: true,
       },
     });
 
@@ -63,13 +88,11 @@ export async function GET(request: NextRequest) {
       "X-Cache": res.headers.get("cf-cache-status") || "DYNAMIC",
     });
 
-    // Forward X-Source from VPS
     const xSource = res.headers.get("X-Source");
     if (xSource) {
       responseHeaders.set("X-Source", xSource);
     }
 
-    // Forward critical headers
     const contentLength = res.headers.get("content-length");
     if (contentLength) {
       responseHeaders.set("Content-Length", contentLength);
@@ -88,7 +111,26 @@ export async function GET(request: NextRequest) {
       responseHeaders.set("ETag", etag);
     }
 
-    // Stream body directly - NO body.tee(), NO manual cache.put()
+    const isM3U8 =
+      contentType.includes("mpegurl") ||
+      contentType.includes("m3u8");
+
+    if (isM3U8) {
+      const bodyText = await res.text();
+
+      try {
+        const { ctx } = getCloudflareContext();
+        ctx.waitUntil(prefetchSegments(bodyText));
+      } catch {
+        prefetchSegments(bodyText).catch(() => {});
+      }
+
+      return new NextResponse(bodyText, {
+        status: res.status,
+        headers: responseHeaders,
+      });
+    }
+
     return new NextResponse(res.body, {
       status: res.status,
       headers: responseHeaders,
