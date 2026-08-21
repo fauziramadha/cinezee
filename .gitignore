@@ -65,3 +65,7 @@ mini-services/
 db/
 *.bak
 *.bak.*
+---
+# Wrangler local state
+.wrangler/
+package-lock.json
