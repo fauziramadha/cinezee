@@ -199,18 +199,32 @@ function VideoPlayer({
     }, SWITCHING_TIMEOUT_MS);
 
     if (Hls.isSupported()) {
+      // PERFORMANCE: Config tuned untuk streaming yang stabil
+      // - fragLoadingMaxRetry dinaikin ke 30 (dari 10) supaya segment failure bisa recover
+      // - fragLoadingRetryDelay + fragLoadingMaxRetryTimeout = exponential backoff sampai 10s
+      // - maxBufferLength dinaikin ke 90 (dari 30) supaya buffer lebih tebal = lebih tahan network jitter
+      // - fragLoadingMaxRetryTimeout 30s = total waktu retry max sebelum give up
       const hls = new Hls({
         enableWorker: true,
         lowLatencyMode: false,
         startLevel: -1,
-        maxBufferLength: 30,
-        maxMaxBufferLength: 60,
-        fragLoadingMaxRetry: 10,
-        fragLoadingRetryDelay: 1000,
-        manifestLoadingMaxRetry: 6,
+        maxBufferLength: 90,
+        maxMaxBufferLength: 120,
+        // Segment retry - lebih agresif supaya playback tidak stuck
+        fragLoadingMaxRetry: 30,
+        fragLoadingRetryDelay: 500,
+        fragLoadingMaxRetryTimeout: 64000,
+        // Manifest/level retry
+        manifestLoadingMaxRetry: 10,
         manifestLoadingRetryDelay: 1000,
-        levelLoadingMaxRetry: 6,
+        manifestLoadingMaxRetryTimeout: 20000,
+        levelLoadingMaxRetry: 10,
         levelLoadingRetryDelay: 1000,
+        levelLoadingMaxRetryTimeout: 20000,
+        // Tolerance untuk network jitter
+        fragLoadingTimeOut: 30000,
+        manifestLoadingTimeOut: 20000,
+        levelLoadingTimeOut: 20000,
       });
 
       hlsRef.current = hls;
@@ -295,14 +309,20 @@ function VideoPlayer({
                 enableWorker: true,
                 lowLatencyMode: false,
                 startLevel: -1,
-                maxBufferLength: 30,
-                maxMaxBufferLength: 60,
-                fragLoadingMaxRetry: 10,
-                fragLoadingRetryDelay: 1000,
-                manifestLoadingMaxRetry: 6,
+                maxBufferLength: 90,
+                maxMaxBufferLength: 120,
+                fragLoadingMaxRetry: 30,
+                fragLoadingRetryDelay: 500,
+                fragLoadingMaxRetryTimeout: 64000,
+                manifestLoadingMaxRetry: 10,
                 manifestLoadingRetryDelay: 1000,
-                levelLoadingMaxRetry: 6,
+                manifestLoadingMaxRetryTimeout: 20000,
+                levelLoadingMaxRetry: 10,
                 levelLoadingRetryDelay: 1000,
+                levelLoadingMaxRetryTimeout: 20000,
+                fragLoadingTimeOut: 30000,
+                manifestLoadingTimeOut: 20000,
+                levelLoadingTimeOut: 20000,
               });
               hlsRef.current = newHls;
               newHls.loadSource(streamUrl);

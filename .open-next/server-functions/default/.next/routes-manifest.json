@@ -1,0 +1,924 @@
+{
+  "version": 3,
+  "pages404": true,
+  "appType": "app",
+  "caseSensitive": false,
+  "basePath": "",
+  "redirects": [
+    {
+      "source": "/:path+/",
+      "destination": "/:path+",
+      "internal": true,
+      "priority": true,
+      "statusCode": 308,
+      "regex": "^(?:/((?:[^/]+?)(?:/(?:[^/]+?))*))/$"
+    }
+  ],
+  "headers": [],
+  "rewrites": {
+    "beforeFiles": [],
+    "afterFiles": [],
+    "fallback": []
+  },
+  "dynamicRoutes": [
+    {
+      "page": "/anime/s1/genre/[slug]",
+      "regex": "^/anime/s1/genre/([^/]+?)(?:/)?$",
+      "routeKeys": {
+        "nxtPslug": "nxtPslug"
+      },
+      "namedRegex": "^/anime/s1/genre/(?<nxtPslug>[^/]+?)(?:/)?$"
+    },
+    {
+      "page": "/anime/s1/watch/[id]/[episode]",
+      "regex": "^/anime/s1/watch/([^/]+?)/([^/]+?)(?:/)?$",
+      "routeKeys": {
+        "nxtPid": "nxtPid",
+        "nxtPepisode": "nxtPepisode"
+      },
+      "namedRegex": "^/anime/s1/watch/(?<nxtPid>[^/]+?)/(?<nxtPepisode>[^/]+?)(?:/)?$"
+    },
+    {
+      "page": "/anime/s1/[id]",
+      "regex": "^/anime/s1/([^/]+?)(?:/)?$",
+      "routeKeys": {
+        "nxtPid": "nxtPid"
+      },
+      "namedRegex": "^/anime/s1/(?<nxtPid>[^/]+?)(?:/)?$"
+    },
+    {
+      "page": "/anime/s2/genre/[slug]",
+      "regex": "^/anime/s2/genre/([^/]+?)(?:/)?$",
+      "routeKeys": {
+        "nxtPslug": "nxtPslug"
+      },
+      "namedRegex": "^/anime/s2/genre/(?<nxtPslug>[^/]+?)(?:/)?$"
+    },
+    {
+      "page": "/anime/s2/watch/[id]/[episode]",
+      "regex": "^/anime/s2/watch/([^/]+?)/([^/]+?)(?:/)?$",
+      "routeKeys": {
+        "nxtPid": "nxtPid",
+        "nxtPepisode": "nxtPepisode"
+      },
+      "namedRegex": "^/anime/s2/watch/(?<nxtPid>[^/]+?)/(?<nxtPepisode>[^/]+?)(?:/)?$"
+    },
+    {
+      "page": "/anime/s2/[id]",
+      "regex": "^/anime/s2/([^/]+?)(?:/)?$",
+      "routeKeys": {
+        "nxtPid": "nxtPid"
+      },
+      "namedRegex": "^/anime/s2/(?<nxtPid>[^/]+?)(?:/)?$"
+    },
+    {
+      "page": "/api/admin/ads/[id]",
+      "regex": "^/api/admin/ads/([^/]+?)(?:/)?$",
+      "routeKeys": {
+        "nxtPid": "nxtPid"
+      },
+      "namedRegex": "^/api/admin/ads/(?<nxtPid>[^/]+?)(?:/)?$"
+    },
+    {
+      "page": "/api/admin/cinemacity-cookies/[id]",
+      "regex": "^/api/admin/cinemacity\\-cookies/([^/]+?)(?:/)?$",
+      "routeKeys": {
+        "nxtPid": "nxtPid"
+      },
+      "namedRegex": "^/api/admin/cinemacity\\-cookies/(?<nxtPid>[^/]+?)(?:/)?$"
+    },
+    {
+      "page": "/api/admin/curated/[id]",
+      "regex": "^/api/admin/curated/([^/]+?)(?:/)?$",
+      "routeKeys": {
+        "nxtPid": "nxtPid"
+      },
+      "namedRegex": "^/api/admin/curated/(?<nxtPid>[^/]+?)(?:/)?$"
+    },
+    {
+      "page": "/api/admin/messages/[id]",
+      "regex": "^/api/admin/messages/([^/]+?)(?:/)?$",
+      "routeKeys": {
+        "nxtPid": "nxtPid"
+      },
+      "namedRegex": "^/api/admin/messages/(?<nxtPid>[^/]+?)(?:/)?$"
+    },
+    {
+      "page": "/api/admin/providers/[id]",
+      "regex": "^/api/admin/providers/([^/]+?)(?:/)?$",
+      "routeKeys": {
+        "nxtPid": "nxtPid"
+      },
+      "namedRegex": "^/api/admin/providers/(?<nxtPid>[^/]+?)(?:/)?$"
+    },
+    {
+      "page": "/api/admin/subtitle/[id]",
+      "regex": "^/api/admin/subtitle/([^/]+?)(?:/)?$",
+      "routeKeys": {
+        "nxtPid": "nxtPid"
+      },
+      "namedRegex": "^/api/admin/subtitle/(?<nxtPid>[^/]+?)(?:/)?$"
+    },
+    {
+      "page": "/api/anime/[...path]",
+      "regex": "^/api/anime/(.+?)(?:/)?$",
+      "routeKeys": {
+        "nxtPpath": "nxtPpath"
+      },
+      "namedRegex": "^/api/anime/(?<nxtPpath>.+?)(?:/)?$"
+    },
+    {
+      "page": "/api/auth/[...nextauth]",
+      "regex": "^/api/auth/(.+?)(?:/)?$",
+      "routeKeys": {
+        "nxtPnextauth": "nxtPnextauth"
+      },
+      "namedRegex": "^/api/auth/(?<nxtPnextauth>.+?)(?:/)?$"
+    },
+    {
+      "page": "/api/cinemacity/genre/[genre]",
+      "regex": "^/api/cinemacity/genre/([^/]+?)(?:/)?$",
+      "routeKeys": {
+        "nxtPgenre": "nxtPgenre"
+      },
+      "namedRegex": "^/api/cinemacity/genre/(?<nxtPgenre>[^/]+?)(?:/)?$"
+    },
+    {
+      "page": "/api/cinemacity/movie/[slug]",
+      "regex": "^/api/cinemacity/movie/([^/]+?)(?:/)?$",
+      "routeKeys": {
+        "nxtPslug": "nxtPslug"
+      },
+      "namedRegex": "^/api/cinemacity/movie/(?<nxtPslug>[^/]+?)(?:/)?$"
+    },
+    {
+      "page": "/api/cinemacity/play/[slug]",
+      "regex": "^/api/cinemacity/play/([^/]+?)(?:/)?$",
+      "routeKeys": {
+        "nxtPslug": "nxtPslug"
+      },
+      "namedRegex": "^/api/cinemacity/play/(?<nxtPslug>[^/]+?)(?:/)?$"
+    },
+    {
+      "page": "/api/comic/detail/[slug]",
+      "regex": "^/api/comic/detail/([^/]+?)(?:/)?$",
+      "routeKeys": {
+        "nxtPslug": "nxtPslug"
+      },
+      "namedRegex": "^/api/comic/detail/(?<nxtPslug>[^/]+?)(?:/)?$"
+    },
+    {
+      "page": "/api/comic/view/[slug]/[chapter]",
+      "regex": "^/api/comic/view/([^/]+?)/([^/]+?)(?:/)?$",
+      "routeKeys": {
+        "nxtPslug": "nxtPslug",
+        "nxtPchapter": "nxtPchapter"
+      },
+      "namedRegex": "^/api/comic/view/(?<nxtPslug>[^/]+?)/(?<nxtPchapter>[^/]+?)(?:/)?$"
+    },
+    {
+      "page": "/api/comic/[...path]",
+      "regex": "^/api/comic/(.+?)(?:/)?$",
+      "routeKeys": {
+        "nxtPpath": "nxtPpath"
+      },
+      "namedRegex": "^/api/comic/(?<nxtPpath>.+?)(?:/)?$"
+    },
+    {
+      "page": "/api/donghua/donghua/detail/[slug]",
+      "regex": "^/api/donghua/donghua/detail/([^/]+?)(?:/)?$",
+      "routeKeys": {
+        "nxtPslug": "nxtPslug"
+      },
+      "namedRegex": "^/api/donghua/donghua/detail/(?<nxtPslug>[^/]+?)(?:/)?$"
+    },
+    {
+      "page": "/api/donghua/donghua/episode/[slug]",
+      "regex": "^/api/donghua/donghua/episode/([^/]+?)(?:/)?$",
+      "routeKeys": {
+        "nxtPslug": "nxtPslug"
+      },
+      "namedRegex": "^/api/donghua/donghua/episode/(?<nxtPslug>[^/]+?)(?:/)?$"
+    },
+    {
+      "page": "/api/donghua/[...path]",
+      "regex": "^/api/donghua/(.+?)(?:/)?$",
+      "routeKeys": {
+        "nxtPpath": "nxtPpath"
+      },
+      "namedRegex": "^/api/donghua/(?<nxtPpath>.+?)(?:/)?$"
+    },
+    {
+      "page": "/api/drakor/detail/[slug]",
+      "regex": "^/api/drakor/detail/([^/]+?)(?:/)?$",
+      "routeKeys": {
+        "nxtPslug": "nxtPslug"
+      },
+      "namedRegex": "^/api/drakor/detail/(?<nxtPslug>[^/]+?)(?:/)?$"
+    },
+    {
+      "page": "/api/drakor/kategori/[slug]",
+      "regex": "^/api/drakor/kategori/([^/]+?)(?:/)?$",
+      "routeKeys": {
+        "nxtPslug": "nxtPslug"
+      },
+      "namedRegex": "^/api/drakor/kategori/(?<nxtPslug>[^/]+?)(?:/)?$"
+    },
+    {
+      "page": "/api/indocast/[...path]",
+      "regex": "^/api/indocast/(.+?)(?:/)?$",
+      "routeKeys": {
+        "nxtPpath": "nxtPpath"
+      },
+      "namedRegex": "^/api/indocast/(?<nxtPpath>.+?)(?:/)?$"
+    },
+    {
+      "page": "/api/messages/[id]",
+      "regex": "^/api/messages/([^/]+?)(?:/)?$",
+      "routeKeys": {
+        "nxtPid": "nxtPid"
+      },
+      "namedRegex": "^/api/messages/(?<nxtPid>[^/]+?)(?:/)?$"
+    },
+    {
+      "page": "/api/stream/[...path]",
+      "regex": "^/api/stream/(.+?)(?:/)?$",
+      "routeKeys": {
+        "nxtPpath": "nxtPpath"
+      },
+      "namedRegex": "^/api/stream/(?<nxtPpath>.+?)(?:/)?$"
+    },
+    {
+      "page": "/api/user/[id]/badges",
+      "regex": "^/api/user/([^/]+?)/badges(?:/)?$",
+      "routeKeys": {
+        "nxtPid": "nxtPid"
+      },
+      "namedRegex": "^/api/user/(?<nxtPid>[^/]+?)/badges(?:/)?$"
+    },
+    {
+      "page": "/api/user/[id]/equip",
+      "regex": "^/api/user/([^/]+?)/equip(?:/)?$",
+      "routeKeys": {
+        "nxtPid": "nxtPid"
+      },
+      "namedRegex": "^/api/user/(?<nxtPid>[^/]+?)/equip(?:/)?$"
+    },
+    {
+      "page": "/api/vps/[...path]",
+      "regex": "^/api/vps/(.+?)(?:/)?$",
+      "routeKeys": {
+        "nxtPpath": "nxtPpath"
+      },
+      "namedRegex": "^/api/vps/(?<nxtPpath>.+?)(?:/)?$"
+    },
+    {
+      "page": "/comic/genre/[slug]",
+      "regex": "^/comic/genre/([^/]+?)(?:/)?$",
+      "routeKeys": {
+        "nxtPslug": "nxtPslug"
+      },
+      "namedRegex": "^/comic/genre/(?<nxtPslug>[^/]+?)(?:/)?$"
+    },
+    {
+      "page": "/comic/list/[type]",
+      "regex": "^/comic/list/([^/]+?)(?:/)?$",
+      "routeKeys": {
+        "nxtPtype": "nxtPtype"
+      },
+      "namedRegex": "^/comic/list/(?<nxtPtype>[^/]+?)(?:/)?$"
+    },
+    {
+      "page": "/comic/read/[slug]",
+      "regex": "^/comic/read/([^/]+?)(?:/)?$",
+      "routeKeys": {
+        "nxtPslug": "nxtPslug"
+      },
+      "namedRegex": "^/comic/read/(?<nxtPslug>[^/]+?)(?:/)?$"
+    },
+    {
+      "page": "/comic/read/[slug]/[chapter]",
+      "regex": "^/comic/read/([^/]+?)/([^/]+?)(?:/)?$",
+      "routeKeys": {
+        "nxtPslug": "nxtPslug",
+        "nxtPchapter": "nxtPchapter"
+      },
+      "namedRegex": "^/comic/read/(?<nxtPslug>[^/]+?)/(?<nxtPchapter>[^/]+?)(?:/)?$"
+    },
+    {
+      "page": "/comic/[slug]",
+      "regex": "^/comic/([^/]+?)(?:/)?$",
+      "routeKeys": {
+        "nxtPslug": "nxtPslug"
+      },
+      "namedRegex": "^/comic/(?<nxtPslug>[^/]+?)(?:/)?$"
+    },
+    {
+      "page": "/donghua/s1/genre/[slug]",
+      "regex": "^/donghua/s1/genre/([^/]+?)(?:/)?$",
+      "routeKeys": {
+        "nxtPslug": "nxtPslug"
+      },
+      "namedRegex": "^/donghua/s1/genre/(?<nxtPslug>[^/]+?)(?:/)?$"
+    },
+    {
+      "page": "/donghua/s1/list/[type]",
+      "regex": "^/donghua/s1/list/([^/]+?)(?:/)?$",
+      "routeKeys": {
+        "nxtPtype": "nxtPtype"
+      },
+      "namedRegex": "^/donghua/s1/list/(?<nxtPtype>[^/]+?)(?:/)?$"
+    },
+    {
+      "page": "/donghua/s1/watch/[id]/[episode]",
+      "regex": "^/donghua/s1/watch/([^/]+?)/([^/]+?)(?:/)?$",
+      "routeKeys": {
+        "nxtPid": "nxtPid",
+        "nxtPepisode": "nxtPepisode"
+      },
+      "namedRegex": "^/donghua/s1/watch/(?<nxtPid>[^/]+?)/(?<nxtPepisode>[^/]+?)(?:/)?$"
+    },
+    {
+      "page": "/donghua/s1/[id]",
+      "regex": "^/donghua/s1/([^/]+?)(?:/)?$",
+      "routeKeys": {
+        "nxtPid": "nxtPid"
+      },
+      "namedRegex": "^/donghua/s1/(?<nxtPid>[^/]+?)(?:/)?$"
+    },
+    {
+      "page": "/donghua/s2/genre/[slug]",
+      "regex": "^/donghua/s2/genre/([^/]+?)(?:/)?$",
+      "routeKeys": {
+        "nxtPslug": "nxtPslug"
+      },
+      "namedRegex": "^/donghua/s2/genre/(?<nxtPslug>[^/]+?)(?:/)?$"
+    },
+    {
+      "page": "/donghua/s2/watch/[id]/[episode]",
+      "regex": "^/donghua/s2/watch/([^/]+?)/([^/]+?)(?:/)?$",
+      "routeKeys": {
+        "nxtPid": "nxtPid",
+        "nxtPepisode": "nxtPepisode"
+      },
+      "namedRegex": "^/donghua/s2/watch/(?<nxtPid>[^/]+?)/(?<nxtPepisode>[^/]+?)(?:/)?$"
+    },
+    {
+      "page": "/donghua/s2/[id]",
+      "regex": "^/donghua/s2/([^/]+?)(?:/)?$",
+      "routeKeys": {
+        "nxtPid": "nxtPid"
+      },
+      "namedRegex": "^/donghua/s2/(?<nxtPid>[^/]+?)(?:/)?$"
+    },
+    {
+      "page": "/drakor/kategori/[slug]",
+      "regex": "^/drakor/kategori/([^/]+?)(?:/)?$",
+      "routeKeys": {
+        "nxtPslug": "nxtPslug"
+      },
+      "namedRegex": "^/drakor/kategori/(?<nxtPslug>[^/]+?)(?:/)?$"
+    },
+    {
+      "page": "/drakor/list/[type]",
+      "regex": "^/drakor/list/([^/]+?)(?:/)?$",
+      "routeKeys": {
+        "nxtPtype": "nxtPtype"
+      },
+      "namedRegex": "^/drakor/list/(?<nxtPtype>[^/]+?)(?:/)?$"
+    },
+    {
+      "page": "/drakor/watch/[slug]/[episode]",
+      "regex": "^/drakor/watch/([^/]+?)/([^/]+?)(?:/)?$",
+      "routeKeys": {
+        "nxtPslug": "nxtPslug",
+        "nxtPepisode": "nxtPepisode"
+      },
+      "namedRegex": "^/drakor/watch/(?<nxtPslug>[^/]+?)/(?<nxtPepisode>[^/]+?)(?:/)?$"
+    },
+    {
+      "page": "/drakor/[slug]",
+      "regex": "^/drakor/([^/]+?)(?:/)?$",
+      "routeKeys": {
+        "nxtPslug": "nxtPslug"
+      },
+      "namedRegex": "^/drakor/(?<nxtPslug>[^/]+?)(?:/)?$"
+    },
+    {
+      "page": "/genre/[slug]",
+      "regex": "^/genre/([^/]+?)(?:/)?$",
+      "routeKeys": {
+        "nxtPslug": "nxtPslug"
+      },
+      "namedRegex": "^/genre/(?<nxtPslug>[^/]+?)(?:/)?$"
+    },
+    {
+      "page": "/person/[id]",
+      "regex": "^/person/([^/]+?)(?:/)?$",
+      "routeKeys": {
+        "nxtPid": "nxtPid"
+      },
+      "namedRegex": "^/person/(?<nxtPid>[^/]+?)(?:/)?$"
+    }
+  ],
+  "staticRoutes": [
+    {
+      "page": "/",
+      "regex": "^/(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/(?:/)?$"
+    },
+    {
+      "page": "/_global-error",
+      "regex": "^/_global\\-error(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/_global\\-error(?:/)?$"
+    },
+    {
+      "page": "/_not-found",
+      "regex": "^/_not\\-found(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/_not\\-found(?:/)?$"
+    },
+    {
+      "page": "/admin",
+      "regex": "^/admin(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/admin(?:/)?$"
+    },
+    {
+      "page": "/admin/ads",
+      "regex": "^/admin/ads(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/admin/ads(?:/)?$"
+    },
+    {
+      "page": "/admin/analytics",
+      "regex": "^/admin/analytics(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/admin/analytics(?:/)?$"
+    },
+    {
+      "page": "/admin/badges",
+      "regex": "^/admin/badges(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/admin/badges(?:/)?$"
+    },
+    {
+      "page": "/admin/curated",
+      "regex": "^/admin/curated(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/admin/curated(?:/)?$"
+    },
+    {
+      "page": "/admin/logs",
+      "regex": "^/admin/logs(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/admin/logs(?:/)?$"
+    },
+    {
+      "page": "/admin/messages",
+      "regex": "^/admin/messages(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/admin/messages(?:/)?$"
+    },
+    {
+      "page": "/admin/providers",
+      "regex": "^/admin/providers(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/admin/providers(?:/)?$"
+    },
+    {
+      "page": "/admin/subtitle",
+      "regex": "^/admin/subtitle(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/admin/subtitle(?:/)?$"
+    },
+    {
+      "page": "/admin/subtitle/batch",
+      "regex": "^/admin/subtitle/batch(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/admin/subtitle/batch(?:/)?$"
+    },
+    {
+      "page": "/admin/subtitle/generate",
+      "regex": "^/admin/subtitle/generate(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/admin/subtitle/generate(?:/)?$"
+    },
+    {
+      "page": "/admin/users",
+      "regex": "^/admin/users(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/admin/users(?:/)?$"
+    },
+    {
+      "page": "/anime",
+      "regex": "^/anime(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/anime(?:/)?$"
+    },
+    {
+      "page": "/anime/search",
+      "regex": "^/anime/search(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/anime/search(?:/)?$"
+    },
+    {
+      "page": "/api",
+      "regex": "^/api(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api(?:/)?$"
+    },
+    {
+      "page": "/api/admin/ads",
+      "regex": "^/api/admin/ads(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/admin/ads(?:/)?$"
+    },
+    {
+      "page": "/api/admin/analytics",
+      "regex": "^/api/admin/analytics(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/admin/analytics(?:/)?$"
+    },
+    {
+      "page": "/api/admin/cinemacity-cookies",
+      "regex": "^/api/admin/cinemacity\\-cookies(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/admin/cinemacity\\-cookies(?:/)?$"
+    },
+    {
+      "page": "/api/admin/curated",
+      "regex": "^/api/admin/curated(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/admin/curated(?:/)?$"
+    },
+    {
+      "page": "/api/admin/logs",
+      "regex": "^/api/admin/logs(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/admin/logs(?:/)?$"
+    },
+    {
+      "page": "/api/admin/messages",
+      "regex": "^/api/admin/messages(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/admin/messages(?:/)?$"
+    },
+    {
+      "page": "/api/admin/providers",
+      "regex": "^/api/admin/providers(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/admin/providers(?:/)?$"
+    },
+    {
+      "page": "/api/admin/stats",
+      "regex": "^/api/admin/stats(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/admin/stats(?:/)?$"
+    },
+    {
+      "page": "/api/admin/subtitle",
+      "regex": "^/api/admin/subtitle(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/admin/subtitle(?:/)?$"
+    },
+    {
+      "page": "/api/admin/users",
+      "regex": "^/api/admin/users(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/admin/users(?:/)?$"
+    },
+    {
+      "page": "/api/ads/config",
+      "regex": "^/api/ads/config(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/ads/config(?:/)?$"
+    },
+    {
+      "page": "/api/analytics",
+      "regex": "^/api/analytics(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/analytics(?:/)?$"
+    },
+    {
+      "page": "/api/auth/register",
+      "regex": "^/api/auth/register(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/auth/register(?:/)?$"
+    },
+    {
+      "page": "/api/badges",
+      "regex": "^/api/badges(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/badges(?:/)?$"
+    },
+    {
+      "page": "/api/cinemacity/genres",
+      "regex": "^/api/cinemacity/genres(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/cinemacity/genres(?:/)?$"
+    },
+    {
+      "page": "/api/cinemacity/home",
+      "regex": "^/api/cinemacity/home(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/cinemacity/home(?:/)?$"
+    },
+    {
+      "page": "/api/cinemacity/image",
+      "regex": "^/api/cinemacity/image(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/cinemacity/image(?:/)?$"
+    },
+    {
+      "page": "/api/cinemacity/proxy",
+      "regex": "^/api/cinemacity/proxy(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/cinemacity/proxy(?:/)?$"
+    },
+    {
+      "page": "/api/cinemacity/scrape",
+      "regex": "^/api/cinemacity/scrape(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/cinemacity/scrape(?:/)?$"
+    },
+    {
+      "page": "/api/cinemacity/search",
+      "regex": "^/api/cinemacity/search(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/cinemacity/search(?:/)?$"
+    },
+    {
+      "page": "/api/cinemacity/stream",
+      "regex": "^/api/cinemacity/stream(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/cinemacity/stream(?:/)?$"
+    },
+    {
+      "page": "/api/cinemacity/test-bypass",
+      "regex": "^/api/cinemacity/test\\-bypass(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/cinemacity/test\\-bypass(?:/)?$"
+    },
+    {
+      "page": "/api/comic/filters",
+      "regex": "^/api/comic/filters(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/comic/filters(?:/)?$"
+    },
+    {
+      "page": "/api/comic/home",
+      "regex": "^/api/comic/home(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/comic/home(?:/)?$"
+    },
+    {
+      "page": "/api/comic/populer",
+      "regex": "^/api/comic/populer(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/comic/populer(?:/)?$"
+    },
+    {
+      "page": "/api/comic/search",
+      "regex": "^/api/comic/search(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/comic/search(?:/)?$"
+    },
+    {
+      "page": "/api/comic/terbaru",
+      "regex": "^/api/comic/terbaru(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/comic/terbaru(?:/)?$"
+    },
+    {
+      "page": "/api/comments",
+      "regex": "^/api/comments(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/comments(?:/)?$"
+    },
+    {
+      "page": "/api/cron/check-updates",
+      "regex": "^/api/cron/check\\-updates(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/cron/check\\-updates(?:/)?$"
+    },
+    {
+      "page": "/api/cron/refresh-cookies",
+      "regex": "^/api/cron/refresh\\-cookies(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/cron/refresh\\-cookies(?:/)?$"
+    },
+    {
+      "page": "/api/debug",
+      "regex": "^/api/debug(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/debug(?:/)?$"
+    },
+    {
+      "page": "/api/debug-db",
+      "regex": "^/api/debug\\-db(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/debug\\-db(?:/)?$"
+    },
+    {
+      "page": "/api/debug-eps",
+      "regex": "^/api/debug\\-eps(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/debug\\-eps(?:/)?$"
+    },
+    {
+      "page": "/api/drakor/kategori",
+      "regex": "^/api/drakor/kategori(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/drakor/kategori(?:/)?$"
+    },
+    {
+      "page": "/api/drakor/ongoing",
+      "regex": "^/api/drakor/ongoing(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/drakor/ongoing(?:/)?$"
+    },
+    {
+      "page": "/api/drakor/play",
+      "regex": "^/api/drakor/play(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/drakor/play(?:/)?$"
+    },
+    {
+      "page": "/api/drakor/search",
+      "regex": "^/api/drakor/search(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/drakor/search(?:/)?$"
+    },
+    {
+      "page": "/api/drakor/terbaru",
+      "regex": "^/api/drakor/terbaru(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/drakor/terbaru(?:/)?$"
+    },
+    {
+      "page": "/api/drakor/trending",
+      "regex": "^/api/drakor/trending(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/drakor/trending(?:/)?$"
+    },
+    {
+      "page": "/api/history",
+      "regex": "^/api/history(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/history(?:/)?$"
+    },
+    {
+      "page": "/api/home",
+      "regex": "^/api/home(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/home(?:/)?$"
+    },
+    {
+      "page": "/api/messages",
+      "regex": "^/api/messages(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/messages(?:/)?$"
+    },
+    {
+      "page": "/api/notifications",
+      "regex": "^/api/notifications(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/notifications(?:/)?$"
+    },
+    {
+      "page": "/api/providers",
+      "regex": "^/api/providers(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/providers(?:/)?$"
+    },
+    {
+      "page": "/api/proxy-image",
+      "regex": "^/api/proxy\\-image(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/proxy\\-image(?:/)?$"
+    },
+    {
+      "page": "/api/ratings",
+      "regex": "^/api/ratings(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/ratings(?:/)?$"
+    },
+    {
+      "page": "/api/subtitle/manual",
+      "regex": "^/api/subtitle/manual(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/subtitle/manual(?:/)?$"
+    },
+    {
+      "page": "/api/user/language",
+      "regex": "^/api/user/language(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/user/language(?:/)?$"
+    },
+    {
+      "page": "/api/user/profile",
+      "regex": "^/api/user/profile(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/user/profile(?:/)?$"
+    },
+    {
+      "page": "/api/watchlist",
+      "regex": "^/api/watchlist(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/watchlist(?:/)?$"
+    },
+    {
+      "page": "/comic",
+      "regex": "^/comic(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/comic(?:/)?$"
+    },
+    {
+      "page": "/donghua",
+      "regex": "^/donghua(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/donghua(?:/)?$"
+    },
+    {
+      "page": "/donghua/s1",
+      "regex": "^/donghua/s1(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/donghua/s1(?:/)?$"
+    },
+    {
+      "page": "/drakor",
+      "regex": "^/drakor(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/drakor(?:/)?$"
+    },
+    {
+      "page": "/history",
+      "regex": "^/history(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/history(?:/)?$"
+    },
+    {
+      "page": "/movies",
+      "regex": "^/movies(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/movies(?:/)?$"
+    },
+    {
+      "page": "/new",
+      "regex": "^/new(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/new(?:/)?$"
+    },
+    {
+      "page": "/novel",
+      "regex": "^/novel(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/novel(?:/)?$"
+    },
+    {
+      "page": "/profile",
+      "regex": "^/profile(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/profile(?:/)?$"
+    },
+    {
+      "page": "/search",
+      "regex": "^/search(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/search(?:/)?$"
+    },
+    {
+      "page": "/tv",
+      "regex": "^/tv(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/tv(?:/)?$"
+    },
+    {
+      "page": "/watchlist",
+      "regex": "^/watchlist(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/watchlist(?:/)?$"
+    }
+  ],
+  "dataRoutes": [],
+  "rsc": {
+    "header": "rsc",
+    "varyHeader": "rsc, next-router-state-tree, next-router-prefetch, next-router-segment-prefetch",
+    "prefetchHeader": "next-router-prefetch",
+    "didPostponeHeader": "x-nextjs-postponed",
+    "contentTypeHeader": "text/x-component",
+    "suffix": ".rsc",
+    "prefetchSegmentHeader": "next-router-segment-prefetch",
+    "prefetchSegmentSuffix": ".segment.rsc",
+    "prefetchSegmentDirSuffix": ".segments",
+    "clientParamParsing": false,
+    "dynamicRSCPrerender": false
+  },
+  "rewriteHeaders": {
+    "pathHeader": "x-nextjs-rewritten-path",
+    "queryHeader": "x-nextjs-rewritten-query"
+  }
+}
