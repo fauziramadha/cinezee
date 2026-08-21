@@ -1,0 +1,101 @@
+import { NextRequest, NextResponse } from "next/server";
+
+const VPS_API_BASE = "https://api.cinestream.biz.id";
+
+/**
+ * Same-origin proxy untuk /api/stream/* endpoints di VPS.
+ *
+ * KENAPA INI DIBUTUHKAN:
+ * - VPS API (api.cinestream.biz.id/api/stream/play/:id) mengembalikan m3u8 playlist
+ * - Playlist berisi segment URLs dalam bentuk RELATIF: /api/stream/segment?p=...
+ * - hls.js resolve URL relatif terhadap origin halaman (cinestream.biz.id)
+ * - Tanpa proxy ini, segment URLs resolve ke cinestream.biz.id/api/stream/segment → 404
+ * - hls.js retry forever → player stuck loading
+ *
+ * Dengan proxy ini, segment URLs resolve ke cinestream.biz.id/api/stream/segment
+ * → diteruskan ke api.cinestream.biz.id/api/stream/segment → 200 OK
+ *
+ * Endpoint yang lewat sini:
+ * - /api/stream/segment?p=<base64>  → TS video segments
+ * - /api/stream/playlist/:id        → sub-playlist (kalau ada)
+ *
+ * Note: /api/stream/play/:id (master m3u8) masih lewat /api/vps/api/stream/play/:id
+ * karena dipanggil langsung dari player-modal.tsx.
+ */
+export const dynamic = "force-dynamic";
+
+export async function GET(request: NextRequest) {
+  const path = request.nextUrl.pathname.replace("/api/stream/", "");
+  const search = request.nextUrl.search;
+  const targetUrl = `${VPS_API_BASE}/api/stream/${path}${search}`;
+
+  try {
+    const headers = new Headers();
+    headers.set("User-Agent", "CineStream-Worker/1.0");
+    headers.set("Accept", "*/*");
+    // Forward Range header untuk video segment seek
+    const range = request.headers.get("range");
+    if (range) {
+      headers.set("Range", range);
+    }
+
+    const res = await fetch(targetUrl, {
+      headers,
+      redirect: "follow",
+    });
+
+    const contentType =
+      res.headers.get("content-type") ||
+      "video/mp2t; charset=utf-8";
+
+    const body = await res.arrayBuffer();
+
+    const responseHeaders = new Headers({
+      "Content-Type": contentType,
+      "Access-Control-Allow-Origin": "*",
+      "Cache-Control":
+        res.headers.get("cache-control") || "public, max-age=3600",
+    });
+
+    // Forward critical headers for video streaming
+    const contentLength = res.headers.get("content-length");
+    if (contentLength) {
+      responseHeaders.set("Content-Length", contentLength);
+    }
+    const contentRange = res.headers.get("content-range");
+    if (contentRange) {
+      responseHeaders.set("Content-Range", contentRange);
+      responseHeaders.set("Accept-Ranges", "bytes");
+    }
+    const acceptRanges = res.headers.get("accept-ranges");
+    if (acceptRanges) {
+      responseHeaders.set("Accept-Ranges", acceptRanges);
+    }
+    const etag = res.headers.get("etag");
+    if (etag) {
+      responseHeaders.set("ETag", etag);
+    }
+
+    return new NextResponse(body, {
+      status: res.status,
+      headers: responseHeaders,
+    });
+  } catch (error: any) {
+    console.error("[Stream Proxy] Error:", error.message);
+    return NextResponse.json(
+      { error: "Failed to fetch stream segment" },
+      { status: 502 }
+    );
+  }
+}
+
+export async function OPTIONS() {
+  return new NextResponse(null, {
+    status: 204,
+    headers: {
+      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Methods": "GET, OPTIONS",
+      "Access-Control-Allow-Headers": "Content-Type, Range",
+    },
+  });
+}
