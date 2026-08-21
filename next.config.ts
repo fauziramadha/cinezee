@@ -6,6 +6,7 @@ const nextConfig: NextConfig = {
     ignoreBuildErrors: true,
   },
   reactStrictMode: false,
+  generateBuildId: () => 'v4-proxy-' + Date.now().toString(),
   images: {
     unoptimized: true,
     remotePatterns: [
@@ -32,7 +33,5 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default nextConfig;
 
-// Force new build ID
-export const generateBuildId = () => 'cinestream-v4-' + Date.now();
+export default nextConfig;

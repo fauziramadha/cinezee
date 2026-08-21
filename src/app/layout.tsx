@@ -120,6 +120,7 @@ export default function RootLayout({
         <meta name="application-name" content="CineStream" />
         <meta name="msapplication-TileColor" content="#B20710" />
         <meta name="msapplication-tap-highlight" content="no" />
+        <meta name="build-version" content="v4-proxy-fix" />
 
         {/* === Service Worker Registration === */}
         <Script
