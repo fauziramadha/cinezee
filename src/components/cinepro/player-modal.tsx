@@ -210,12 +210,28 @@ function VideoPlayer({
 
     if (isSafari && canPlayNativeHls) {
       // Use Safari's NATIVE HLS player - much more efficient on iOS
-      // Native player pre-downloads segments based on network speed
       video.src = streamUrl;
 
       const onLoadedMeta = () => {
         handleSwitchingDone();
         video.play().catch(() => {});
+
+        // FIX: Force enable default subtitle for Safari native HLS
+        // Safari doesn't auto-show <track> elements, must set mode = "showing"
+        if (defaultSubtitleIdx >= 0) {
+          const enableSub = () => {
+            const tracks = video.textTracks;
+            if (tracks && tracks.length > defaultSubtitleIdx) {
+              for (let i = 0; i < tracks.length; i++) {
+                tracks[i].mode = i === defaultSubtitleIdx ? "showing" : "disabled";
+              }
+            }
+          };
+          enableSub();
+          setTimeout(enableSub, 500);
+          setTimeout(enableSub, 1500);
+          setTimeout(enableSub, 3000);
+        }
       };
       const onVideoError = () => {
         handleSwitchingDone();

@@ -1,18 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getCloudflareContext } from "@opennextjs/cloudflare";
 
 const VPS_API_BASE = "https://api.cinestream.biz.id";
 
 /**
- * Stream proxy dengan Cloudflare Cache API (caches.default)
+ * SIMPLE stream proxy - NO Cache API (was causing Worker hangs)
  *
- * KEY FIXES:
- * 1. Strip Range header - Safari sends Range for HLS segments
- *    VPS returns 206 (partial) if Range forwarded → can't cache
- *    Strip Range → VPS returns 200 OK → cacheable
- * 2. Use caches.default (Cache API) not cf: { cacheEverything }
- *    Cache API stores complete response at edge
- *    HIT = Worker doesn't process body = TTFB <100ms
+ * Previous approach used caches.default + res.clone() + cache.put()
+ * This caused Worker to buffer entire 2MB response → 25s hang → 502 errors
+ *
+ * New approach: PURE streaming
+ * - Stream body directly from VPS to client
+ * - Set Cache-Control header → Cloudflare CDN caches automatically
+ * - NO res.clone(), NO cache.put(), NO body buffering
+ * - Worker CPU minimal = no hangs, no 502s
  */
 
 export const dynamic = "force-dynamic";
@@ -30,28 +30,11 @@ export async function GET(request: NextRequest) {
   const isSegment = hasSegmentParam || hasShortSegPath;
   const cacheTtl = isSegment ? SEGMENT_CACHE_TTL : PLAYLIST_CACHE_TTL;
 
-  const cache = caches.default;
-  const cacheKey = new Request(targetUrl, { method: "GET" });
-
-  // === CHECK CACHE FIRST ===
-  const cached = await cache.match(cacheKey);
-  if (cached) {
-    const headers = new Headers(cached.headers);
-    headers.set("Access-Control-Allow-Origin", "*");
-    headers.set("X-Cache", "HIT-EDGE");
-    return new NextResponse(cached.body, {
-      status: cached.status,
-      headers,
-    });
-  }
-
-  // === CACHE MISS - FETCH FROM VPS ===
   try {
     const headers = new Headers();
     headers.set("User-Agent", "CineStream-Worker/1.0");
     headers.set("Accept", "*/*");
-    // DO NOT forward Range header - causes 206 (uncacheable)
-    // Safari sends Range for HLS segments, strip it so VPS returns 200 OK
+    // DO NOT forward Range - causes 206 (uncacheable)
 
     const res = await fetch(targetUrl, {
       headers,
@@ -66,7 +49,6 @@ export async function GET(request: NextRequest) {
       "Content-Type": contentType,
       "Access-Control-Allow-Origin": "*",
       "Cache-Control": `public, max-age=${cacheTtl}`,
-      "X-Cache": "MISS",
     });
 
     const xSource = res.headers.get("X-Source");
@@ -79,31 +61,8 @@ export async function GET(request: NextRequest) {
       responseHeaders.set("Content-Length", contentLength);
     }
 
-    // Cache ALL 200 OK responses (Range stripped, so always 200 not 206)
-    const isCacheable = res.ok && res.status === 200 && res.body;
-
-    if (isCacheable) {
-      const resForCache = res.clone();
-
-      const responseForCache = new NextResponse(resForCache.body, {
-        status: resForCache.status,
-        headers: responseHeaders,
-      });
-
-      try {
-        const { ctx } = getCloudflareContext();
-        ctx.waitUntil(cache.put(cacheKey, responseForCache));
-      } catch {
-        cache.put(cacheKey, responseForCache).catch(() => {});
-      }
-
-      return new NextResponse(res.body, {
-        status: res.status,
-        headers: responseHeaders,
-      });
-    }
-
-    // Non-200: stream directly
+    // PURE STREAMING - no clone, no cache.put, no buffering
+    // Cloudflare CDN caches based on Cache-Control header automatically
     return new NextResponse(res.body, {
       status: res.status,
       headers: responseHeaders,
