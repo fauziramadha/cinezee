@@ -4,22 +4,21 @@ import { getCloudflareContext } from "@opennextjs/cloudflare";
 const VPS_API_BASE = "https://api.cinestream.biz.id";
 
 /**
- * OPTIMIZED stream proxy with prefetch
+ * Stream proxy dengan Cloudflare Cache API (caches.default)
  *
- * When sub-playlist (m3u8) is fetched, prefetch first 10 segments
- * to warm edge cache. This eliminates buffer underrun on first play.
+ * KEY FIXES:
+ * 1. Strip Range header - Safari sends Range for HLS segments
+ *    VPS returns 206 (partial) if Range forwarded → can't cache
+ *    Strip Range → VPS returns 200 OK → cacheable
+ * 2. Use caches.default (Cache API) not cf: { cacheEverything }
+ *    Cache API stores complete response at edge
+ *    HIT = Worker doesn't process body = TTFB <100ms
  */
 
 export const dynamic = "force-dynamic";
 
 const PLAYLIST_CACHE_TTL = 60;
 const SEGMENT_CACHE_TTL = 86400;
-
-async function prefetchSegments(playlistText: string): Promise<void> {
-  // DISABLED - prefetch was causing Worker CPU overload (Error 1102)
-  // Safari native HLS handles buffering natively and more efficiently
-  return;
-}
 
 export async function GET(request: NextRequest) {
   const path = request.nextUrl.pathname.replace("/api/stream/", "");
@@ -31,23 +30,33 @@ export async function GET(request: NextRequest) {
   const isSegment = hasSegmentParam || hasShortSegPath;
   const cacheTtl = isSegment ? SEGMENT_CACHE_TTL : PLAYLIST_CACHE_TTL;
 
+  const cache = caches.default;
+  const cacheKey = new Request(targetUrl, { method: "GET" });
+
+  // === CHECK CACHE FIRST ===
+  const cached = await cache.match(cacheKey);
+  if (cached) {
+    const headers = new Headers(cached.headers);
+    headers.set("Access-Control-Allow-Origin", "*");
+    headers.set("X-Cache", "HIT-EDGE");
+    return new NextResponse(cached.body, {
+      status: cached.status,
+      headers,
+    });
+  }
+
+  // === CACHE MISS - FETCH FROM VPS ===
   try {
     const headers = new Headers();
     headers.set("User-Agent", "CineStream-Worker/1.0");
     headers.set("Accept", "*/*");
-    const range = request.headers.get("range");
-    if (range) {
-      headers.set("Range", range);
-    }
+    // DO NOT forward Range header - causes 206 (uncacheable)
+    // Safari sends Range for HLS segments, strip it so VPS returns 200 OK
 
     const res = await fetch(targetUrl, {
       headers,
       redirect: "follow",
       signal: AbortSignal.timeout(25000),
-      cf: {
-        cacheTtl: cacheTtl,
-        cacheEverything: true,
-      },
     });
 
     const contentType =
@@ -57,7 +66,7 @@ export async function GET(request: NextRequest) {
       "Content-Type": contentType,
       "Access-Control-Allow-Origin": "*",
       "Cache-Control": `public, max-age=${cacheTtl}`,
-      "X-Cache": res.headers.get("cf-cache-status") || "DYNAMIC",
+      "X-Cache": "MISS",
     });
 
     const xSource = res.headers.get("X-Source");
@@ -69,40 +78,32 @@ export async function GET(request: NextRequest) {
     if (contentLength) {
       responseHeaders.set("Content-Length", contentLength);
     }
-    const contentRange = res.headers.get("content-range");
-    if (contentRange) {
-      responseHeaders.set("Content-Range", contentRange);
-      responseHeaders.set("Accept-Ranges", "bytes");
-    }
-    const acceptRanges = res.headers.get("accept-ranges");
-    if (acceptRanges) {
-      responseHeaders.set("Accept-Ranges", acceptRanges);
-    }
-    const etag = res.headers.get("etag");
-    if (etag) {
-      responseHeaders.set("ETag", etag);
-    }
 
-    const isM3U8 =
-      contentType.includes("mpegurl") ||
-      contentType.includes("m3u8");
+    // Cache ALL 200 OK responses (Range stripped, so always 200 not 206)
+    const isCacheable = res.ok && res.status === 200 && res.body;
 
-    if (isM3U8) {
-      const bodyText = await res.text();
+    if (isCacheable) {
+      const resForCache = res.clone();
+
+      const responseForCache = new NextResponse(resForCache.body, {
+        status: resForCache.status,
+        headers: responseHeaders,
+      });
 
       try {
         const { ctx } = getCloudflareContext();
-        ctx.waitUntil(prefetchSegments(bodyText));
+        ctx.waitUntil(cache.put(cacheKey, responseForCache));
       } catch {
-        prefetchSegments(bodyText).catch(() => {});
+        cache.put(cacheKey, responseForCache).catch(() => {});
       }
 
-      return new NextResponse(bodyText, {
+      return new NextResponse(res.body, {
         status: res.status,
         headers: responseHeaders,
       });
     }
 
+    // Non-200: stream directly
     return new NextResponse(res.body, {
       status: res.status,
       headers: responseHeaders,
