@@ -200,16 +200,21 @@ function VideoPlayer({
 
     if (Hls.isSupported()) {
       // PERFORMANCE: Config tuned untuk streaming yang stabil
-      // - fragLoadingMaxRetry dinaikin ke 30 (dari 10) supaya segment failure bisa recover
-      // - fragLoadingRetryDelay + fragLoadingMaxRetryTimeout = exponential backoff sampai 10s
-      // - maxBufferLength dinaikin ke 90 (dari 30) supaya buffer lebih tebal = lebih tahan network jitter
-      // - fragLoadingMaxRetryTimeout 30s = total waktu retry max sebelum give up
+      // - maxBufferLength dinaikin ke 120 (dari 30) supaya buffer lebih tebal
+      //   Segment 1080p = ~2MB per 6s, di koneksi 5Mbps butuh ~3s download
+      //   Dengan buffer 120s = 20 segments ahead = tahan network jitter lama
+      // - maxMaxBufferLength 600 = max 10 menit buffer (kalau koneksi bagus)
+      // - fragLoadingMaxRetry 30 = retry 30x sebelum give up
+      // - fragLoadingRetryDelay 500ms + exponential backoff sampai 64s
+      // - fragLoadingTimeOut 60s = beri waktu lama untuk segment besar (2MB)
       const hls = new Hls({
         enableWorker: true,
         lowLatencyMode: false,
         startLevel: -1,
-        maxBufferLength: 90,
-        maxMaxBufferLength: 120,
+        // Buffer lebih tebal untuk handle segment besar + network jitter
+        maxBufferLength: 120,
+        maxMaxBufferLength: 600,
+        backBufferLength: 90,
         // Segment retry - lebih agresif supaya playback tidak stuck
         fragLoadingMaxRetry: 30,
         fragLoadingRetryDelay: 500,
@@ -221,10 +226,16 @@ function VideoPlayer({
         levelLoadingMaxRetry: 10,
         levelLoadingRetryDelay: 1000,
         levelLoadingMaxRetryTimeout: 20000,
-        // Tolerance untuk network jitter
-        fragLoadingTimeOut: 30000,
+        // Timeout lebih lama untuk segment besar (2MB di koneksi lambat)
+        fragLoadingTimeOut: 60000,
         manifestLoadingTimeOut: 20000,
         levelLoadingTimeOut: 20000,
+        // Preload lebih banyak segment di background
+        startFragPrefetch: true,
+        // Smooth playback saat network jitter
+        nudgeOffset: 0.1,
+        nudgeMaxRetry: 10,
+        nudgeOnDiscard: true,
       });
 
       hlsRef.current = hls;
@@ -309,8 +320,9 @@ function VideoPlayer({
                 enableWorker: true,
                 lowLatencyMode: false,
                 startLevel: -1,
-                maxBufferLength: 90,
-                maxMaxBufferLength: 120,
+                maxBufferLength: 120,
+                maxMaxBufferLength: 600,
+                backBufferLength: 90,
                 fragLoadingMaxRetry: 30,
                 fragLoadingRetryDelay: 500,
                 fragLoadingMaxRetryTimeout: 64000,
@@ -320,9 +332,13 @@ function VideoPlayer({
                 levelLoadingMaxRetry: 10,
                 levelLoadingRetryDelay: 1000,
                 levelLoadingMaxRetryTimeout: 20000,
-                fragLoadingTimeOut: 30000,
+                fragLoadingTimeOut: 60000,
                 manifestLoadingTimeOut: 20000,
                 levelLoadingTimeOut: 20000,
+                startFragPrefetch: true,
+                nudgeOffset: 0.1,
+                nudgeMaxRetry: 10,
+                nudgeOnDiscard: true,
               });
               hlsRef.current = newHls;
               newHls.loadSource(streamUrl);
