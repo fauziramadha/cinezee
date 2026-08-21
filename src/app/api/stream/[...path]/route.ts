@@ -31,7 +31,9 @@ export async function GET(request: NextRequest) {
   const targetUrl = `${VPS_API_BASE}/api/stream/${path}${search}`;
 
   const hasSegmentParam = request.nextUrl.searchParams.has("p");
-  const cacheTtl = hasSegmentParam ? SEGMENT_CACHE_TTL : PLAYLIST_CACHE_TTL;
+  const hasShortSegPath = path.startsWith("seg/");
+  const isSegment = hasSegmentParam || hasShortSegPath;
+  const cacheTtl = isSegment ? SEGMENT_CACHE_TTL : PLAYLIST_CACHE_TTL;
 
   // Cloudflare Cache API
   const cacheKey = new Request(targetUrl, { method: "GET" });
