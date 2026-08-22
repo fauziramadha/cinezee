@@ -343,46 +343,43 @@ function VideoPlayer({
 
         switch (data.type) {
           case Hls.ErrorTypes.NETWORK_ERROR:
-            // Coba startLoad dulu
-            console.log("[Player] Network error, retrying with startLoad...");
-            hls.startLoad();
+            // PRESERVE current time to prevent rollback
+            const savedTime = video.currentTime;
+            console.log("[Player] Network error at", savedTime, "s, retrying...");
+            hls.startLoad(savedTime);
             // Kalau masih gagal dalam 10 detik, destroy + recreate
             timeoutRef.current = setTimeout(() => {
-              console.log("[Player] startLoad failed, recreating HLS instance...");
+              console.log("[Player] startLoad failed, recreating HLS...");
+              const preserveTime = video.currentTime;
               try {
                 hls.destroy();
               } catch {}
-              // Recreate HLS instance
               const newHls = new Hls({
                 enableWorker: true,
                 lowLatencyMode: false,
                 startLevel: -1,
-                maxBufferLength: 120,
-                maxMaxBufferLength: 600,
-                backBufferLength: 90,
-                fragLoadingMaxRetry: 30,
+                maxBufferLength: 30,
+                maxMaxBufferLength: 60,
+                fragLoadingMaxRetry: 4,
                 fragLoadingRetryDelay: 500,
-                fragLoadingMaxRetryTimeout: 64000,
-                manifestLoadingMaxRetry: 10,
-                manifestLoadingRetryDelay: 1000,
-                manifestLoadingMaxRetryTimeout: 20000,
-                levelLoadingMaxRetry: 10,
-                levelLoadingRetryDelay: 1000,
-                levelLoadingMaxRetryTimeout: 20000,
-                fragLoadingTimeOut: 60000,
-                manifestLoadingTimeOut: 20000,
-                levelLoadingTimeOut: 20000,
-                startFragPrefetch: true,
-                nudgeOffset: 0.1,
-                nudgeMaxRetry: 10,
-                nudgeOnDiscard: true,
+                fragLoadingMaxRetryTimeout: 8000,
+                manifestLoadingMaxRetry: 4,
+                manifestLoadingRetryDelay: 500,
+                levelLoadingMaxRetry: 4,
+                levelLoadingRetryDelay: 500,
+                fragLoadingTimeOut: 15000,
+                manifestLoadingTimeOut: 10000,
+                levelLoadingTimeOut: 10000,
               });
               hlsRef.current = newHls;
               newHls.loadSource(streamUrl);
               newHls.attachMedia(video);
-              // Re-register events for new instance
               newHls.on(Hls.Events.MANIFEST_PARSED, () => {
                 handleSwitchingDone();
+                // RESTORE position to prevent rollback
+                if (preserveTime > 0) {
+                  video.currentTime = preserveTime;
+                }
                 video.play().catch(() => {});
               });
               newHls.on(Hls.Events.ERROR, (evt2, data2) => {
