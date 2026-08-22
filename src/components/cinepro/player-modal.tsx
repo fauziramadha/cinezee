@@ -21,7 +21,7 @@ import { useAppStore } from "@/lib/store";
 const VPS_API_BASE =
   process.env.NEXT_PUBLIC_API_URL || "/api/vps";
 
-const SWITCHING_TIMEOUT_MS = 20000;
+const SWITCHING_TIMEOUT_MS = 45000; // 45s - give hls.js time to parse manifest + download first segment
 
 interface ServerInfo {
   id: number;
