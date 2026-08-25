@@ -3734,12 +3734,12 @@
       "imports": [],
       "format": "cjs"
     },
-    ".open-next/server-functions/default/.next/server/app/api/vps/[...path]/route_client-reference-manifest.js": {
+    ".open-next/server-functions/default/.next/server/app/api/user/language/route_client-reference-manifest.js": {
       "bytes": 320,
       "imports": [],
       "format": "cjs"
     },
-    ".open-next/server-functions/default/.next/server/app/api/user/language/route_client-reference-manifest.js": {
+    ".open-next/server-functions/default/.next/server/app/api/vps/[...path]/route_client-reference-manifest.js": {
       "bytes": 320,
       "imports": [],
       "format": "cjs"
@@ -3895,7 +3895,7 @@
       "format": "cjs"
     },
     ".open-next/server-functions/default/node_modules/next/dist/server/load-manifest.external.js": {
-      "bytes": 551978,
+      "bytes": 551999,
       "imports": [
         {
           "path": "path",
@@ -4128,14 +4128,14 @@
           "original": "/home/z/my-project/cinezee-check/.open-next/server-functions/default/.next/server/app/api/notifications/route_client-reference-manifest.js"
         },
         {
-          "path": ".open-next/server-functions/default/.next/server/app/api/vps/[...path]/route_client-reference-manifest.js",
-          "kind": "require-call",
-          "original": "/home/z/my-project/cinezee-check/.open-next/server-functions/default/.next/server/app/api/vps/[...path]/route_client-reference-manifest.js"
-        },
-        {
           "path": ".open-next/server-functions/default/.next/server/app/api/user/language/route_client-reference-manifest.js",
           "kind": "require-call",
           "original": "/home/z/my-project/cinezee-check/.open-next/server-functions/default/.next/server/app/api/user/language/route_client-reference-manifest.js"
+        },
+        {
+          "path": ".open-next/server-functions/default/.next/server/app/api/vps/[...path]/route_client-reference-manifest.js",
+          "kind": "require-call",
+          "original": "/home/z/my-project/cinezee-check/.open-next/server-functions/default/.next/server/app/api/vps/[...path]/route_client-reference-manifest.js"
         },
         {
           "path": ".open-next/server-functions/default/.next/server/app/api/messages/[id]/route_client-reference-manifest.js",
@@ -4814,7 +4814,7 @@
       "format": "cjs"
     },
     ".open-next/server-functions/default/.next/server/chunks/ssr/_739f8e03._.js": {
-      "bytes": 66654,
+      "bytes": 66845,
       "imports": [],
       "format": "cjs"
     },
@@ -9285,8 +9285,8 @@
       ],
       "format": "cjs"
     },
-    ".open-next/server-functions/default/.next/server/chunks/ssr/_63de82ef._.js": {
-      "bytes": 8201,
+    ".open-next/server-functions/default/.next/server/chunks/ssr/_93dae812._.js": {
+      "bytes": 8278,
       "imports": [],
       "format": "cjs"
     },
@@ -9365,7 +9365,7 @@
       "format": "cjs"
     },
     ".open-next/server-functions/default/.next/server/chunks/ssr/src_app_donghua_s1_content_tsx_4ed32b53._.js": {
-      "bytes": 13061,
+      "bytes": 13480,
       "imports": [],
       "format": "cjs"
     },
@@ -9397,7 +9397,7 @@
       "format": "cjs"
     },
     ".open-next/server-functions/default/.next/server/chunks/ssr/src_components_donghua_donghua-detail-content_tsx_efd93501._.js": {
-      "bytes": 11747,
+      "bytes": 12240,
       "imports": [],
       "format": "cjs"
     },
@@ -9514,8 +9514,8 @@
       ],
       "format": "cjs"
     },
-    ".open-next/server-functions/default/.next/server/chunks/ssr/_fe7f906f._.js": {
-      "bytes": 12128,
+    ".open-next/server-functions/default/.next/server/chunks/ssr/_8a053ec5._.js": {
+      "bytes": 14686,
       "imports": [],
       "format": "cjs"
     },
@@ -11681,9 +11681,9 @@
           "original": "/home/z/my-project/cinezee-check/.open-next/server-functions/default/.next/server/chunks/ssr/_604f8d03._.js"
         },
         {
-          "path": ".open-next/server-functions/default/.next/server/chunks/ssr/_63de82ef._.js",
+          "path": ".open-next/server-functions/default/.next/server/chunks/ssr/_93dae812._.js",
           "kind": "require-call",
-          "original": "/home/z/my-project/cinezee-check/.open-next/server-functions/default/.next/server/chunks/ssr/_63de82ef._.js"
+          "original": "/home/z/my-project/cinezee-check/.open-next/server-functions/default/.next/server/chunks/ssr/_93dae812._.js"
         },
         {
           "path": ".open-next/server-functions/default/.next/server/chunks/ssr/_next-internal_server_app_comic_read_[slug]_[chapter]_page_actions_8e81363b.js",
@@ -11826,9 +11826,9 @@
           "original": "/home/z/my-project/cinezee-check/.open-next/server-functions/default/.next/server/chunks/ssr/_437516bd._.js"
         },
         {
-          "path": ".open-next/server-functions/default/.next/server/chunks/ssr/_fe7f906f._.js",
+          "path": ".open-next/server-functions/default/.next/server/chunks/ssr/_8a053ec5._.js",
           "kind": "require-call",
-          "original": "/home/z/my-project/cinezee-check/.open-next/server-functions/default/.next/server/chunks/ssr/_fe7f906f._.js"
+          "original": "/home/z/my-project/cinezee-check/.open-next/server-functions/default/.next/server/chunks/ssr/_8a053ec5._.js"
         },
         {
           "path": ".open-next/server-functions/default/.next/server/chunks/ssr/_next-internal_server_app_donghua_s1_watch_[id]_[episode]_page_actions_23b487d7.js",
@@ -13772,9 +13772,9 @@
           "original": "/home/z/my-project/cinezee-check/.open-next/server-functions/default/.next/server/chunks/ssr/_604f8d03._.js"
         },
         {
-          "path": ".open-next/server-functions/default/.next/server/chunks/ssr/_63de82ef._.js",
+          "path": ".open-next/server-functions/default/.next/server/chunks/ssr/_93dae812._.js",
           "kind": "require-call",
-          "original": "/home/z/my-project/cinezee-check/.open-next/server-functions/default/.next/server/chunks/ssr/_63de82ef._.js"
+          "original": "/home/z/my-project/cinezee-check/.open-next/server-functions/default/.next/server/chunks/ssr/_93dae812._.js"
         },
         {
           "path": ".open-next/server-functions/default/.next/server/chunks/ssr/_next-internal_server_app_comic_read_[slug]_[chapter]_page_actions_8e81363b.js",
@@ -13917,9 +13917,9 @@
           "original": "/home/z/my-project/cinezee-check/.open-next/server-functions/default/.next/server/chunks/ssr/_437516bd._.js"
         },
         {
-          "path": ".open-next/server-functions/default/.next/server/chunks/ssr/_fe7f906f._.js",
+          "path": ".open-next/server-functions/default/.next/server/chunks/ssr/_8a053ec5._.js",
           "kind": "require-call",
-          "original": "/home/z/my-project/cinezee-check/.open-next/server-functions/default/.next/server/chunks/ssr/_fe7f906f._.js"
+          "original": "/home/z/my-project/cinezee-check/.open-next/server-functions/default/.next/server/chunks/ssr/_8a053ec5._.js"
         },
         {
           "path": ".open-next/server-functions/default/.next/server/chunks/ssr/_next-internal_server_app_donghua_s1_watch_[id]_[episode]_page_actions_23b487d7.js",
@@ -19369,10 +19369,10 @@
         ".open-next/server-functions/default/.next/server/app/api/notifications/route_client-reference-manifest.js": {
           "bytesInOutput": 477
         },
-        ".open-next/server-functions/default/.next/server/app/api/vps/[...path]/route_client-reference-manifest.js": {
+        ".open-next/server-functions/default/.next/server/app/api/user/language/route_client-reference-manifest.js": {
           "bytesInOutput": 477
         },
-        ".open-next/server-functions/default/.next/server/app/api/user/language/route_client-reference-manifest.js": {
+        ".open-next/server-functions/default/.next/server/app/api/vps/[...path]/route_client-reference-manifest.js": {
           "bytesInOutput": 477
         },
         ".open-next/server-functions/default/.next/server/app/api/messages/[id]/route_client-reference-manifest.js": {
@@ -19466,7 +19466,7 @@
           "bytesInOutput": 449
         },
         ".open-next/server-functions/default/node_modules/next/dist/server/load-manifest.external.js": {
-          "bytesInOutput": 480258
+          "bytesInOutput": 480279
         },
         ".open-next/cloudflare-templates/shims/throw.js": {
           "bytesInOutput": 215
@@ -19556,7 +19556,7 @@
           "bytesInOutput": 12624
         },
         ".open-next/server-functions/default/.next/server/chunks/ssr/_739f8e03._.js": {
-          "bytesInOutput": 68647
+          "bytesInOutput": 68859
         },
         ".open-next/server-functions/default/.next/server/chunks/ssr/_c48fc0e7._.js": {
           "bytesInOutput": 35319
@@ -20446,8 +20446,8 @@
         ".open-next/server-functions/default/.next/server/chunks/ssr/_604f8d03._.js": {
           "bytesInOutput": 17687
         },
-        ".open-next/server-functions/default/.next/server/chunks/ssr/_63de82ef._.js": {
-          "bytesInOutput": 8394
+        ".open-next/server-functions/default/.next/server/chunks/ssr/_93dae812._.js": {
+          "bytesInOutput": 8456
         },
         ".open-next/server-functions/default/.next/server/chunks/ssr/_next-internal_server_app_comic_read_[slug]_[chapter]_page_actions_8e81363b.js": {
           "bytesInOutput": 303
@@ -20480,7 +20480,7 @@
           "bytesInOutput": 1167
         },
         ".open-next/server-functions/default/.next/server/chunks/ssr/src_app_donghua_s1_content_tsx_4ed32b53._.js": {
-          "bytesInOutput": 13442
+          "bytesInOutput": 13886
         },
         ".open-next/server-functions/default/.next/server/chunks/ssr/[root-of-the-server]__f3964180._.js": {
           "bytesInOutput": 2183
@@ -20492,7 +20492,7 @@
           "bytesInOutput": 281
         },
         ".open-next/server-functions/default/.next/server/chunks/ssr/src_components_donghua_donghua-detail-content_tsx_efd93501._.js": {
-          "bytesInOutput": 12007
+          "bytesInOutput": 12528
         },
         ".open-next/server-functions/default/.next/server/chunks/ssr/[root-of-the-server]__0b8c0fe1._.js": {
           "bytesInOutput": 1668
@@ -20533,8 +20533,8 @@
         ".open-next/server-functions/default/.next/server/chunks/ssr/_437516bd._.js": {
           "bytesInOutput": 17792
         },
-        ".open-next/server-functions/default/.next/server/chunks/ssr/_fe7f906f._.js": {
-          "bytesInOutput": 12284
+        ".open-next/server-functions/default/.next/server/chunks/ssr/_8a053ec5._.js": {
+          "bytesInOutput": 14911
         },
         ".open-next/server-functions/default/.next/server/chunks/ssr/_next-internal_server_app_donghua_s1_watch_[id]_[episode]_page_actions_23b487d7.js": {
           "bytesInOutput": 310
@@ -20762,10 +20762,10 @@
           "bytesInOutput": 271
         },
         ".open-next/server-functions/default/.next/server/chunks/ssr/[turbopack]_runtime.js": {
-          "bytesInOutput": 63443
+          "bytesInOutput": 63442
         },
         ".open-next/server-functions/default/.next/server/chunks/[turbopack]_runtime.js": {
-          "bytesInOutput": 63430
+          "bytesInOutput": 63429
         },
         ".open-next/server-functions/default/.next/server/app/api/admin/cinemacity-cookies/[id]/route.js": {
           "bytesInOutput": 618
@@ -21299,7 +21299,7 @@
           "bytesInOutput": 77825
         }
       },
-      "bytes": 7751542
+      "bytes": 7755427
     }
   }
 }

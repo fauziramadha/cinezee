@@ -20,6 +20,22 @@ interface DonghuaDetailContentProps {
   source: "s1" | "s2";
 }
 
+function decodeHtmlEntities(text: string): string {
+  if (!text) return "";
+  const entities: Record<string, string> = {
+    "&#8217;": "'", "&#8216;": "'", "&#8220;": '"', "&#8221;": '"',
+    "&#8211;": "-", "&#8212;": "—", "&#8230;": "...", "&amp;": "&",
+    "&lt;": "<", "&gt;": ">", "&quot;": '"', "&#39;": "'", "&nbsp;": " ",
+  };
+  let decoded = text;
+  for (const [entity, char] of Object.entries(entities)) {
+    decoded = decoded.split(entity).join(char);
+  }
+  decoded = decoded.replace(/&#(\d+);/g, (_, num) => String.fromCharCode(parseInt(num, 10)));
+  decoded = decoded.replace(/&#x([0-9a-fA-F]+);/g, (_, hex) => String.fromCharCode(parseInt(hex, 16)));
+  return decoded;
+}
+
 export function DonghuaDetailContent({ slug, source }: DonghuaDetailContentProps) {
   const router = useRouter();
   const [detail, setDetail] = useState<any>(null);
@@ -45,12 +61,15 @@ export function DonghuaDetailContent({ slug, source }: DonghuaDetailContentProps
         // { title, slug, poster, synopsis, rating, genres: [{name,slug}], status, type, episodes: [], total_episodes }
         if (json) {
           const normalized = {
-            title: json.title || "Untitled",
+            title: decodeHtmlEntities(json.title || "Untitled"),
             poster: json.poster || json.thumbnail || null,
-            alter_title: json.alter_title || null,
+            alter_title: json.alter_title ? decodeHtmlEntities(json.alter_title) : null,
             rating: json.rating ? String(json.rating) : null,
-            synopsis: json.synopsis || "",
-            genres: Array.isArray(json.genres) ? json.genres : [],
+            synopsis: json.synopsis ? decodeHtmlEntities(json.synopsis) : "",
+            genres: Array.isArray(json.genres) ? json.genres.map((g: any) => ({
+              ...g,
+              name: g.name ? decodeHtmlEntities(g.name) : g.name,
+            })) : [],
             episodes_list: Array.isArray(json.episodes) ? json.episodes : [],
             studio: json.studio || null,
             network: json.network || null,

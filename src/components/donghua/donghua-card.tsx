@@ -19,9 +19,35 @@ interface DonghuaCardProps {
   };
 }
 
+function decodeHtmlEntities(text: string): string {
+  if (!text) return "";
+  const entities: Record<string, string> = {
+    "&#8217;": "'",
+    "&#8216;": "'",
+    "&#8220;": '"',
+    "&#8221;": '"',
+    "&#8211;": "-",
+    "&#8212;": "—",
+    "&#8230;": "...",
+    "&amp;": "&",
+    "&lt;": "<",
+    "&gt;": ">",
+    "&quot;": '"',
+    "&#39;": "'",
+    "&nbsp;": " ",
+  };
+  let decoded = text;
+  for (const [entity, char] of Object.entries(entities)) {
+    decoded = decoded.split(entity).join(char);
+  }
+  decoded = decoded.replace(/&#(\d+);/g, (_, num) => String.fromCharCode(parseInt(num, 10)));
+  decoded = decoded.replace(/&#x([0-9a-fA-F]+);/g, (_, hex) => String.fromCharCode(parseInt(hex, 16)));
+  return decoded;
+}
+
 export function DonghuaCard({ donghua }: DonghuaCardProps) {
   const rawTitle = donghua.title || "Untitled";
-  const title = rawTitle.includes("\t") ? rawTitle.split("\t")[0] : rawTitle;
+  const title = decodeHtmlEntities(rawTitle.includes("\t") ? rawTitle.split("\t")[0] : rawTitle);
   
   const poster = donghua.poster || null;
   const status = donghua.status || "Unknown";
@@ -68,9 +94,6 @@ export function DonghuaCard({ donghua }: DonghuaCardProps) {
         </div>
       </div>
       <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/95 via-black/70 to-transparent p-2.5 pt-8">
-        <span className={cn("mb-1 inline-block rounded px-1 py-0.5 text-[8px] font-bold uppercase tracking-wide text-white", source === "s2" ? "bg-purple-500/90" : "bg-blue-500/90")}>
-          {source === "s2" ? "Server 2" : "Server 1"}
-        </span>
         <h3 className="line-clamp-2 text-xs font-semibold text-white sm:text-sm">{title}</h3>
       </div>
     </Link>

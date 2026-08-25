@@ -30,9 +30,36 @@ const SLIDE_DURATION = 7000;
 // Normalize VPS FastAPI items → DonghuaItem
 // Format from API: { title, slug, url, poster, episode, status }
 // ============================================================
+function decodeHtmlEntities(text: string): string {
+  if (!text) return "";
+  const entities: Record<string, string> = {
+    "&#8217;": "'",
+    "&#8216;": "'",
+    "&#8220;": '"',
+    "&#8221;": '"',
+    "&#8211;": "-",
+    "&#8212;": "—",
+    "&#8230;": "...",
+    "&amp;": "&",
+    "&lt;": "<",
+    "&gt;": ">",
+    "&quot;": '"',
+    "&#39;": "'",
+    "&nbsp;": " ",
+  };
+  let decoded = text;
+  for (const [entity, char] of Object.entries(entities)) {
+    decoded = decoded.split(entity).join(char);
+  }
+  // Also decode any remaining numeric entities like &#NNNN;
+  decoded = decoded.replace(/&#(\d+);/g, (_, num) => String.fromCharCode(parseInt(num, 10)));
+  decoded = decoded.replace(/&#x([0-9a-fA-F]+);/g, (_, hex) => String.fromCharCode(parseInt(hex, 16)));
+  return decoded;
+}
+
 function normalizeItem(raw: any): DonghuaItem {
   const rawTitle = raw.title || raw.name || "Untitled";
-  const title = rawTitle.includes("\t") ? rawTitle.split("\t")[0] : rawTitle;
+  const title = decodeHtmlEntities(rawTitle.includes("\t") ? rawTitle.split("\t")[0] : rawTitle);
   const slug = (raw.slug || raw.id || "").toString().replace(/\/+$/, "").trim();
   const poster = raw.poster || raw.thumbnail || raw.image || raw.cover || "";
   return {
@@ -41,7 +68,7 @@ function normalizeItem(raw: any): DonghuaItem {
     title,
     poster,
     backdrop: poster, // donghua only has poster, use as backdrop too
-    overview: raw.synopsis || raw.overview || "",
+    overview: raw.synopsis ? decodeHtmlEntities(raw.synopsis) : "",
     status: raw.status || (raw.completed ? "Completed" : "Ongoing") || "Ongoing",
     episode: raw.episode || raw.current_episode || "",
     type: raw.type || "TV",
