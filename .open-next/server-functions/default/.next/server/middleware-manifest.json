@@ -18,11 +18,11 @@
       "wasm": [],
       "assets": [],
       "env": {
-        "__NEXT_BUILD_ID": "cinestream-v11-1787677110204",
-        "NEXT_SERVER_ACTIONS_ENCRYPTION_KEY": "5RkW7Jrhvciog2X/qv+DweuA3jb+uvRjaI24HEKpzrI=",
-        "__NEXT_PREVIEW_MODE_ID": "8d4147a78fb18a5b5d8628ee3cece3f0",
-        "__NEXT_PREVIEW_MODE_ENCRYPTION_KEY": "43cb28348ddcc65cad98518a5b1a79347d1e5cc78af5263a5fba0618a09f1c37",
-        "__NEXT_PREVIEW_MODE_SIGNING_KEY": "1be5ecc52628899b5d01aad30ee0d4705ee06e4f4403dbe2ade98a3409211d6d"
+        "__NEXT_BUILD_ID": "cinestream-v12-1787679671284",
+        "NEXT_SERVER_ACTIONS_ENCRYPTION_KEY": "6mfl5g1aZn0J5l067XhUkmQkAWVNk0fLfzpeTbQGMVg=",
+        "__NEXT_PREVIEW_MODE_ID": "b5cee9783cd0dcd3a8c1a426906c0e04",
+        "__NEXT_PREVIEW_MODE_ENCRYPTION_KEY": "2a69677b60bbd16bd0e4d646a48bc95ff7c50be04c8e13fc6bd11a11c1487d44",
+        "__NEXT_PREVIEW_MODE_SIGNING_KEY": "d938613e01225181175578877ca209a99dcedfb97e837f5f1132519642bafbd4"
       }
     }
   },

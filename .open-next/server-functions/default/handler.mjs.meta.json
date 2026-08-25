@@ -3704,6 +3704,11 @@
       "imports": [],
       "format": "cjs"
     },
+    ".open-next/server-functions/default/.next/server/app/api/drakor/terbaru/route_client-reference-manifest.js": {
+      "bytes": 321,
+      "imports": [],
+      "format": "cjs"
+    },
     ".open-next/server-functions/default/.next/server/app/api/drakor/ongoing/route_client-reference-manifest.js": {
       "bytes": 321,
       "imports": [],
@@ -3720,11 +3725,6 @@
       "format": "cjs"
     },
     ".open-next/server-functions/default/.next/server/app/api/admin/ads/[id]/route_client-reference-manifest.js": {
-      "bytes": 321,
-      "imports": [],
-      "format": "cjs"
-    },
-    ".open-next/server-functions/default/.next/server/app/api/drakor/terbaru/route_client-reference-manifest.js": {
       "bytes": 321,
       "imports": [],
       "format": "cjs"
@@ -3895,7 +3895,7 @@
       "format": "cjs"
     },
     ".open-next/server-functions/default/node_modules/next/dist/server/load-manifest.external.js": {
-      "bytes": 552125,
+      "bytes": 552120,
       "imports": [
         {
           "path": "path",
@@ -4098,6 +4098,11 @@
           "original": "/home/z/my-project/cinezee-check/.open-next/server-functions/default/.next/server/app/api/user/[id]/equip/route_client-reference-manifest.js"
         },
         {
+          "path": ".open-next/server-functions/default/.next/server/app/api/drakor/terbaru/route_client-reference-manifest.js",
+          "kind": "require-call",
+          "original": "/home/z/my-project/cinezee-check/.open-next/server-functions/default/.next/server/app/api/drakor/terbaru/route_client-reference-manifest.js"
+        },
+        {
           "path": ".open-next/server-functions/default/.next/server/app/api/drakor/ongoing/route_client-reference-manifest.js",
           "kind": "require-call",
           "original": "/home/z/my-project/cinezee-check/.open-next/server-functions/default/.next/server/app/api/drakor/ongoing/route_client-reference-manifest.js"
@@ -4116,11 +4121,6 @@
           "path": ".open-next/server-functions/default/.next/server/app/api/admin/ads/[id]/route_client-reference-manifest.js",
           "kind": "require-call",
           "original": "/home/z/my-project/cinezee-check/.open-next/server-functions/default/.next/server/app/api/admin/ads/[id]/route_client-reference-manifest.js"
-        },
-        {
-          "path": ".open-next/server-functions/default/.next/server/app/api/drakor/terbaru/route_client-reference-manifest.js",
-          "kind": "require-call",
-          "original": "/home/z/my-project/cinezee-check/.open-next/server-functions/default/.next/server/app/api/drakor/terbaru/route_client-reference-manifest.js"
         },
         {
           "path": ".open-next/server-functions/default/.next/server/app/api/notifications/route_client-reference-manifest.js",
@@ -9525,7 +9525,7 @@
       "format": "cjs"
     },
     ".open-next/server-functions/default/.next/server/chunks/ssr/src_components_donghua_donghua-player_tsx_9cc70ef5._.js": {
-      "bytes": 11758,
+      "bytes": 12065,
       "imports": [],
       "format": "cjs"
     },
@@ -19366,6 +19366,9 @@
         ".open-next/server-functions/default/.next/server/app/api/user/[id]/equip/route_client-reference-manifest.js": {
           "bytesInOutput": 481
         },
+        ".open-next/server-functions/default/.next/server/app/api/drakor/terbaru/route_client-reference-manifest.js": {
+          "bytesInOutput": 479
+        },
         ".open-next/server-functions/default/.next/server/app/api/drakor/ongoing/route_client-reference-manifest.js": {
           "bytesInOutput": 479
         },
@@ -19376,9 +19379,6 @@
           "bytesInOutput": 479
         },
         ".open-next/server-functions/default/.next/server/app/api/admin/ads/[id]/route_client-reference-manifest.js": {
-          "bytesInOutput": 479
-        },
-        ".open-next/server-functions/default/.next/server/app/api/drakor/terbaru/route_client-reference-manifest.js": {
           "bytesInOutput": 479
         },
         ".open-next/server-functions/default/.next/server/app/api/notifications/route_client-reference-manifest.js": {
@@ -19481,7 +19481,7 @@
           "bytesInOutput": 449
         },
         ".open-next/server-functions/default/node_modules/next/dist/server/load-manifest.external.js": {
-          "bytesInOutput": 480405
+          "bytesInOutput": 480400
         },
         ".open-next/cloudflare-templates/shims/throw.js": {
           "bytesInOutput": 215
@@ -20555,7 +20555,7 @@
           "bytesInOutput": 3628
         },
         ".open-next/server-functions/default/.next/server/chunks/ssr/src_components_donghua_donghua-player_tsx_9cc70ef5._.js": {
-          "bytesInOutput": 12020
+          "bytesInOutput": 12364
         },
         ".open-next/server-functions/default/.next/server/chunks/ssr/[root-of-the-server]__b0c73c73._.js": {
           "bytesInOutput": 1677
@@ -21317,7 +21317,7 @@
           "bytesInOutput": 77827
         }
       },
-      "bytes": 7757188
+      "bytes": 7757527
     }
   }
 }

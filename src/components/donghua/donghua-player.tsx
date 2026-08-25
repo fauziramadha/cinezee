@@ -38,17 +38,13 @@ function decodeHtmlEntities(text: string): string {
   return decoded;
 }
 
-// Transform anichin.moe stream URL to VPS proxy URL to bypass 403/CSP
-// Input:  https://anichin.moe/stream/TOKEN
-// Output: https://api.cinestream.biz.id/anichin-api-internal/stream-proxy/TOKEN
-function toProxyUrl(url: string): string {
+// Extract token from anichin.moe stream URL
+// Input: https://anichin.moe/stream/TOKEN
+// Output: TOKEN (or empty string if not an anichin stream URL)
+function extractToken(url: string): string {
   if (!url) return "";
   const match = url.match(/anichin\.moe\/stream\/(.+)/);
-  if (match) {
-    const token = match[1];
-    return `https://api.cinestream.biz.id/anichin-api-internal/stream-proxy/${token}`;
-  }
-  return url;
+  return match ? match[1] : "";
 }
 
 export function DonghuaPlayer({ animeId, episodeId, source }: DonghuaPlayerProps) {
@@ -60,6 +56,7 @@ export function DonghuaPlayer({ animeId, episodeId, source }: DonghuaPlayerProps
   const [streams, setStreams] = useState<any[]>([]);
   const [selectedStreamIdx, setSelectedStreamIdx] = useState(0);
   const [streamUrl, setStreamUrl] = useState("");
+  const [resolvingSource, setResolvingSource] = useState(false);
   const [iframeLoading, setIframeLoading] = useState(true);
   const [iframeError, setIframeError] = useState(false);
   const [showOpenInNewTab, setShowOpenInNewTab] = useState(false);
@@ -70,6 +67,31 @@ export function DonghuaPlayer({ animeId, episodeId, source }: DonghuaPlayerProps
   const playerRef = useRef<HTMLDivElement>(null);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const episodeListRef = useRef<HTMLDivElement>(null);
+  const directUrlCache = useRef<Map<string, string>>(new Map());
+
+  // Fetch direct video URL for a given source
+  const resolveDirectUrl = useCallback(async (sourceUrl: string): Promise<string> => {
+    // If not an anichin stream URL, return as-is
+    const token = extractToken(sourceUrl);
+    if (!token) return sourceUrl;
+
+    // Check cache first
+    const cached = directUrlCache.current.get(token);
+    if (cached) return cached;
+
+    // Fetch from VPS FastAPI /source/{token}
+    try {
+      const res = await fetch(`/api/donghua/source/${token}`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      const directUrl = data.url || sourceUrl;
+      directUrlCache.current.set(token, directUrl);
+      return directUrl;
+    } catch {
+      // Fallback to original URL if resolution fails
+      return sourceUrl;
+    }
+  }, []);
 
   useEffect(() => {
     setLoading(true);
@@ -82,26 +104,32 @@ export function DonghuaPlayer({ animeId, episodeId, source }: DonghuaPlayerProps
     const endpoint = `/api/donghua/episode/${episodeId}`;
     fetch(endpoint)
       .then((res) => { if (!res.ok) throw new Error(`HTTP ${res.status}`); return res.json(); })
-      .then((json) => {
+      .then(async (json) => {
         if (!json) throw new Error("Invalid response");
         setEpisode(json);
         const rawStreams = Array.isArray(json.sources) ? json.sources : [];
         const normalizedStreams = rawStreams.map((s: any) => ({
           name: s.name || s.server || "Unknown",
-          url: toProxyUrl(s.url),
+          url: s.url, // Keep raw URL, resolve to direct URL on selection
         }));
         setStreams(normalizedStreams);
-        if (normalizedStreams.length > 0) {
-          setSelectedStreamIdx(0);
-          setStreamUrl(normalizedStreams[0].url);
-          setIframeLoading(false);
-        }
         setPrevEpSlug(json.prev_episode || null);
         setNextEpSlug(json.next_episode || null);
+
+        // Resolve direct URL for first source
+        if (normalizedStreams.length > 0) {
+          setSelectedStreamIdx(0);
+          setResolvingSource(true);
+          setIframeLoading(true);
+          const directUrl = await resolveDirectUrl(normalizedStreams[0].url);
+          setStreamUrl(directUrl);
+          setIframeLoading(false);
+          setResolvingSource(false);
+        }
       })
       .catch((err) => setError(err instanceof Error ? err.message : "Failed to load"))
       .finally(() => setLoading(false));
-  }, [episodeId, source]);
+  }, [episodeId, source, resolveDirectUrl]);
 
   useEffect(() => {
     if (!animeId) return;
@@ -136,17 +164,21 @@ export function DonghuaPlayer({ animeId, episodeId, source }: DonghuaPlayerProps
     return () => { if (timeoutRef.current) clearTimeout(timeoutRef.current); };
   }, [streamUrl, iframeLoading, iframeError]);
 
-  const handleStreamChange = (idx: number) => {
+  const handleStreamChange = async (idx: number) => {
     setSelectedStreamIdx(idx);
-    setStreamUrl(streams[idx].url);
+    setStreamUrl("");
     setIframeLoading(true);
     setIframeError(false);
     setShowOpenInNewTab(false);
+    setResolvingSource(true);
+    const directUrl = await resolveDirectUrl(streams[idx].url);
+    setStreamUrl(directUrl);
+    setResolvingSource(false);
   };
 
   const switchServer = useCallback(() => {
     if (streams.length > 0) handleStreamChange((selectedStreamIdx + 1) % streams.length);
-  }, [streams, selectedStreamIdx]);
+  }, [streams, selectedStreamIdx, handleStreamChange]);
 
   const toggleFullscreen = () => {
     if (!document.fullscreenElement) { playerRef.current?.requestFullscreen?.(); }
