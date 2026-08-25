@@ -3,33 +3,34 @@
 import { useEffect, useState } from "react";
 import { X, Heart } from "lucide-react";
 
-const DISMISS_KEY = "cinestream_donation_dismissed";
-const DISMISS_DURATION = 7 * 24 * 60 * 60 * 1000; // 7 days
+// Use sessionStorage so the bar shows once per browser session
+// (every time the user opens the website fresh, it shows again)
+const SESSION_KEY = "cinestream_donation_shown";
 const SHOW_DELAY = 3000; // Show after 3 seconds
 
 export function DonationBar() {
   const [visible, setVisible] = useState(false);
   const [dismissed, setDismissed] = useState(false);
 
-  // Check if user dismissed recently
+  // Check if already shown in this browser session
   useEffect(() => {
     try {
-      const dismissedAt = localStorage.getItem(DISMISS_KEY);
-      if (dismissedAt) {
-        const elapsed = Date.now() - parseInt(dismissedAt, 10);
-        if (elapsed < DISMISS_DURATION) {
-          setDismissed(true);
-        } else {
-          localStorage.removeItem(DISMISS_KEY);
-        }
+      const shown = sessionStorage.getItem(SESSION_KEY);
+      if (shown) {
+        setDismissed(true);
       }
     } catch {}
   }, []);
 
-  // Show after delay
+  // Show after delay (only if not already shown this session)
   useEffect(() => {
     if (dismissed) return;
-    const timer = setTimeout(() => setVisible(true), SHOW_DELAY);
+    const timer = setTimeout(() => {
+      setVisible(true);
+      try {
+        sessionStorage.setItem(SESSION_KEY, "1");
+      } catch {}
+    }, SHOW_DELAY);
     return () => clearTimeout(timer);
   }, [dismissed]);
 
@@ -49,7 +50,7 @@ export function DonationBar() {
     setVisible(false);
     setDismissed(true);
     try {
-      localStorage.setItem(DISMISS_KEY, Date.now().toString());
+      sessionStorage.setItem(SESSION_KEY, "1");
     } catch {}
   };
 

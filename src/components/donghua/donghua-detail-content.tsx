@@ -10,7 +10,7 @@ import { SearchModal } from "@/components/cinepro/search-modal";
 import { DetailModal } from "@/components/cinepro/detail-modal";
 import { PlayerModal } from "@/components/cinepro/player-modal";
 import { AuthModal } from "@/components/cinepro/auth-modal";
-import { Loader2, AlertCircle, ArrowLeft, Play, Calendar, Tv, Star, Download, ChevronRight } from "lucide-react";
+import { Loader2, AlertCircle, ArrowLeft, Play, Calendar, Tv, Star, Download, ChevronRight, ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
@@ -25,6 +25,7 @@ export function DonghuaDetailContent({ slug, source }: DonghuaDetailContentProps
   const [detail, setDetail] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [showAllGenres, setShowAllGenres] = useState(false);
 
   useEffect(() => {
     setLoading(true);
@@ -178,8 +179,21 @@ export function DonghuaDetailContent({ slug, source }: DonghuaDetailContentProps
               <div className="mb-4">
                 <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Genre</h3>
                 <div className="flex flex-wrap gap-1.5">
-                  {genres.map((g: any, idx: number) => <Link key={g.slug || idx} href={`${genreBase}/${g.slug || g.name?.toLowerCase()}`}><Badge variant="outline" className="cursor-pointer hover:border-primary hover:text-primary">{g.name || g.title}</Badge></Link>)}
+                  {(showAllGenres ? genres : genres.slice(0, 5)).map((g: any, idx: number) => (
+                    <Link key={g.slug || idx} href={`${genreBase}/${g.slug || g.name?.toLowerCase()}`}>
+                      <Badge variant="outline" className="cursor-pointer hover:border-primary hover:text-primary">{g.name || g.title}</Badge>
+                    </Link>
+                  ))}
                 </div>
+                {genres.length > 5 && (
+                  <button
+                    onClick={() => setShowAllGenres(!showAllGenres)}
+                    className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-primary transition hover:text-primary/80"
+                  >
+                    {showAllGenres ? "Tampilkan lebih sedikit" : `Selengkapnya (+${genres.length - 5})`}
+                    <ChevronDown className={`h-3 w-3 transition-transform ${showAllGenres ? "rotate-180" : ""}`} />
+                  </button>
+                )}
               </div>
             )}
             {synopsisText && (

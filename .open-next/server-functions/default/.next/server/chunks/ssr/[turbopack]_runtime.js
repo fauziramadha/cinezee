@@ -1122,8 +1122,8 @@ module.exports = (sourcePath)=>({
       case "server/chunks/ssr/src_app_donghua_s1_content_tsx_4ed32b53._.js": return require("/home/z/my-project/cinezee-check/.open-next/server-functions/default/.next/server/chunks/ssr/src_app_donghua_s1_content_tsx_4ed32b53._.js");
       case "server/chunks/ssr/[root-of-the-server]__f3964180._.js": return require("/home/z/my-project/cinezee-check/.open-next/server-functions/default/.next/server/chunks/ssr/[root-of-the-server]__f3964180._.js");
       case "server/chunks/ssr/_1bae7f88._.js": return require("/home/z/my-project/cinezee-check/.open-next/server-functions/default/.next/server/chunks/ssr/_1bae7f88._.js");
-      case "server/chunks/ssr/_8b51ac15._.js": return require("/home/z/my-project/cinezee-check/.open-next/server-functions/default/.next/server/chunks/ssr/_8b51ac15._.js");
       case "server/chunks/ssr/_next-internal_server_app_donghua_s1_[id]_page_actions_ad53139e.js": return require("/home/z/my-project/cinezee-check/.open-next/server-functions/default/.next/server/chunks/ssr/_next-internal_server_app_donghua_s1_[id]_page_actions_ad53139e.js");
+      case "server/chunks/ssr/src_components_donghua_donghua-detail-content_tsx_efd93501._.js": return require("/home/z/my-project/cinezee-check/.open-next/server-functions/default/.next/server/chunks/ssr/src_components_donghua_donghua-detail-content_tsx_efd93501._.js");
       case "server/chunks/ssr/[root-of-the-server]__0b8c0fe1._.js": return require("/home/z/my-project/cinezee-check/.open-next/server-functions/default/.next/server/chunks/ssr/[root-of-the-server]__0b8c0fe1._.js");
       case "server/chunks/ssr/_c20f8812._.js": return require("/home/z/my-project/cinezee-check/.open-next/server-functions/default/.next/server/chunks/ssr/_c20f8812._.js");
       case "server/chunks/ssr/_f8a0f406._.js": return require("/home/z/my-project/cinezee-check/.open-next/server-functions/default/.next/server/chunks/ssr/_f8a0f406._.js");
