@@ -29,42 +29,44 @@ export function DonghuaDetailContent({ slug, source }: DonghuaDetailContentProps
   useEffect(() => {
     setLoading(true);
     setError(null);
-    const endpoint = source === "s2"
-      ? `/api/donghua/donghub/detail/${slug}`
-      : `/api/anime/donghua/detail/${slug}`;
+    // Both s1 and s2 use the same VPS FastAPI endpoint now
+    const endpoint = `/api/donghua/detail/${slug}`;
     fetch(endpoint)
-      .then((res) => { 
-        if (!res.ok) throw new Error(`HTTP ${res.status}`); 
-        return res.json(); 
+      .then((res) => {
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return res.json();
       })
       .then((json) => {
         if (json?.status === "error" || json?.message?.includes("Error")) {
           throw new Error(json?.message || "Donghua tidak ditemukan");
         }
-        const raw = source === "s2" ? json?.data : json;
-        if (raw) {
+        // VPS FastAPI detail format:
+        // { title, slug, poster, synopsis, rating, genres: [{name,slug}], status, type, episodes: [], total_episodes }
+        if (json) {
           const normalized = {
-            title: raw.title || "Untitled",
-            poster: raw.poster || raw.thumbnail || null,
-            alter_title: raw.alter_title || null,
-            rating: raw.rating || null,
-            synopsis: raw.synopsis || "",
-            genres: raw.genres || [],
-            episodes_list: raw.episodes_list || raw.episodes || [],
-            studio: raw.studio || raw.info?.studio || null,
-            network: raw.network || raw.info?.network || null,
-            released: raw.released || raw.info?.released || raw.released_on || raw.info?.released_on || null,
-            type: raw.type || raw.info?.type || null,
-            status: raw.status || raw.info?.status || "Unknown",
-            duration: raw.duration || null,
-            episodes_count: raw.episodes_count || raw.info?.episodes || null,
-            season: raw.season || null,
-            country: raw.country || raw.info?.country || null,
-            updated_on: raw.updated_on || raw.info?.updated_on || null,
-            batch_link: raw.batch_link || raw.batch || null,
+            title: json.title || "Untitled",
+            poster: json.poster || json.thumbnail || null,
+            alter_title: json.alter_title || null,
+            rating: json.rating ? String(json.rating) : null,
+            synopsis: json.synopsis || "",
+            genres: Array.isArray(json.genres) ? json.genres : [],
+            episodes_list: Array.isArray(json.episodes) ? json.episodes : [],
+            studio: json.studio || null,
+            network: json.network || null,
+            released: json.released || null,
+            type: json.type || null,
+            status: json.status || "Unknown",
+            duration: json.duration || null,
+            episodes_count: json.total_episodes || json.episodes_count || null,
+            season: json.season || null,
+            country: json.country || null,
+            updated_on: json.updated_on || null,
+            batch_link: json.batch_link || null,
           };
           setDetail(normalized);
-        } else { throw new Error("Invalid response"); }
+        } else {
+          throw new Error("Invalid response");
+        }
       })
       .catch((err) => setError(err instanceof Error ? err.message : "Failed to load"))
       .finally(() => setLoading(false));

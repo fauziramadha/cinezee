@@ -87,25 +87,26 @@ async function fetchJSON(url: string): Promise<any> {
   return res.json();
 }
 
+// VPS FastAPI endpoints — response format: { items: [...], pagination: {current_page, max_page, has_next} }
 const TYPE_CONFIG: Record<
   string,
-  { title: string; endpoint: (page: number) => string; keys: string[] }
+  { title: string; endpoint: (page: number) => string }
 > = {
   latest: {
     title: "Episode Terbaru",
-    endpoint: (page) => "/api/anime/donghua/latest/" + page,
-    // FIX: endpoint /latest/N returns { latest_donghua: [...] } (not latest_release)
-    keys: ["latest_donghua", "latest_release", "latest", "new_release"],
+    endpoint: (page) => `/api/donghua/latest?page=${page}`,
   },
   ongoing: {
     title: "Sedang Berjalan",
-    endpoint: (page) => "/api/anime/donghua/ongoing/" + page,
-    keys: ["ongoing_donghua", "ongoing", "on_going"],
+    endpoint: (page) => `/api/donghua/ongoing?page=${page}`,
   },
   completed: {
     title: "Tamat",
-    endpoint: (page) => "/api/anime/donghua/completed/" + page,
-    keys: ["completed_donghua", "completed", "complete"],
+    endpoint: (page) => `/api/donghua/completed?page=${page}`,
+  },
+  popular: {
+    title: "Terpopuler",
+    endpoint: (page) => `/api/donghua/popular?page=${page}`,
   },
 };
 
@@ -132,8 +133,8 @@ export function DonghuaS1ListContent({ type, page }: DonghuaS1ListContentProps) 
     setError(null);
     fetchJSON(config.endpoint(page))
       .then((res) => {
-        const inner = unwrap(res);
-        const list = pickArray(inner, config.keys);
+        // VPS FastAPI format: { items: [...], pagination: {...} }
+        const list = Array.isArray(res.items) ? res.items : (Array.isArray(res) ? res : []);
         let normalized = normalizeS1List(list);
         // For latest, extract series slug so click goes to detail page
         if (type === "latest") {

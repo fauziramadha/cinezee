@@ -41,39 +41,28 @@ export function DonghuaPlayer({ animeId, episodeId, source }: DonghuaPlayerProps
 
   useEffect(() => {
     setLoading(true); setError(null); setStreamUrl(""); setIframeLoading(true); setIframeError(false); setShowOpenInNewTab(false);
-    const endpoint = source === "s2" ? `/api/donghua/donghub/episode/${episodeId}` : `/api/anime/donghua/episode/${episodeId}`;
+    // Both s1 and s2 use the same VPS FastAPI endpoint now
+    const endpoint = `/api/donghua/episode/${episodeId}`;
     fetch(endpoint)
       .then((res) => { if (!res.ok) throw new Error(`HTTP ${res.status}`); return res.json(); })
       .then((json) => {
-        const raw = source === "s2" ? json?.data : json;
-        if (!raw) throw new Error("Invalid response");
-        setEpisode(raw);
-        // Normalize streams: S1: streaming.servers[{name,url}], S2: data.streams[{server,url}]
-        const rawStreams = source === "s2" ? (raw.streams || []) : ((raw.streaming?.servers || []).concat(raw.streaming?.main_url ? [raw.streaming.main_url] : []));
+        if (!json) throw new Error("Invalid response");
+        setEpisode(json);
+        // VPS FastAPI episode format:
+        // { title, sources: [{name, url}], default_source, prev_episode, next_episode }
+        const rawStreams = Array.isArray(json.sources) ? json.sources : [];
         const normalizedStreams = rawStreams.map((s: any) => ({ name: s.name || s.server || "Unknown", url: s.url }));
         setStreams(normalizedStreams);
-        if (normalizedStreams.length > 0) { setSelectedStreamIdx(0); setStreamUrl(normalizedStreams[0].url); setIframeLoading(false); }
-        // Normalize downloads
-        if (source === "s2") { setDownloads(raw.downloads || []); }
-        else {
-          const dlUrl = raw.download_url || {};
-          const dlList = Object.entries(dlUrl).map(([quality, links]: [string, any]) => ({ title: quality, urls: Object.entries(links).map(([host, url]: [string, any]) => ({ title: host, url })) }));
-          setDownloads(dlList);
+        if (normalizedStreams.length > 0) {
+          setSelectedStreamIdx(0);
+          setStreamUrl(normalizedStreams[0].url);
+          setIframeLoading(false);
         }
-        // Normalize navigation: S1: navigation.previous_episode.slug / next_episode.slug, S2: data.navigation.prev_slug / next_slug
-        if (source === "s2") {
-          setPrevEpSlug(raw.navigation?.prev_slug || null);
-          setNextEpSlug(raw.navigation?.next_slug || null);
-          // Extract series slug for back-to-detail link
-          if (raw.navigation?.all_slug) setSeriesSlug(raw.navigation.all_slug);
-          else if (raw.anime_info?.slug) setSeriesSlug(raw.anime_info.slug);
-        } else {
-          setPrevEpSlug(raw.navigation?.previous_episode?.slug || null);
-          setNextEpSlug(raw.navigation?.next_episode?.slug || null);
-          // Extract series slug for back-to-detail link
-          if (raw.navigation?.all_episodes?.slug) setSeriesSlug(raw.navigation.all_episodes.slug);
-          else if (raw.donghua_details?.slug) setSeriesSlug(raw.donghua_details.slug.replace(/\/$/, ""));
-        }
+        // No downloads from VPS FastAPI currently
+        setDownloads([]);
+        // Navigation
+        setPrevEpSlug(json.prev_episode || null);
+        setNextEpSlug(json.next_episode || null);
       })
       .catch((err) => setError(err instanceof Error ? err.message : "Failed to load"))
       .finally(() => setLoading(false));
@@ -90,7 +79,7 @@ export function DonghuaPlayer({ animeId, episodeId, source }: DonghuaPlayerProps
   const toggleFullscreen = () => { if (!document.fullscreenElement) { playerRef.current?.requestFullscreen?.(); } else { document.exitFullscreen?.(); } };
   const watchBase = source === "s2" ? `/donghua/s2/watch/${seriesSlug}` : `/donghua/s1/watch/${seriesSlug}`;
   const detailHref = source === "s2" ? `/donghua/s2/${seriesSlug}` : `/donghua/s1/${seriesSlug}`;
-  const title = source === "s2" ? episode?.title : episode?.episode;
+  const title = episode?.title || "Episode";
 
   if (loading) return (<main className="min-h-screen bg-background"><Header /><div className="flex h-[60vh] items-center justify-center pt-20"><Loader2 className="h-10 w-10 animate-spin text-primary" /></div><Footer /><SearchModal /><DetailModal /><PlayerModal /><AuthModal /></main>);
   if (error || !episode) return (<main className="min-h-screen bg-background"><Header /><div className="flex h-[60vh] flex-col items-center justify-center gap-3 pt-20 text-center"><AlertCircle className="h-10 w-10 text-destructive" /><p className="text-sm text-destructive">{error || "Tidak ditemukan"}</p><Button variant="secondary" size="sm" onClick={() => router.push(detailHref)} className="gap-1.5"><ArrowLeft className="h-3.5 w-3.5" />Kembali</Button></div><Footer /><SearchModal /><DetailModal /><PlayerModal /><AuthModal /></main>);

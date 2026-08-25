@@ -13,41 +13,19 @@ import { DonghuaCard } from "@/components/donghua/donghua-card";
 import { Loader2, Search, ArrowLeft } from "lucide-react";
 import { Input } from "@/components/ui/input";
 
-function normalizeS1List(list: any[]): any[] {
+// ============================================================
+// Normalize list items from VPS FastAPI
+// Format: { title, slug, url, poster, episode, status }
+// ============================================================
+function normalizeList(list: any[]): any[] {
   if (!Array.isArray(list)) return [];
   return list.map((item: any) => {
     const rawTitle = item.title || item.name || "Untitled";
     const title = rawTitle.includes("\t") ? rawTitle.split("\t")[0] : rawTitle;
-    let slug =
-      item.slug ||
-      (item.id || "").toString() ||
-      (item.link || item.url || item.href || "")
-        .replace(/^https?:\/\/[^/]+/, "")
-        .replace(/^\/(anime|donghua|detail|episode)\//, "")
-        .replace(/\/$/, "")
-        .split("/")[0] ||
-      "";
-    // CRITICAL: strip trailing slash from slug (API returns "xxx/")
-    slug = slug.toString().replace(/\/+$/, "").trim();
-    const poster =
-      item.poster ||
-      item.thumbnail ||
-      item.image ||
-      item.cover ||
-      item.img ||
-      null;
-    const status =
-      item.status ||
-      item.type ||
-      item.state ||
-      (item.completed ? "Completed" : "Ongoing");
-    const current_episode =
-      item.current_episode ||
-      item.episode ||
-      item.latest_episode ||
-      item.uploaded_episode ||
-      item.total_episode ||
-      "";
+    const slug = (item.slug || item.id || "").toString().replace(/\/+$/, "").trim();
+    const poster = item.poster || item.thumbnail || item.image || item.cover || item.img || null;
+    const status = item.status || item.type || (item.completed ? "Completed" : "Ongoing") || "Ongoing";
+    const current_episode = item.episode || item.current_episode || item.latest_episode || "";
     return {
       title,
       slug,
@@ -68,21 +46,6 @@ function extractSeriesSlug(episodeSlug: string): string {
   return episodeSlug;
 }
 
-function pickArray(obj: any, keys: string[]): any[] {
-  if (!obj) return [];
-  for (const k of keys) {
-    if (Array.isArray(obj[k])) return obj[k];
-  }
-  return [];
-}
-
-function unwrap(res: any): any {
-  if (!res) return null;
-  if (res.status === "error" || res.statusCode) return res;
-  if (res.data !== undefined) return res.data;
-  return res;
-}
-
 async function fetchJSON(url: string): Promise<any> {
   const res = await fetch(url, { cache: "no-store" });
   if (!res.ok) throw new Error("HTTP " + res.status);
@@ -91,9 +54,9 @@ async function fetchJSON(url: string): Promise<any> {
 
 export function DonghuaS1Content() {
   const [hero, setHero] = useState<any[]>([]);
+  const [popular, setPopular] = useState<any[]>([]);
   const [latest, setLatest] = useState<any[]>([]);
   const [ongoing, setOngoing] = useState<any[]>([]);
-  const [completed, setCompleted] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<any[]>([]);
@@ -103,53 +66,52 @@ export function DonghuaS1Content() {
     const fetchAll = async () => {
       setLoading(true);
       try {
+        // Fetch home (popular + latest + ongoing) and separate ongoing page
         const [homeRes, ongoingRes] = await Promise.all([
-          fetchJSON("/api/anime/donghua/home").catch((e) => {
-            console.error("[Donghua s1] home error:", e);
+          fetchJSON("/api/donghua/").catch((e) => {
+            console.error("[Donghua] home error:", e);
             return null;
           }),
-          fetchJSON("/api/anime/donghua/ongoing/1").catch((e) => {
-            console.error("[Donghua s1] ongoing error:", e);
+          fetchJSON("/api/donghua/ongoing?page=1").catch((e) => {
+            console.error("[Donghua] ongoing error:", e);
             return null;
           }),
         ]);
 
         if (homeRes) {
-          const homeInner = unwrap(homeRes);
-          const latestList = pickArray(homeInner, [
-            "latest_release",
-            "latest",
-            "new_release",
-          ]);
-          // Extract series slug from episode slug, so clicking goes to detail page
-          const latestNormalized = normalizeS1List(latestList).map((item) => ({
+          // Home format: { popular: [5], latest: [20], ongoing: [12] }
+          const popularList = Array.isArray(homeRes.popular) ? homeRes.popular : [];
+          const latestList = Array.isArray(homeRes.latest) ? homeRes.latest : [];
+          const homeOngoing = Array.isArray(homeRes.ongoing) ? homeRes.ongoing : [];
+
+          const popularNorm = normalizeList(popularList);
+          const latestNorm = normalizeList(latestList).map((item) => ({
             ...item,
+            // Extract series slug from episode slug so clicking goes to detail
             slug: extractSeriesSlug(item.slug),
           }));
-          if (latestNormalized.length > 0) setLatest(latestNormalized);
-          if (latestNormalized.length > 0) setHero(latestNormalized.slice(0, 5));
 
-          const completedList = pickArray(homeInner, [
-            "completed_donghua",
-            "completed",
-            "complete",
-          ]);
-          const completedNormalized = normalizeS1List(completedList);
-          if (completedNormalized.length > 0) setCompleted(completedNormalized);
+          if (popularNorm.length > 0) {
+            setPopular(popularNorm);
+            setHero(popularNorm.slice(0, 5));
+          } else if (latestNorm.length > 0) {
+            // Fallback: use latest as hero if no popular
+            setHero(latestNorm.slice(0, 5));
+          }
+          if (latestNorm.length > 0) setLatest(latestNorm);
+          if (homeOngoing.length > 0 && !ongoingRes) {
+            setOngoing(normalizeList(homeOngoing));
+          }
         }
 
+        // Ongoing page format: { items: [30], pagination: {...} }
         if (ongoingRes) {
-          const ongoingInner = unwrap(ongoingRes);
-          const ongoingList = pickArray(ongoingInner, [
-            "ongoing_donghua",
-            "ongoing",
-            "on_going",
-          ]);
-          const ongoingNormalized = normalizeS1List(ongoingList);
-          if (ongoingNormalized.length > 0) setOngoing(ongoingNormalized);
+          const ongoingList = Array.isArray(ongoingRes.items) ? ongoingRes.items : [];
+          const ongoingNorm = normalizeList(ongoingList);
+          if (ongoingNorm.length > 0) setOngoing(ongoingNorm);
         }
       } catch (err) {
-        console.error("Failed to load donghua s1 home:", err);
+        console.error("Failed to load donghua home:", err);
       } finally {
         setLoading(false);
       }
@@ -166,22 +128,11 @@ export function DonghuaS1Content() {
     const timer = setTimeout(async () => {
       try {
         const keyword = encodeURIComponent(searchQuery.trim());
-        const res = await fetchJSON(
-          "/api/anime/donghua/search/" + keyword
-        ).catch(() => null);
+        const res = await fetchJSON(`/api/donghua/search?q=${keyword}&page=1`).catch(() => null);
         if (res) {
-          const inner = unwrap(res);
-          const list = Array.isArray(inner)
-            ? inner
-            : pickArray(inner, [
-                "data",
-                "items",
-                "results",
-                "list",
-                "search",
-                "cards",
-              ]);
-          setSearchResults(normalizeS1List(list));
+          // Search format: { items: [...], pagination: {...}, query: "..." }
+          const list = Array.isArray(res.items) ? res.items : (Array.isArray(res) ? res : []);
+          setSearchResults(normalizeList(list));
         } else {
           setSearchResults([]);
         }
@@ -231,9 +182,17 @@ export function DonghuaS1Content() {
               </a>
             </div>
 
+            {popular.length > 0 && (
+              <DonghuaRow
+                title="🔥 Terpopuler Hari Ini"
+                donghuas={popular}
+                href="/donghua/s1/list/popular"
+                source="s1"
+              />
+            )}
             {latest.length > 0 && (
               <DonghuaRow
-                title="🔥 Episode Terbaru"
+                title="📺 Episode Terbaru"
                 donghuas={latest}
                 href="/donghua/s1/list/latest"
                 source="s1"
@@ -244,14 +203,6 @@ export function DonghuaS1Content() {
                 title="▶️ Sedang Berjalan"
                 donghuas={ongoing}
                 href="/donghua/s1/list/ongoing"
-                source="s1"
-              />
-            )}
-            {completed.length > 0 && (
-              <DonghuaRow
-                title="✅ Tamat"
-                donghuas={completed}
-                href="/donghua/s1/list/completed"
                 source="s1"
               />
             )}

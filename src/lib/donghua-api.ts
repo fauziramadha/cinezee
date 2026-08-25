@@ -1,7 +1,10 @@
 import { getCloudflareContext } from "@opennextjs/cloudflare";
 
+// ============================================================
+// VPS FastAPI (Anichin scraper) — WARP-protected, hides VPS IP
+// ============================================================
 const API_BASE =
-  process.env.ANIME_API_BASE || "https://www.sankavollerei.web.id";
+  process.env.DONGHUA_API_BASE || "http://45.32.100.252:5001";
 
 const CACHE_TTL = {
   home: 30 * 60,
@@ -9,7 +12,6 @@ const CACHE_TTL = {
   completed: 30 * 60,
   latest: 30 * 60,
   popular: 60 * 60,
-  movie: 60 * 60,
   detail: 6 * 60 * 60,
   episode: 60 * 60,
   search: 5 * 60,
@@ -52,24 +54,23 @@ async function setCached(key: string, endpoint: string, data: any, ttl: number):
 }
 
 function getCacheTtl(endpoint: string): number {
-  if (endpoint.includes("/home")) return CACHE_TTL.home;
+  if (endpoint === "/" || endpoint === "") return CACHE_TTL.home;
   if (endpoint.includes("/ongoing")) return CACHE_TTL.ongoing;
   if (endpoint.includes("/completed")) return CACHE_TTL.completed;
   if (endpoint.includes("/latest")) return CACHE_TTL.latest;
   if (endpoint.includes("/popular")) return CACHE_TTL.popular;
-  if (endpoint.includes("/movie")) return CACHE_TTL.movie;
   if (endpoint.includes("/detail/")) return CACHE_TTL.detail;
   if (endpoint.includes("/episode/")) return CACHE_TTL.episode;
   if (endpoint.includes("/search")) return CACHE_TTL.search;
-  if (endpoint.includes("/genres") && !endpoint.includes("/genres/")) return CACHE_TTL.genres;
-  if (endpoint.includes("/genres/") || endpoint.includes("/genre/")) return CACHE_TTL.genreBrowse;
+  if (endpoint.includes("/genres") && !endpoint.includes("/genre/")) return CACHE_TTL.genres;
+  if (endpoint.includes("/genre/")) return CACHE_TTL.genreBrowse;
   if (endpoint.includes("/schedule")) return CACHE_TTL.schedule;
   return 5 * 60;
 }
 
 function buildCacheKey(endpoint: string): string {
   const normalized = endpoint.replace(/^\//, "").replace(/\?/g, "_").replace(/&/g, "_").replace(/=/g, "_").replace(/\//g, "_");
-  return `donghua_${normalized}`;
+  return `donghua_v2_${normalized}`;
 }
 
 export async function fetchDonghuaAPI(endpoint: string, options: { forceRefresh?: boolean } = {}): Promise<any> {
@@ -82,7 +83,10 @@ export async function fetchDonghuaAPI(endpoint: string, options: { forceRefresh?
   console.log(`[Donghua API] Cache MISS, fetching: ${endpoint}`);
   const url = `${API_BASE}${endpoint.startsWith("/") ? "" : "/"}${endpoint}`;
   try {
-    const response = await fetch(url, { headers: { Accept: "application/json", "User-Agent": "CineStream/1.0" } });
+    const response = await fetch(url, {
+      headers: { Accept: "application/json", "User-Agent": "CineStream/1.0" },
+      cf: { cacheTtl: 60, cacheEverything: true },
+    });
     if (!response.ok) throw new Error(`API responded with status ${response.status}`);
     const data = await response.json();
     if (ttl > 0) await setCached(cacheKey, endpoint, data, ttl);
@@ -99,33 +103,33 @@ export async function fetchDonghuaAPI(endpoint: string, options: { forceRefresh?
 }
 
 // ============================================================
-// SERVER 1 (🐉 Anichin) — /anime/donghua/...
+// SERVER 1 (🐉 Anichin via VPS FastAPI) — query-param pagination
 // ============================================================
 export const s1 = {
-  getHome: (page = 1) => fetchDonghuaAPI(`/anime/donghua/home/${page}`),
-  getOngoing: (page = 1) => fetchDonghuaAPI(`/anime/donghua/ongoing/${page}`),
-  getCompleted: (page = 1) => fetchDonghuaAPI(`/anime/donghua/completed/${page}`),
-  getLatest: (page = 1) => fetchDonghuaAPI(`/anime/donghua/latest/${page}`),
-  getDetail: (slug: string) => fetchDonghuaAPI(`/anime/donghua/detail/${slug}`),
-  getEpisode: (slug: string) => fetchDonghuaAPI(`/anime/donghua/episode/${slug}`),
-  search: (keyword: string, page = 1) => fetchDonghuaAPI(`/anime/donghua/search/${encodeURIComponent(keyword)}/${page}`),
-  getGenres: () => fetchDonghuaAPI(`/anime/donghua/genres`),
-  getByGenre: (slug: string, page = 1) => fetchDonghuaAPI(`/anime/donghua/genres/${slug}/${page}`),
-  getSchedule: () => fetchDonghuaAPI(`/anime/donghua/schedule`),
+  getHome: () => fetchDonghuaAPI(`/`),
+  getOngoing: (page = 1) => fetchDonghuaAPI(`/ongoing?page=${page}`),
+  getCompleted: (page = 1) => fetchDonghuaAPI(`/completed?page=${page}`),
+  getLatest: (page = 1) => fetchDonghuaAPI(`/latest?page=${page}`),
+  getPopular: (page = 1) => fetchDonghuaAPI(`/popular?page=${page}`),
+  getDetail: (slug: string) => fetchDonghuaAPI(`/detail/${slug}`),
+  getEpisode: (slug: string) => fetchDonghuaAPI(`/episode/${slug}`),
+  search: (keyword: string, page = 1) => fetchDonghuaAPI(`/search?q=${encodeURIComponent(keyword)}&page=${page}`),
+  getGenres: () => fetchDonghuaAPI(`/genres`),
+  getByGenre: (slug: string, page = 1) => fetchDonghuaAPI(`/genre/${slug}?page=${page}`),
+  getSchedule: () => fetchDonghuaAPI(`/schedule`),
 };
 
 // ============================================================
-// SERVER 2 (🐼 Donghub) — /anime/donghub/...
+// SERVER 2 (🐼 Donghub) — kept for backward compat (not used)
 // ============================================================
 export const s2 = {
-  getHome: () => fetchDonghuaAPI(`/anime/donghub/home`),
-  getLatest: () => fetchDonghuaAPI(`/anime/donghub/latest`),
-  getPopular: () => fetchDonghuaAPI(`/anime/donghub/popular`),
-  getMovie: () => fetchDonghuaAPI(`/anime/donghub/movie`),
-  getDetail: (slug: string) => fetchDonghuaAPI(`/anime/donghub/detail/${slug}`),
-  getEpisode: (slug: string) => fetchDonghuaAPI(`/anime/donghub/episode/${slug}`),
-  search: (keyword: string, page = 1) => fetchDonghuaAPI(`/anime/donghub/search/${encodeURIComponent(keyword)}/${page}`),
-  getGenres: () => fetchDonghuaAPI(`/anime/donghub/genres`),
-  getByGenre: (slug: string, page = 1) => fetchDonghuaAPI(`/anime/donghub/list?genre=${slug}&page=${page}`),
-  getSchedule: () => fetchDonghuaAPI(`/anime/donghub/schedule`),
+  getHome: () => fetchDonghuaAPI(`/`),
+  getLatest: () => fetchDonghuaAPI(`/latest?page=1`),
+  getPopular: () => fetchDonghuaAPI(`/popular?page=1`),
+  getDetail: (slug: string) => fetchDonghuaAPI(`/detail/${slug}`),
+  getEpisode: (slug: string) => fetchDonghuaAPI(`/episode/${slug}`),
+  search: (keyword: string, page = 1) => fetchDonghuaAPI(`/search?q=${encodeURIComponent(keyword)}&page=${page}`),
+  getGenres: () => fetchDonghuaAPI(`/genres`),
+  getByGenre: (slug: string, page = 1) => fetchDonghuaAPI(`/genre/${slug}?page=${page}`),
+  getSchedule: () => fetchDonghuaAPI(`/schedule`),
 };

@@ -28,20 +28,24 @@ export function DonghuaGenreContent({ slug, source }: DonghuaGenreContentProps) 
   const loadData = useCallback(async (pageNum: number) => {
     setLoading(true); setError(null);
     try {
-      // S2 uses /list?genre= endpoint, S1 uses /genres/ endpoint
-      const endpoint = source === "s2"
-        ? `/api/donghua/donghub/list?genre=${slug}&page=${pageNum}`
-        : `/api/donghua/donghua/genres/${slug}/${pageNum}`;
+      // VPS FastAPI: /genre/{slug}?page=N → { items: [...], pagination: {...} }
+      const endpoint = `/api/donghua/genre/${slug}?page=${pageNum}`;
       const res = await fetch(endpoint);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const json = await res.json();
-      // Both S1 and S2 wrap data in "data" array
-      const rawList = json?.data || (Array.isArray(json) ? json : []);
-      const list = rawList.map((item: any) => ({ ...item, slug: (item.slug || "").replace(/\/$/, ""), source }));
+      const rawList = Array.isArray(json.items) ? json.items : (Array.isArray(json) ? json : []);
+      const list = rawList.map((item: any) => ({
+        ...item,
+        slug: (item.slug || "").toString().replace(/\/$/, ""),
+        source,
+      }));
       setItems(list);
-      setHasNextPage(source === "s2" ? (json?.pagination?.has_next ?? list.length >= 10) : list.length >= 10);
-    } catch (err) { setError(err instanceof Error ? err.message : "Failed to load"); }
-    finally { setLoading(false); }
+      setHasNextPage(json?.pagination?.has_next ?? list.length >= 10);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load");
+    } finally {
+      setLoading(false);
+    }
   }, [slug, source]);
 
   useEffect(() => { setPage(1); loadData(1); }, [loadData]);
