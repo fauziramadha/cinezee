@@ -1,30 +1,36 @@
 import { getCloudflareContext } from "@opennextjs/cloudflare";
 
 // ============================================================
-// VPS FastAPI (Anichin scraper) — Task 3 fix (2026-08-25)
+// VPS FastAPI (Anichin scraper) — Task 4 fix (2026-08-25)
 // ------------------------------------------------------------
-// BEFORE: API_BASE = https://api.cinestream.biz.id/anichin-api
-//   -> Cloudflare Worker -> CF Edge (api.cinestream.biz.id is CF-proxied)
-//   -> CF detects same-zone loop and returns HTTP 403 "error code: 1000".
+// Task 3 attempted to use http://45.32.100.252/anichin-api-internal (HTTP
+// to raw VPS IP) to "bypass CF same-zone loop". That diagnosis was WRONG:
+// CF Workers CAN fetch same-zone CF-proxied URLs (verified with a test
+// Worker — https://api.cinestream.biz.id/anichin-api/home returns 200).
 //
-// AFTER: API_BASE = http://45.32.100.252/anichin-api-internal
-//   -> Worker fetches the VPS DIRECTLY on port 80 (no Cloudflare in path).
-//   -> nginx requires the X-Internal-Auth header on /anichin-api-internal/
-//      and proxies to FastAPI /anichin-api/ (path rewrite).
-//   -> Bypasses the CF loop entirely. Authenticated by the secret header.
+// The REAL block is **Cloudflare error 1003**: CF Workers CANNOT make HTTP
+// subrequests to raw IP addresses. Any fetch to http://<ip>/... from a
+// Worker returns HTTP 403 with body `error code: 1003\n` (17 bytes) —
+// the request never reaches the origin. Verified empirically with a
+// temporary test Worker (see worklog Task 4).
+//
+// FIX: Use HTTPS via the CF-proxied hostname api.cinestream.biz.id. The
+// secret X-Internal-Auth header passes through CF → nginx → FastAPI.
+// nginx's /anichin-api-internal/ location (Task 3) still gates on the
+// secret, so the endpoint is not public.
 //
 // To rotate the secret: change it in nginx /opt/cinestream/default.conf
 // (location /anichin-api-internal/) AND here (or set as CF Worker secret
 // DONGHUA_INTERNAL_AUTH in the Cloudflare dashboard).
 // ============================================================
-const VPS_IP = "45.32.100.252";
+const INTERNAL_API_HOST = "api.cinestream.biz.id";
 const INTERNAL_AUTH_SECRET =
   process.env.DONGHUA_INTERNAL_AUTH ||
   "cs1-internal-cfworker-bypass-7f3a9b2e8c1d";
 
 const API_BASE =
   process.env.DONGHUA_API_BASE ||
-  `http://${VPS_IP}/anichin-api-internal`;
+  `https://${INTERNAL_API_HOST}/anichin-api-internal`;
 
 const CACHE_TTL = {
   home: 30 * 60,
