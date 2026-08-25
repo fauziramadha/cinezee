@@ -8024,7 +8024,7 @@
       "format": "cjs"
     },
     ".open-next/server-functions/default/.next/server/chunks/[root-of-the-server]__c1b42d56._.js": {
-      "bytes": 14003,
+      "bytes": 14009,
       "imports": [
         {
           "path": ".open-next/server-functions/default/node_modules/next/dist/compiled/next-server/app-page-turbo.runtime.prod.js",
@@ -20228,7 +20228,7 @@
           "bytesInOutput": 277
         },
         ".open-next/server-functions/default/.next/server/chunks/[root-of-the-server]__c1b42d56._.js": {
-          "bytesInOutput": 14313
+          "bytesInOutput": 14319
         },
         ".open-next/server-functions/default/.next/server/chunks/_next-internal_server_app_api_donghua_[___path]_route_actions_641bd2ed.js": {
           "bytesInOutput": 288
@@ -21299,7 +21299,7 @@
           "bytesInOutput": 77825
         }
       },
-      "bytes": 7770077
+      "bytes": 7770083
     }
   }
 }

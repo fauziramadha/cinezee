@@ -2,9 +2,11 @@ import { getCloudflareContext } from "@opennextjs/cloudflare";
 
 // ============================================================
 // VPS FastAPI (Anichin scraper) — WARP-protected, hides VPS IP
+// Use HTTPS via api.cinestream.biz.id/anichin-api (port 443, works from CF Workers)
+// Direct IP:5001 gets 403 from CF Worker subrequests (port restriction)
 // ============================================================
 const API_BASE =
-  process.env.DONGHUA_API_BASE || "http://45.32.100.252:5001";
+  process.env.DONGHUA_API_BASE || "https://api.cinestream.biz.id/anichin-api";
 
 const CACHE_TTL = {
   home: 30 * 60,
@@ -84,8 +86,10 @@ export async function fetchDonghuaAPI(endpoint: string, options: { forceRefresh?
   const url = `${API_BASE}${endpoint.startsWith("/") ? "" : "/"}${endpoint}`;
   try {
     const response = await fetch(url, {
-      headers: { Accept: "application/json", "User-Agent": "CineStream/1.0" },
-      cf: { cacheTtl: 60, cacheEverything: true },
+      headers: {
+        Accept: "application/json",
+        "User-Agent": "Mozilla/5.0 (compatible; CineStream/1.0)",
+      },
     });
     if (!response.ok) throw new Error(`API responded with status ${response.status}`);
     const data = await response.json();
