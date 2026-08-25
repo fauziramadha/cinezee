@@ -154,10 +154,10 @@ export function DonghuaS1ListContent({ type, page }: DonghuaS1ListContentProps) 
 
   if (loading) {
     return (
-      <main className="min-h-screen bg-background">
+      <main className="min-h-screen bg-black">
         <Header />
         <div className="flex h-[60vh] items-center justify-center pt-20">
-          <Loader2 className="h-10 w-10 animate-spin text-primary" />
+          <Loader2 className="h-10 w-10 animate-spin text-red-600" />
         </div>
         <Footer />
         <SearchModal />
@@ -170,10 +170,10 @@ export function DonghuaS1ListContent({ type, page }: DonghuaS1ListContentProps) 
 
   if (error || !config) {
     return (
-      <main className="min-h-screen bg-background">
+      <main className="min-h-screen bg-black">
         <Header />
         <div className="flex h-[60vh] flex-col items-center justify-center gap-3 pt-20 text-center">
-          <p className="text-sm text-destructive">{error || "Tipe tidak valid"}</p>
+          <p className="text-sm text-red-400">{error || "Tipe tidak valid"}</p>
           <Button variant="secondary" size="sm" onClick={() => router.push("/donghua")}>
             <ArrowLeft className="h-3.5 w-3.5" />Kembali
           </Button>
@@ -188,19 +188,19 @@ export function DonghuaS1ListContent({ type, page }: DonghuaS1ListContentProps) 
   }
 
   return (
-    <main className="min-h-screen bg-background">
+    <main className="min-h-screen bg-black">
       <Header />
       <div className="container mx-auto px-4 py-8 pt-24">
         <div className="mb-6">
           <Link
             href="/donghua"
-            className="mb-3 inline-flex items-center gap-2 text-sm text-primary hover:text-primary/80"
+            className="mb-3 inline-flex items-center gap-2 text-sm text-red-500 hover:text-red-400"
           >
             <ArrowLeft className="h-4 w-4" />
             Kembali ke Donghua
           </Link>
-          <h1 className="text-2xl font-bold sm:text-3xl">{config.title}</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
+          <h1 className="text-2xl font-bold text-white sm:text-3xl">{config.title}</h1>
+          <p className="mt-1 text-sm text-white/60">
             Halaman {page}
           </p>
         </div>
@@ -224,7 +224,7 @@ export function DonghuaS1ListContent({ type, page }: DonghuaS1ListContentProps) 
             ))}
           </div>
         ) : (
-          <p className="py-8 text-center text-sm text-muted-foreground">
+          <p className="py-8 text-center text-sm text-white/60">
             Tidak ada donghua di halaman ini.
           </p>
         )}
@@ -238,12 +238,12 @@ export function DonghuaS1ListContent({ type, page }: DonghuaS1ListContentProps) 
             onClick={() =>
               router.push("/donghua/s1/list/" + type + "?page=" + (page - 1))
             }
-            className="gap-1.5"
+            className="gap-1.5 border-white/20 text-white hover:bg-white/10"
           >
             <ChevronLeft className="h-4 w-4" />
             Prev
           </Button>
-          <span className="text-sm font-medium text-muted-foreground">
+          <span className="text-sm font-medium text-white/60">
             Halaman {page}
           </span>
           <Button
@@ -253,7 +253,7 @@ export function DonghuaS1ListContent({ type, page }: DonghuaS1ListContentProps) 
             onClick={() =>
               router.push("/donghua/s1/list/" + type + "?page=" + (page + 1))
             }
-            className="gap-1.5"
+            className="gap-1.5 border-white/20 text-white hover:bg-white/10"
           >
             Next
             <ChevronRight className="h-4 w-4" />

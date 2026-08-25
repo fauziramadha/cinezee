@@ -1,3 +1,0 @@
-module.exports=[1239,a=>{"use strict";let b=(0,a.i(70106).default)("pin",[["path",{d:"M12 17v5",key:"bb1du9"}],["path",{d:"M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z",key:"1nkz8b"}]]);a.s(["Pin",()=>b],1239)},91119,a=>{"use strict";var b=a.i(87924),c=a.i(68114);function d({className:a,...d}){return(0,b.jsx)("div",{"data-slot":"card",className:(0,c.cn)("bg-card text-card-foreground flex flex-col gap-6 rounded-xl border py-6 shadow-sm",a),...d})}a.s(["Card",()=>d])}];
-
-//# sourceMappingURL=_2b8cbbf0._.js.map

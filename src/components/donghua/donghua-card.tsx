@@ -53,7 +53,6 @@ export function DonghuaCard({ donghua }: DonghuaCardProps) {
   const status = donghua.status || "Unknown";
   const slug = (donghua.slug || "").replace(/\/$/, "");
   const currentEp = donghua.current_episode || donghua.episode || "";
-  const source = donghua.source || "s1";
   const isEpisode = donghua.isEpisode || false;
 
   // If isEpisode (from Latest tab), link to watch page
@@ -63,11 +62,9 @@ export function DonghuaCard({ donghua }: DonghuaCardProps) {
     // Episode slug goes directly to watch page
     // Use episode slug as both animeId and episodeId
     // Player will extract series slug from navigation
-    detailHref = source === "s2"
-      ? `/donghua/s2/watch/${slug}/${slug}`
-      : `/donghua/s1/watch/${slug}/${slug}`;
+    detailHref = `/donghua/s1/watch/${slug}/${slug}`;
   } else {
-    detailHref = source === "s2" ? `/donghua/s2/${slug}` : `/donghua/s1/${slug}`;
+    detailHref = `/donghua/s1/${slug}`;
   }
 
   return (

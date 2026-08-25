@@ -94,10 +94,10 @@ export function DonghuaDetailContent({ slug, source }: DonghuaDetailContentProps
   }, [slug, source]);
 
   if (loading) {
-    return (<main className="min-h-screen bg-background"><Header /><div className="flex h-[60vh] items-center justify-center pt-20"><Loader2 className="h-10 w-10 animate-spin text-primary" /></div><Footer /><SearchModal /><DetailModal /><PlayerModal /><AuthModal /></main>);
+    return (<main className="min-h-screen bg-black"><Header /><div className="flex h-[60vh] items-center justify-center pt-20"><Loader2 className="h-10 w-10 animate-spin text-red-600" /></div><Footer /><SearchModal /><DetailModal /><PlayerModal /><AuthModal /></main>);
   }
   if (error || !detail) {
-    return (<main className="min-h-screen bg-background"><Header /><div className="flex h-[60vh] flex-col items-center justify-center gap-3 pt-20 text-center"><AlertCircle className="h-10 w-10 text-destructive" /><p className="text-sm text-destructive">{error || "Tidak ditemukan"}</p><Button variant="secondary" size="sm" onClick={() => router.push("/donghua")} className="gap-1.5"><ArrowLeft className="h-3.5 w-3.5" />Kembali</Button></div><Footer /><SearchModal /><DetailModal /><PlayerModal /><AuthModal /></main>);
+    return (<main className="min-h-screen bg-black"><Header /><div className="flex h-[60vh] flex-col items-center justify-center gap-3 pt-20 text-center"><AlertCircle className="h-10 w-10 text-red-500" /><p className="text-sm text-red-400">{error || "Tidak ditemukan"}</p><Button variant="secondary" size="sm" onClick={() => router.push("/donghua")} className="gap-1.5"><ArrowLeft className="h-3.5 w-3.5" />Kembali</Button></div><Footer /><SearchModal /><DetailModal /><PlayerModal /><AuthModal /></main>);
   }
 
   const title = detail.title;
@@ -107,8 +107,8 @@ export function DonghuaDetailContent({ slug, source }: DonghuaDetailContentProps
   const episodeList = detail.episodes_list || [];
   const synopsisText = typeof detail.synopsis === "string" ? detail.synopsis : "";
   const genres = detail.genres || [];
-  const watchBase = source === "s2" ? `/donghua/s2/watch` : `/donghua/s1/watch`;
-  const genreBase = source === "s2" ? `/donghua/s2/genre` : `/donghua/s1/genre`;
+  const watchBase = `/donghua/s1/watch`;
+  const genreBase = `/donghua/s1/genre`;
 
   // FIX: Extract episode number from string like:
   // "Little Fairy Yao Episode 40 Tamat Subtitle Indonesia"
@@ -169,34 +169,33 @@ export function DonghuaDetailContent({ slug, source }: DonghuaDetailContentProps
   const firstEpisode = sortedEpisodes[0];
 
   return (
-    <main className="min-h-screen bg-background overflow-hidden">
+    <main className="min-h-screen bg-black overflow-hidden">
       <Header />
-      <div className="relative h-[40vh] min-h-[280px] w-full overflow-hidden bg-muted sm:h-[50vh]">
+      <div className="relative h-[40vh] min-h-[280px] w-full overflow-hidden bg-zinc-900 sm:h-[50vh]">
         {poster && <Image src={poster} alt={title} fill sizes="100vw" className="object-cover opacity-30 blur-sm scale-110" unoptimized priority />}
-        <div className="absolute inset-0 bg-gradient-to-t from-background via-background/70 to-background/30" />
+        <div className="absolute inset-0 bg-gradient-to-t from-black via-black/70 to-black/30" />
       </div>
       <div className="container mx-auto -mt-32 px-4 pb-12 sm:-mt-40">
-        <button onClick={() => router.push("/donghua")} className="mb-4 flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground"><ArrowLeft className="h-4 w-4" />Kembali ke Donghua</button>
-        <div className="mb-3"><span className={cn("inline-block rounded px-2 py-0.5 text-[10px] font-bold uppercase text-white", source === "s2" ? "bg-purple-500/90" : "bg-blue-500/90")}>{source === "s2" ? "Server 2" : "Server 1"}</span></div>
-        
+        <button onClick={() => router.push("/donghua")} className="mb-4 flex items-center gap-2 text-sm text-white/60 hover:text-white"><ArrowLeft className="h-4 w-4" />Kembali ke Donghua</button>
+
         {/* Hero Section */}
         <div className="flex flex-col gap-6 sm:flex-row sm:items-end">
-          <div className="relative mx-auto aspect-[2/3] w-40 shrink-0 overflow-hidden rounded-lg bg-muted shadow-2xl sm:mx-0 sm:w-48 md:w-56">
-            {poster ? <Image src={poster} alt={title} fill sizes="(max-width: 640px) 160px, 224px" className="object-cover" unoptimized priority /> : <div className="flex h-full items-center justify-center text-muted-foreground"><Tv className="h-12 w-12" /></div>}
+          <div className="relative mx-auto aspect-[2/3] w-40 shrink-0 overflow-hidden rounded-lg bg-zinc-800 shadow-2xl sm:mx-0 sm:w-48 md:w-56">
+            {poster ? <Image src={poster} alt={title} fill sizes="(max-width: 640px) 160px, 224px" className="object-cover" unoptimized priority /> : <div className="flex h-full items-center justify-center text-white/30"><Tv className="h-12 w-12" /></div>}
           </div>
           <div className="flex-1 text-center sm:text-left min-w-0">
-            <h1 className="text-2xl font-bold tracking-tight sm:text-3xl md:text-4xl break-words">{title}</h1>
-            {detail.alter_title && <p className="mt-1 text-sm text-muted-foreground break-words">{detail.alter_title}</p>}
+            <h1 className="text-2xl font-bold tracking-tight text-white sm:text-3xl md:text-4xl break-words">{title}</h1>
+            {detail.alter_title && <p className="mt-1 text-sm text-white/60 break-words">{detail.alter_title}</p>}
             <div className="mt-3 flex flex-wrap items-center justify-center gap-2 sm:justify-start">
-              {detail.type && <Badge variant="secondary" className="gap-1"><Tv className="h-3 w-3" />{detail.type}</Badge>}
-              <Badge variant="secondary" className={cn(isOngoing ? "border-green-500/40 text-green-400" : "border-blue-500/40 text-blue-400")}>{status}</Badge>
-              {detail.rating && detail.rating !== "Rating 0.0" && <Badge variant="secondary" className="gap-1"><Star className="h-3 w-3 fill-yellow-400 text-yellow-400" />{detail.rating}</Badge>}
-              {detail.duration && <Badge variant="secondary" className="gap-1"><Calendar className="h-3 w-3" />{detail.duration}</Badge>}
-              {detail.episodes_count && <Badge variant="secondary">{detail.episodes_count} Episode</Badge>}
+              {detail.type && <Badge variant="secondary" className="gap-1 bg-white/10 text-white"><Tv className="h-3 w-3" />{detail.type}</Badge>}
+              <Badge variant="secondary" className={cn(isOngoing ? "border-green-500/40 text-green-400" : "border-blue-500/40 text-blue-400", "bg-white/10")}>{status}</Badge>
+              {detail.rating && detail.rating !== "Rating 0.0" && <Badge variant="secondary" className="gap-1 bg-white/10 text-white"><Star className="h-3 w-3 fill-yellow-400 text-yellow-400" />{detail.rating}</Badge>}
+              {detail.duration && <Badge variant="secondary" className="gap-1 bg-white/10 text-white"><Calendar className="h-3 w-3" />{detail.duration}</Badge>}
+              {detail.episodes_count && <Badge variant="secondary" className="bg-white/10 text-white">{detail.episodes_count} Episode</Badge>}
             </div>
             <div className="mt-4 flex flex-wrap justify-center gap-2 sm:justify-start">
-              {firstEpisode && <Button size="sm" onClick={() => router.push(`${watchBase}/${slug}/${firstEpisode.slug}`)} className="gap-2"><Play className="h-4 w-4 fill-current" />Tonton Episode 1</Button>}
-              {detail.batch_link && <Button size="sm" variant="outline" className="gap-2"><Download className="h-4 w-4" />Download Batch</Button>}
+              {firstEpisode && <Button size="sm" onClick={() => router.push(`${watchBase}/${slug}/${firstEpisode.slug}`)} className="gap-2 bg-red-600 text-white hover:bg-red-700"><Play className="h-4 w-4 fill-current" />Tonton Episode 1</Button>}
+              {detail.batch_link && <Button size="sm" variant="outline" className="gap-2 border-white/20 text-white hover:bg-white/10"><Download className="h-4 w-4" />Download Batch</Button>}
             </div>
           </div>
         </div>
@@ -207,18 +206,18 @@ export function DonghuaDetailContent({ slug, source }: DonghuaDetailContentProps
           <div className="md:col-span-2 min-w-0">
             {genres.length > 0 && (
               <div className="mb-4">
-                <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Genre</h3>
+                <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-white/50">Genre</h3>
                 <div className="flex flex-wrap gap-1.5">
                   {(showAllGenres ? genres : genres.slice(0, 5)).map((g: any, idx: number) => (
                     <Link key={g.slug || idx} href={`${genreBase}/${g.slug || g.name?.toLowerCase()}`}>
-                      <Badge variant="outline" className="cursor-pointer hover:border-primary hover:text-primary">{g.name || g.title}</Badge>
+                      <Badge variant="outline" className="cursor-pointer border-white/20 text-white/80 hover:border-red-500 hover:text-red-400">{g.name || g.title}</Badge>
                     </Link>
                   ))}
                 </div>
                 {genres.length > 5 && (
                   <button
                     onClick={() => setShowAllGenres(!showAllGenres)}
-                    className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-primary transition hover:text-primary/80"
+                    className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-red-500 transition hover:text-red-400"
                   >
                     {showAllGenres ? "Tampilkan lebih sedikit" : `Selengkapnya (+${genres.length - 5})`}
                     <ChevronDown className={`h-3 w-3 transition-transform ${showAllGenres ? "rotate-180" : ""}`} />
@@ -228,29 +227,29 @@ export function DonghuaDetailContent({ slug, source }: DonghuaDetailContentProps
             )}
             {synopsisText && (
               <div className="mb-6">
-                <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Synopsis</h3>
-                <div className="space-y-2 text-sm leading-relaxed text-foreground/90" style={{ wordBreak: "break-word", overflowWrap: "anywhere" }}>
+                <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-white/50">Synopsis</h3>
+                <div className="space-y-2 text-sm leading-relaxed text-white/90" style={{ wordBreak: "break-word", overflowWrap: "anywhere" }}>
                   {synopsisText.split("\n").filter((p: string) => p.trim()).map((p: string, idx: number) => <p key={idx}>{p}</p>)}
                 </div>
               </div>
             )}
             {sortedEpisodes.length > 0 && (
               <div className="min-w-0">
-                <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Episode ({sortedEpisodes.length})</h3>
+                <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-white/50">Episode ({sortedEpisodes.length})</h3>
                 <div className="space-y-1.5">
                   {sortedEpisodes.map((ep: any, idx: number) => {
                     const epNum = getEpNum(ep, idx);
                     const epSlug = ep.slug || ep.episodeId || "";
                     return (
-                      <Link key={epSlug || idx} href={`${watchBase}/${slug}/${epSlug}`} className="flex items-center justify-between gap-2 rounded-lg border border-border bg-card p-3 transition-all hover:border-primary hover:bg-primary/5">
+                      <Link key={epSlug || idx} href={`${watchBase}/${slug}/${epSlug}`} className="flex items-center justify-between gap-2 rounded-lg border border-white/10 bg-zinc-900 p-3 transition-all hover:border-red-500 hover:bg-red-600/5">
                         <div className="flex min-w-0 flex-1 items-center gap-3">
-                          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary">{epNum}</div>
+                          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-red-600/10 text-xs font-bold text-red-500">{epNum}</div>
                           <div className="min-w-0 flex-1">
-                            <p className="text-sm font-medium" style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>Episode {epNum}</p>
-                            {ep.date && <p className="flex items-center gap-1 text-[10px] text-muted-foreground" style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}><Calendar className="h-2.5 w-2.5 shrink-0" />{ep.date}</p>}
+                            <p className="text-sm font-medium text-white" style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>Episode {epNum}</p>
+                            {ep.date && <p className="flex items-center gap-1 text-[10px] text-white/40" style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}><Calendar className="h-2.5 w-2.5 shrink-0" />{ep.date}</p>}
                           </div>
                         </div>
-                        <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+                        <ChevronRight className="h-4 w-4 shrink-0 text-white/40" />
                       </Link>
                     );
                   })}
@@ -261,19 +260,19 @@ export function DonghuaDetailContent({ slug, source }: DonghuaDetailContentProps
 
           {/* Sidebar Info */}
           <div className="w-full md:space-y-4">
-            <div className="rounded-lg border border-border bg-card p-4">
-              <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Informasi</h3>
+            <div className="rounded-lg border border-white/10 bg-zinc-900 p-4">
+              <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-white/50">Informasi</h3>
               <dl className="space-y-2 text-xs">
-                {detail.type && <div className="flex justify-between gap-2"><dt className="text-muted-foreground">Tipe</dt><dd className="font-medium text-right">{detail.type}</dd></div>}
-                {detail.status && <div className="flex justify-between gap-2"><dt className="text-muted-foreground">Status</dt><dd className="font-medium text-right">{detail.status}</dd></div>}
-                {detail.episodes_count && <div className="flex justify-between gap-2"><dt className="text-muted-foreground">Total Episode</dt><dd className="font-medium text-right">{detail.episodes_count}</dd></div>}
-                {detail.duration && <div className="flex justify-between gap-2"><dt className="text-muted-foreground">Durasi</dt><dd className="font-medium text-right">{detail.duration}</dd></div>}
-                {detail.released && <div className="flex justify-between gap-2"><dt className="text-muted-foreground">Tayang</dt><dd className="font-medium text-right">{detail.released}</dd></div>}
-                {detail.studio && <div className="flex justify-between gap-2"><dt className="text-muted-foreground">Studio</dt><dd className="font-medium text-right">{detail.studio}</dd></div>}
-                {detail.network && <div className="flex justify-between gap-2"><dt className="text-muted-foreground">Network</dt><dd className="font-medium text-right">{detail.network}</dd></div>}
-                {detail.country && <div className="flex justify-between gap-2"><dt className="text-muted-foreground">Negara</dt><dd className="font-medium text-right">{detail.country}</dd></div>}
-                {detail.season && <div className="flex justify-between gap-2"><dt className="text-muted-foreground">Musim</dt><dd className="font-medium text-right">{detail.season}</dd></div>}
-                {detail.subber && <div className="flex justify-between gap-2"><dt className="text-muted-foreground">Subber</dt><dd className="font-medium text-right">{detail.subber}</dd></div>}
+                {detail.type && <div className="flex justify-between gap-2"><dt className="text-white/50">Tipe</dt><dd className="font-medium text-right text-white">{detail.type}</dd></div>}
+                {detail.status && <div className="flex justify-between gap-2"><dt className="text-white/50">Status</dt><dd className="font-medium text-right text-white">{detail.status}</dd></div>}
+                {detail.episodes_count && <div className="flex justify-between gap-2"><dt className="text-white/50">Total Episode</dt><dd className="font-medium text-right text-white">{detail.episodes_count}</dd></div>}
+                {detail.duration && <div className="flex justify-between gap-2"><dt className="text-white/50">Durasi</dt><dd className="font-medium text-right text-white">{detail.duration}</dd></div>}
+                {detail.released && <div className="flex justify-between gap-2"><dt className="text-white/50">Tayang</dt><dd className="font-medium text-right text-white">{detail.released}</dd></div>}
+                {detail.studio && <div className="flex justify-between gap-2"><dt className="text-white/50">Studio</dt><dd className="font-medium text-right text-white">{detail.studio}</dd></div>}
+                {detail.network && <div className="flex justify-between gap-2"><dt className="text-white/50">Network</dt><dd className="font-medium text-right text-white">{detail.network}</dd></div>}
+                {detail.country && <div className="flex justify-between gap-2"><dt className="text-white/50">Negara</dt><dd className="font-medium text-right text-white">{detail.country}</dd></div>}
+                {detail.season && <div className="flex justify-between gap-2"><dt className="text-white/50">Musim</dt><dd className="font-medium text-right text-white">{detail.season}</dd></div>}
+                {detail.subber && <div className="flex justify-between gap-2"><dt className="text-white/50">Subber</dt><dd className="font-medium text-right text-white">{detail.subber}</dd></div>}
               </dl>
             </div>
           </div>

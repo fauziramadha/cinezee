@@ -22,7 +22,7 @@ interface Props {
 
 export function SearchResults({ query, context, activeTab, onClose }: Props) {
   const router = useRouter();
-  const { setSelectedMedia, animeServer, donghuaServer } = useAppStore();
+  const { setSelectedMedia, animeServer } = useAppStore();
   
   const [results, setResults] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
@@ -68,14 +68,13 @@ export function SearchResults({ query, context, activeTab, onClose }: Props) {
           setResults(rawList.map((item: any) => ({ ...item, animeId: item.slug || item.animeId, source: animeServer })));
         }
         else if (context === "donghua") {
-          const endpoint = donghuaServer === "s2"
-            ? "/api/donghua/donghub/search/" + encodeURIComponent(query) + "/1"
-            : "/api/donghua/donghua/search/" + encodeURIComponent(query) + "/1";
+          const endpoint = "/api/donghua/search?q=" + encodeURIComponent(query) + "&page=1";
           const res = await fetch(endpoint);
           if (!res.ok) throw new Error("Fetch failed");
           const data = await res.json();
-          const rawList = data?.data || [];
-          setResults(rawList.map((item: any) => ({ ...item, slug: (item.slug || "").replace(/\/$/, ""), source: donghuaServer })));
+          // VPS FastAPI response: { items: [...], pagination: {...} }
+          const rawList = Array.isArray(data?.items) ? data.items : (Array.isArray(data?.data) ? data.data : []);
+          setResults(rawList.map((item: any) => ({ ...item, slug: (item.slug || "").replace(/\/+$/, "").trim(), source: "s1" as const })));
         }
         else if (context === "comic") {
           const res = await fetch("/api/indocast/komiku/search?q=" + encodeURIComponent(query));
@@ -98,7 +97,7 @@ export function SearchResults({ query, context, activeTab, onClose }: Props) {
     }, 400);
 
     return () => clearTimeout(timer);
-  }, [query, activeTab, context, animeServer, donghuaServer]);
+  }, [query, activeTab, context, animeServer]);
 
   const handleSelectMovie = (item: MediaItem) => {
     setSelectedMedia({

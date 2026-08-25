@@ -51,22 +51,22 @@ export function DonghuaGenreContent({ slug, source }: DonghuaGenreContentProps) 
   useEffect(() => { setPage(1); loadData(1); }, [loadData]);
 
   return (
-    <main className="min-h-screen bg-background">
+    <main className="min-h-screen bg-black">
       <Header />
       <div className="container mx-auto px-4 py-8 pt-24">
-        <button onClick={() => router.push("/donghua")} className="mb-4 flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground"><ArrowLeft className="h-4 w-4" />Kembali</button>
-        <div className="mb-6"><h1 className="text-2xl font-bold sm:text-3xl">Genre: {slug.charAt(0).toUpperCase() + slug.slice(1)}</h1></div>
-        {loading && <div className="flex h-64 items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>}
-        {error && !loading && <div className="flex h-64 flex-col items-center justify-center gap-3 text-center"><p className="text-sm text-destructive">{error}</p><Button variant="secondary" size="sm" onClick={() => loadData(page)}>Coba lagi</Button></div>}
+        <button onClick={() => router.push("/donghua")} className="mb-4 flex items-center gap-2 text-sm text-white/60 hover:text-white"><ArrowLeft className="h-4 w-4" />Kembali</button>
+        <div className="mb-6"><h1 className="text-2xl font-bold text-white sm:text-3xl">Genre: {slug.charAt(0).toUpperCase() + slug.slice(1).replace(/-/g, " ")}</h1></div>
+        {loading && <div className="flex h-64 items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-red-600" /></div>}
+        {error && !loading && <div className="flex h-64 flex-col items-center justify-center gap-3 text-center"><p className="text-sm text-red-400">{error}</p><Button variant="secondary" size="sm" onClick={() => loadData(page)}>Coba lagi</Button></div>}
         {!loading && !error && items.length > 0 && (<>
           <div className="grid grid-cols-3 gap-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7">{items.map((d) => <DonghuaCard key={d.slug} donghua={d} />)}</div>
           <div className="mt-8 flex items-center justify-center gap-3">
-            <Button variant="outline" size="sm" onClick={() => { if (page > 1) { const n = page - 1; setPage(n); loadData(n); window.scrollTo({ top: 0, behavior: "smooth" }); } }} disabled={page === 1 || loading} className="gap-1.5"><ChevronLeft className="h-4 w-4" />Prev</Button>
-            <span className="px-3 text-sm font-medium text-muted-foreground">Halaman {page}</span>
-            <Button variant="outline" size="sm" onClick={() => { if (hasNextPage) { const n = page + 1; setPage(n); loadData(n); window.scrollTo({ top: 0, behavior: "smooth" }); } }} disabled={!hasNextPage || loading} className="gap-1.5">Next<ChevronRight className="h-4 w-4" /></Button>
+            <Button variant="outline" size="sm" onClick={() => { if (page > 1) { const n = page - 1; setPage(n); loadData(n); window.scrollTo({ top: 0, behavior: "smooth" }); } }} disabled={page === 1 || loading} className="gap-1.5 border-white/20 text-white hover:bg-white/10"><ChevronLeft className="h-4 w-4" />Prev</Button>
+            <span className="px-3 text-sm font-medium text-white/60">Halaman {page}</span>
+            <Button variant="outline" size="sm" onClick={() => { if (hasNextPage) { const n = page + 1; setPage(n); loadData(n); window.scrollTo({ top: 0, behavior: "smooth" }); } }} disabled={!hasNextPage || loading} className="gap-1.5 border-white/20 text-white hover:bg-white/10">Next<ChevronRight className="h-4 w-4" /></Button>
           </div>
         </>)}
-        {!loading && !error && items.length === 0 && <div className="flex h-64 flex-col items-center justify-center gap-3 text-center"><p className="text-sm text-muted-foreground">Tidak ada donghua untuk genre ini.</p><Button variant="secondary" size="sm" onClick={() => router.push("/donghua")}>Kembali</Button></div>}
+        {!loading && !error && items.length === 0 && <div className="flex h-64 flex-col items-center justify-center gap-3 text-center"><p className="text-sm text-white/60">Tidak ada donghua untuk genre ini.</p><Button variant="secondary" size="sm" onClick={() => router.push("/donghua")}>Kembali</Button></div>}
       </div>
       <Footer /><SearchModal /><DetailModal /><PlayerModal /><AuthModal />
     </main>
