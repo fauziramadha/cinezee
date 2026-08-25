@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PWA Debug</title>
+  <style>
+    body { font-family: monospace; background: #000; color: #0f0; padding: 20px; font-size: 12px; }
+    .ok { color: #0f0; }
+    .err { color: #f00; }
+    .warn { color: #ff0; }
+    button { background: #333; color: #fff; border: 1px solid #555; padding: 8px 16px; margin: 4px; cursor: pointer; }
+  </style>
+</head>
+<body>
+  <h2>PWA Debug Console</h2>
+  <div id="log"></div>
+  <hr>
+  <button onclick="checkSW()">Check Service Worker</button>
+  <button onclick="checkCache()">Check Cache</button>
+  <button onclick="checkManifest()">Check Manifest</button>
+  <button onclick="forceRegister()">Force Register SW</button>
+  <button onclick="clearAll()">Clear All Caches</button>
+
+  <script>
+    function log(msg, type='ok') {
+      const div = document.getElementById('log');
+      const p = document.createElement('p');
+      p.className = type;
+      p.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+      div.appendChild(p);
+    }
+
+    function checkSW() {
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.getRegistrations().then(regs => {
+          log(`Found ${regs.length} SW registration(s)`);
+          regs.forEach((reg, i) => {
+            log(`SW ${i}: ${reg.scope}, active=${!!reg.active}`);
+          });
+        });
+      } else {
+        log('Service Worker NOT supported', 'err');
+      }
+    }
+
+    function checkCache() {
+      caches.keys().then(names => {
+        log(`Cache stores: ${names.length}`);
+        names.forEach(name => {
+          caches.open(name).then(cache => {
+            cache.keys().then(keys => {
+              log(`- ${name}: ${keys.length} items`);
+            });
+          });
+        });
+      });
+    }
+
+    function checkManifest() {
+      fetch('/manifest.json')
+        .then(r => r.json())
+        .then(m => log(`Manifest OK: ${m.name}, ${m.icons?.length} icons`))
+        .catch(e => log(`Manifest error: ${e}`, 'err'));
+    }
+
+    function forceRegister() {
+      navigator.serviceWorker.register('/sw.js')
+        .then(reg => log(`SW registered: ${reg.scope}`))
+        .catch(err => log(`SW register failed: ${err}`, 'err'));
+    }
+
+    function clearAll() {
+      caches.keys().then(names => {
+        names.forEach(name => caches.delete(name));
+        log('All caches cleared');
+      });
+    }
+
+    // Auto-check on load
+    log('PWA Debug ready');
+    checkSW();
+    checkManifest();
+  </script>
+</body>
+</html>

@@ -48,7 +48,7 @@ export function DonghuaDetailContent({ slug, source }: DonghuaDetailContentProps
     setError(null);
     // Both s1 and s2 use the same VPS FastAPI endpoint now
     const endpoint = `/api/donghua/detail/${slug}`;
-    fetch(endpoint)
+    fetch(endpoint, { cache: "no-store" })
       .then((res) => {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         return res.json();
@@ -176,7 +176,7 @@ export function DonghuaDetailContent({ slug, source }: DonghuaDetailContentProps
         <div className="absolute inset-0 bg-gradient-to-t from-black via-black/70 to-black/30" />
       </div>
       <div className="container mx-auto -mt-32 px-4 pb-12 sm:-mt-40">
-        <button onClick={() => router.push("/donghua")} className="mb-4 flex items-center gap-2 text-sm text-white/60 hover:text-white"><ArrowLeft className="h-4 w-4" />Kembali ke Donghua</button>
+        <button onClick={() => router.back()} className="mb-4 flex items-center gap-2 text-sm text-white/60 hover:text-white"><ArrowLeft className="h-4 w-4" />Kembali</button>
 
         {/* Hero Section */}
         <div className="flex flex-col gap-6 sm:flex-row sm:items-end">

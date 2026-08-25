@@ -96,7 +96,7 @@ function getCacheTtl(endpoint: string): number {
 
 function buildCacheKey(endpoint: string): string {
   const normalized = endpoint.replace(/^\//, "").replace(/\?/g, "_").replace(/&/g, "_").replace(/=/g, "_").replace(/\//g, "_");
-  return `donghua_v3_${normalized}`;
+  return `donghua_v4_${normalized}`;
 }
 
 export async function fetchDonghuaAPI(endpoint: string, options: { forceRefresh?: boolean } = {}): Promise<any> {

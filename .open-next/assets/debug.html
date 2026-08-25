@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>CineStream Debug</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        body { font-family: monospace; padding: 20px; background: #111; color: #0f0; }
+        .box { background: #222; padding: 15px; margin: 10px 0; border-radius: 8px; word-wrap: break-word; }
+        .ok { color: #0f0; }
+        .err { color: #f00; }
+        h2 { color: #fff; }
+    </style>
+</head>
+<body>
+    <h1>🔍 CineStream Debug</h1>
+    
+    <div class="box">
+        <h2>1. Test Home API (Worker)</h2>
+        <div id="home-result">Testing...</div>
+    </div>
+
+    <div class="box">
+        <h2>2. Test Content Detail (VPS)</h2>
+        <div id="detail-result">Testing...</div>
+    </div>
+
+    <div class="box">
+        <h2>3. Test Stream Info (VPS)</h2>
+        <div id="stream-result">Testing...</div>
+    </div>
+
+    <div class="box">
+        <h2>4. Test Poster Image</h2>
+        <img id="poster-test" src="" style="max-width: 200px; display: block;" referrerPolicy="no-referrer">
+        <div id="poster-status">Loading...</div>
+    </div>
+
+    <script>
+        const VPS = 'https://api.cinestream.my.id';
+
+        async function testHome() {
+            try {
+                const res = await fetch('/api/home');
+                const data = await res.json();
+                const firstMovie = data.hero?.[0] || data.movies?.[0];
+                if (firstMovie && firstMovie.cinemacityId) {
+                    document.getElementById('home-result').innerHTML = 
+                        '<span class="ok">✓ OK</span><br>' +
+                        'Title: ' + firstMovie.title + '<br>' +
+                        'cinemacityId: ' + firstMovie.cinemacityId + '<br>' +
+                        'Poster: ' + firstMovie.poster;
+                    
+                    // Use this ID for next tests
+                    testDetail(firstMovie.cinemacityId);
+                    testStream(firstMovie.cinemacityId);
+                    testPoster(firstMovie.poster);
+                } else {
+                    document.getElementById('home-result').innerHTML = '<span class="err">✗ No cinemacityId found</span><br><pre>' + JSON.stringify(firstMovie, null, 2) + '</pre>';
+                }
+            } catch(e) {
+                document.getElementById('home-result').innerHTML = '<span class="err">✗ Error: ' + e.message + '</span>';
+            }
+        }
+
+        async function testDetail(id) {
+            try {
+                const res = await fetch(`${VPS}/api/content/${id}`);
+                const data = await res.json();
+                if (data.success && data.data) {
+                    document.getElementById('detail-result').innerHTML = 
+                        '<span class="ok">✓ OK</span><br>' +
+                        'Title: ' + data.data.title + '<br>' +
+                        'stream_data: ' + (data.data.stream_data ? 'YES (' + data.data.stream_data.length + ' items)' : 'NO');
+                } else {
+                    document.getElementById('detail-result').innerHTML = '<span class="err">✗ Failed</span><br><pre>' + JSON.stringify(data, null, 2).substring(0, 500) + '</pre>';
+                }
+            } catch(e) {
+                document.getElementById('detail-result').innerHTML = '<span class="err">✗ Error: ' + e.message + '</span>';
+            }
+        }
+
+        async function testStream(id) {
+            try {
+                const res = await fetch(`${VPS}/api/stream/info/${id}`);
+                const data = await res.json();
+                if (data.success && data.data) {
+                    document.getElementById('stream-result').innerHTML = 
+                        '<span class="ok">✓ OK</span><br>' +
+                        'stream_url: ' + data.data.stream_url + '<br>' +
+                        'episodes: ' + (data.data.episodes?.length || 0);
+                } else {
+                    document.getElementById('stream-result').innerHTML = '<span class="err">✗ Failed</span><br><pre>' + JSON.stringify(data, null, 2).substring(0, 500) + '</pre>';
+                }
+            } catch(e) {
+                document.getElementById('stream-result').innerHTML = '<span class="err">✗ Error: ' + e.message + '</span>';
+            }
+        }
+
+        function testPoster(url) {
+            const img = document.getElementById('poster-test');
+            const status = document.getElementById('poster-status');
+            img.onload = () => { status.innerHTML = '<span class="ok">✓ Poster loaded!</span>'; };
+            img.onerror = () => { status.innerHTML = '<span class="err">✗ Poster failed to load</span>'; };
+            img.src = url;
+        }
+
+        testHome();
+    </script>
+</body>
+</html>
