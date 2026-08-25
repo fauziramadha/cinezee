@@ -3729,11 +3729,6 @@
       "imports": [],
       "format": "cjs"
     },
-    ".open-next/server-functions/default/.next/server/app/api/notifications/route_client-reference-manifest.js": {
-      "bytes": 320,
-      "imports": [],
-      "format": "cjs"
-    },
     ".open-next/server-functions/default/.next/server/app/api/vps/[...path]/route_client-reference-manifest.js": {
       "bytes": 320,
       "imports": [],
@@ -3754,11 +3749,6 @@
       "imports": [],
       "format": "cjs"
     },
-    ".open-next/server-functions/default/.next/server/app/api/comic/terbaru/route_client-reference-manifest.js": {
-      "bytes": 320,
-      "imports": [],
-      "format": "cjs"
-    },
     ".open-next/server-functions/default/.next/server/app/api/comic/populer/route_client-reference-manifest.js": {
       "bytes": 320,
       "imports": [],
@@ -3769,12 +3759,22 @@
       "imports": [],
       "format": "cjs"
     },
+    ".open-next/server-functions/default/.next/server/app/api/notifications/route_client-reference-manifest.js": {
+      "bytes": 320,
+      "imports": [],
+      "format": "cjs"
+    },
     ".open-next/server-functions/default/.next/server/app/api/auth/register/route_client-reference-manifest.js": {
       "bytes": 320,
       "imports": [],
       "format": "cjs"
     },
     ".open-next/server-functions/default/.next/server/app/api/admin/curated/route_client-reference-manifest.js": {
+      "bytes": 320,
+      "imports": [],
+      "format": "cjs"
+    },
+    ".open-next/server-functions/default/.next/server/app/api/comic/terbaru/route_client-reference-manifest.js": {
       "bytes": 320,
       "imports": [],
       "format": "cjs"
@@ -4123,11 +4123,6 @@
           "original": "/home/z/my-project/cinezee-check/.open-next/server-functions/default/.next/server/app/api/admin/ads/[id]/route_client-reference-manifest.js"
         },
         {
-          "path": ".open-next/server-functions/default/.next/server/app/api/notifications/route_client-reference-manifest.js",
-          "kind": "require-call",
-          "original": "/home/z/my-project/cinezee-check/.open-next/server-functions/default/.next/server/app/api/notifications/route_client-reference-manifest.js"
-        },
-        {
           "path": ".open-next/server-functions/default/.next/server/app/api/vps/[...path]/route_client-reference-manifest.js",
           "kind": "require-call",
           "original": "/home/z/my-project/cinezee-check/.open-next/server-functions/default/.next/server/app/api/vps/[...path]/route_client-reference-manifest.js"
@@ -4148,11 +4143,6 @@
           "original": "/home/z/my-project/cinezee-check/.open-next/server-functions/default/.next/server/app/api/drakor/search/route_client-reference-manifest.js"
         },
         {
-          "path": ".open-next/server-functions/default/.next/server/app/api/comic/terbaru/route_client-reference-manifest.js",
-          "kind": "require-call",
-          "original": "/home/z/my-project/cinezee-check/.open-next/server-functions/default/.next/server/app/api/comic/terbaru/route_client-reference-manifest.js"
-        },
-        {
           "path": ".open-next/server-functions/default/.next/server/app/api/comic/populer/route_client-reference-manifest.js",
           "kind": "require-call",
           "original": "/home/z/my-project/cinezee-check/.open-next/server-functions/default/.next/server/app/api/comic/populer/route_client-reference-manifest.js"
@@ -4163,6 +4153,11 @@
           "original": "/home/z/my-project/cinezee-check/.open-next/server-functions/default/.next/server/app/api/comic/filters/route_client-reference-manifest.js"
         },
         {
+          "path": ".open-next/server-functions/default/.next/server/app/api/notifications/route_client-reference-manifest.js",
+          "kind": "require-call",
+          "original": "/home/z/my-project/cinezee-check/.open-next/server-functions/default/.next/server/app/api/notifications/route_client-reference-manifest.js"
+        },
+        {
           "path": ".open-next/server-functions/default/.next/server/app/api/auth/register/route_client-reference-manifest.js",
           "kind": "require-call",
           "original": "/home/z/my-project/cinezee-check/.open-next/server-functions/default/.next/server/app/api/auth/register/route_client-reference-manifest.js"
@@ -4171,6 +4166,11 @@
           "path": ".open-next/server-functions/default/.next/server/app/api/admin/curated/route_client-reference-manifest.js",
           "kind": "require-call",
           "original": "/home/z/my-project/cinezee-check/.open-next/server-functions/default/.next/server/app/api/admin/curated/route_client-reference-manifest.js"
+        },
+        {
+          "path": ".open-next/server-functions/default/.next/server/app/api/comic/terbaru/route_client-reference-manifest.js",
+          "kind": "require-call",
+          "original": "/home/z/my-project/cinezee-check/.open-next/server-functions/default/.next/server/app/api/comic/terbaru/route_client-reference-manifest.js"
         },
         {
           "path": ".open-next/server-functions/default/.next/server/app/api/user/profile/route_client-reference-manifest.js",
@@ -8024,7 +8024,7 @@
       "format": "cjs"
     },
     ".open-next/server-functions/default/.next/server/chunks/[root-of-the-server]__c1b42d56._.js": {
-      "bytes": 14009,
+      "bytes": 14110,
       "imports": [
         {
           "path": ".open-next/server-functions/default/node_modules/next/dist/compiled/next-server/app-page-turbo.runtime.prod.js",
@@ -19366,9 +19366,6 @@
         ".open-next/server-functions/default/.next/server/app/api/admin/ads/[id]/route_client-reference-manifest.js": {
           "bytesInOutput": 479
         },
-        ".open-next/server-functions/default/.next/server/app/api/notifications/route_client-reference-manifest.js": {
-          "bytesInOutput": 477
-        },
         ".open-next/server-functions/default/.next/server/app/api/vps/[...path]/route_client-reference-manifest.js": {
           "bytesInOutput": 477
         },
@@ -19381,19 +19378,22 @@
         ".open-next/server-functions/default/.next/server/app/api/drakor/search/route_client-reference-manifest.js": {
           "bytesInOutput": 477
         },
-        ".open-next/server-functions/default/.next/server/app/api/comic/terbaru/route_client-reference-manifest.js": {
-          "bytesInOutput": 477
-        },
         ".open-next/server-functions/default/.next/server/app/api/comic/populer/route_client-reference-manifest.js": {
           "bytesInOutput": 477
         },
         ".open-next/server-functions/default/.next/server/app/api/comic/filters/route_client-reference-manifest.js": {
           "bytesInOutput": 477
         },
+        ".open-next/server-functions/default/.next/server/app/api/notifications/route_client-reference-manifest.js": {
+          "bytesInOutput": 477
+        },
         ".open-next/server-functions/default/.next/server/app/api/auth/register/route_client-reference-manifest.js": {
           "bytesInOutput": 477
         },
         ".open-next/server-functions/default/.next/server/app/api/admin/curated/route_client-reference-manifest.js": {
+          "bytesInOutput": 477
+        },
+        ".open-next/server-functions/default/.next/server/app/api/comic/terbaru/route_client-reference-manifest.js": {
           "bytesInOutput": 477
         },
         ".open-next/server-functions/default/.next/server/app/api/user/profile/route_client-reference-manifest.js": {
@@ -20228,7 +20228,7 @@
           "bytesInOutput": 277
         },
         ".open-next/server-functions/default/.next/server/chunks/[root-of-the-server]__c1b42d56._.js": {
-          "bytesInOutput": 14319
+          "bytesInOutput": 14424
         },
         ".open-next/server-functions/default/.next/server/chunks/_next-internal_server_app_api_donghua_[___path]_route_actions_641bd2ed.js": {
           "bytesInOutput": 288
@@ -21299,7 +21299,7 @@
           "bytesInOutput": 77825
         }
       },
-      "bytes": 7770083
+      "bytes": 7770188
     }
   }
 }

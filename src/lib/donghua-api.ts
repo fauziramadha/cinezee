@@ -1,12 +1,30 @@
 import { getCloudflareContext } from "@opennextjs/cloudflare";
 
 // ============================================================
-// VPS FastAPI (Anichin scraper) — WARP-protected, hides VPS IP
-// Use HTTPS via api.cinestream.biz.id/anichin-api (port 443, works from CF Workers)
-// Direct IP:5001 gets 403 from CF Worker subrequests (port restriction)
+// VPS FastAPI (Anichin scraper) — Task 3 fix (2026-08-25)
+// ------------------------------------------------------------
+// BEFORE: API_BASE = https://api.cinestream.biz.id/anichin-api
+//   -> Cloudflare Worker -> CF Edge (api.cinestream.biz.id is CF-proxied)
+//   -> CF detects same-zone loop and returns HTTP 403 "error code: 1000".
+//
+// AFTER: API_BASE = http://45.32.100.252/anichin-api-internal
+//   -> Worker fetches the VPS DIRECTLY on port 80 (no Cloudflare in path).
+//   -> nginx requires the X-Internal-Auth header on /anichin-api-internal/
+//      and proxies to FastAPI /anichin-api/ (path rewrite).
+//   -> Bypasses the CF loop entirely. Authenticated by the secret header.
+//
+// To rotate the secret: change it in nginx /opt/cinestream/default.conf
+// (location /anichin-api-internal/) AND here (or set as CF Worker secret
+// DONGHUA_INTERNAL_AUTH in the Cloudflare dashboard).
 // ============================================================
+const VPS_IP = "45.32.100.252";
+const INTERNAL_AUTH_SECRET =
+  process.env.DONGHUA_INTERNAL_AUTH ||
+  "cs1-internal-cfworker-bypass-7f3a9b2e8c1d";
+
 const API_BASE =
-  process.env.DONGHUA_API_BASE || "https://api.cinestream.biz.id/anichin-api";
+  process.env.DONGHUA_API_BASE ||
+  `http://${VPS_IP}/anichin-api-internal`;
 
 const CACHE_TTL = {
   home: 30 * 60,
@@ -89,6 +107,7 @@ export async function fetchDonghuaAPI(endpoint: string, options: { forceRefresh?
       headers: {
         Accept: "application/json",
         "User-Agent": "Mozilla/5.0 (compatible; CineStream/1.0)",
+        "X-Internal-Auth": INTERNAL_AUTH_SECRET,
       },
     });
     if (!response.ok) throw new Error(`API responded with status ${response.status}`);
