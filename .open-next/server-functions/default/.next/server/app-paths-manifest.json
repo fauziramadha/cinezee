@@ -69,8 +69,6 @@
   "/api/debug-eps/route": "app/api/debug-eps/route.js",
   "/api/debug/route": "app/api/debug/route.js",
   "/api/donghua/[...path]/route": "app/api/donghua/[...path]/route.js",
-  "/api/donghua/donghua/detail/[slug]/route": "app/api/donghua/donghua/detail/[slug]/route.js",
-  "/api/donghua/donghua/episode/[slug]/route": "app/api/donghua/donghua/episode/[slug]/route.js",
   "/api/drakor/detail/[slug]/route": "app/api/drakor/detail/[slug]/route.js",
   "/api/drakor/kategori/[slug]/route": "app/api/drakor/kategori/[slug]/route.js",
   "/api/drakor/kategori/route": "app/api/drakor/kategori/route.js",

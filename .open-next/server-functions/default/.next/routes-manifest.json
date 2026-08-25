@@ -185,22 +185,6 @@
       "namedRegex": "^/api/comic/(?<nxtPpath>.+?)(?:/)?$"
     },
     {
-      "page": "/api/donghua/donghua/detail/[slug]",
-      "regex": "^/api/donghua/donghua/detail/([^/]+?)(?:/)?$",
-      "routeKeys": {
-        "nxtPslug": "nxtPslug"
-      },
-      "namedRegex": "^/api/donghua/donghua/detail/(?<nxtPslug>[^/]+?)(?:/)?$"
-    },
-    {
-      "page": "/api/donghua/donghua/episode/[slug]",
-      "regex": "^/api/donghua/donghua/episode/([^/]+?)(?:/)?$",
-      "routeKeys": {
-        "nxtPslug": "nxtPslug"
-      },
-      "namedRegex": "^/api/donghua/donghua/episode/(?<nxtPslug>[^/]+?)(?:/)?$"
-    },
-    {
       "page": "/api/donghua/[...path]",
       "regex": "^/api/donghua/(.+?)(?:/)?$",
       "routeKeys": {
