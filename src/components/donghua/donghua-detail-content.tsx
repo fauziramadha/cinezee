@@ -174,10 +174,16 @@ export function DonghuaDetailContent({ slug, source }: DonghuaDetailContentProps
       <div className="relative h-[40vh] min-h-[280px] w-full overflow-hidden bg-zinc-900 sm:h-[50vh]">
         {poster && <Image src={poster} alt={title} fill sizes="100vw" className="object-cover opacity-30 blur-sm scale-110" unoptimized priority />}
         <div className="absolute inset-0 bg-gradient-to-t from-black via-black/70 to-black/30" />
+        {/* Back button — positioned absolute on top of background image */}
+        <button
+          onClick={() => router.back()}
+          className="absolute left-4 top-20 z-20 flex items-center gap-2 rounded-full bg-black/60 px-4 py-2 text-sm font-medium text-white backdrop-blur-sm transition hover:bg-black/80"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          Kembali
+        </button>
       </div>
       <div className="container mx-auto -mt-32 px-4 pb-12 sm:-mt-40">
-        <button onClick={() => router.back()} className="mb-4 flex items-center gap-2 text-sm text-white/60 hover:text-white"><ArrowLeft className="h-4 w-4" />Kembali</button>
-
         {/* Hero Section */}
         <div className="flex flex-col gap-6 sm:flex-row sm:items-end">
           <div className="relative mx-auto aspect-[2/3] w-40 shrink-0 overflow-hidden rounded-lg bg-zinc-800 shadow-2xl sm:mx-0 sm:w-48 md:w-56">
