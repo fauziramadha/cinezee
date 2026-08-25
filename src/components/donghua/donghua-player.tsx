@@ -145,6 +145,10 @@ export function DonghuaPlayer({ animeId, episodeId, source }: DonghuaPlayerProps
   const title = episode?.title ? decodeHtmlEntities(episode.title) : "Episode";
 
   const getEpNum = (ep: any, idx: number): string => {
+    // Strategy 0: Use "number" field if present (from VPS FastAPI)
+    if (ep.number !== undefined && ep.number !== null && ep.number !== "") {
+      return String(ep.number);
+    }
     const rawValue = String(ep.episode || ep.title || ep.episode_name || "");
     const slugValue = String(ep.slug || "");
     const epMatch = rawValue.match(/episode\s+(\d+)/i);

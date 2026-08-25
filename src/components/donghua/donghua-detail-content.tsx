@@ -80,6 +80,7 @@ export function DonghuaDetailContent({ slug, source }: DonghuaDetailContentProps
             episodes_count: json.total_episodes || json.episodes_count || null,
             season: json.season || null,
             country: json.country || null,
+            subber: json.subber || null,
             updated_on: json.updated_on || null,
             batch_link: json.batch_link || null,
           };
@@ -111,8 +112,13 @@ export function DonghuaDetailContent({ slug, source }: DonghuaDetailContentProps
 
   // FIX: Extract episode number from string like:
   // "Little Fairy Yao Episode 40 Tamat Subtitle Indonesia"
-  // We use 3 strategies in order: pattern "Episode N", slug "episode-N", fallback any number
+  // We use 4 strategies: field "number", pattern "Episode N", slug "episode-N", fallback any number
   const getEpNum = (ep: any, idx: number): string => {
+    // Strategy 0: Use "number" field if present (from VPS FastAPI)
+    if (ep.number !== undefined && ep.number !== null && ep.number !== "") {
+      return String(ep.number);
+    }
+
     const rawValue = String(ep.episode || ep.title || ep.episode_name || "");
     const slugValue = String(ep.slug || "");
 
@@ -134,6 +140,11 @@ export function DonghuaDetailContent({ slug, source }: DonghuaDetailContentProps
 
   // Sort key: extract episode number for sorting (ascending)
   const getSortKey = (ep: any): number => {
+    if (ep.number !== undefined && ep.number !== null && ep.number !== "") {
+      const n = parseInt(ep.number, 10);
+      if (!isNaN(n)) return n;
+    }
+
     const rawValue = String(ep.episode || ep.title || "");
     const slugValue = String(ep.slug || "");
 
@@ -262,6 +273,7 @@ export function DonghuaDetailContent({ slug, source }: DonghuaDetailContentProps
                 {detail.network && <div className="flex justify-between gap-2"><dt className="text-muted-foreground">Network</dt><dd className="font-medium text-right">{detail.network}</dd></div>}
                 {detail.country && <div className="flex justify-between gap-2"><dt className="text-muted-foreground">Negara</dt><dd className="font-medium text-right">{detail.country}</dd></div>}
                 {detail.season && <div className="flex justify-between gap-2"><dt className="text-muted-foreground">Musim</dt><dd className="font-medium text-right">{detail.season}</dd></div>}
+                {detail.subber && <div className="flex justify-between gap-2"><dt className="text-muted-foreground">Subber</dt><dd className="font-medium text-right">{detail.subber}</dd></div>}
               </dl>
             </div>
           </div>

@@ -3734,12 +3734,12 @@
       "imports": [],
       "format": "cjs"
     },
-    ".open-next/server-functions/default/.next/server/app/api/user/language/route_client-reference-manifest.js": {
+    ".open-next/server-functions/default/.next/server/app/api/vps/[...path]/route_client-reference-manifest.js": {
       "bytes": 320,
       "imports": [],
       "format": "cjs"
     },
-    ".open-next/server-functions/default/.next/server/app/api/vps/[...path]/route_client-reference-manifest.js": {
+    ".open-next/server-functions/default/.next/server/app/api/user/language/route_client-reference-manifest.js": {
       "bytes": 320,
       "imports": [],
       "format": "cjs"
@@ -3895,7 +3895,7 @@
       "format": "cjs"
     },
     ".open-next/server-functions/default/node_modules/next/dist/server/load-manifest.external.js": {
-      "bytes": 551999,
+      "bytes": 552002,
       "imports": [
         {
           "path": "path",
@@ -4128,14 +4128,14 @@
           "original": "/home/z/my-project/cinezee-check/.open-next/server-functions/default/.next/server/app/api/notifications/route_client-reference-manifest.js"
         },
         {
-          "path": ".open-next/server-functions/default/.next/server/app/api/user/language/route_client-reference-manifest.js",
-          "kind": "require-call",
-          "original": "/home/z/my-project/cinezee-check/.open-next/server-functions/default/.next/server/app/api/user/language/route_client-reference-manifest.js"
-        },
-        {
           "path": ".open-next/server-functions/default/.next/server/app/api/vps/[...path]/route_client-reference-manifest.js",
           "kind": "require-call",
           "original": "/home/z/my-project/cinezee-check/.open-next/server-functions/default/.next/server/app/api/vps/[...path]/route_client-reference-manifest.js"
+        },
+        {
+          "path": ".open-next/server-functions/default/.next/server/app/api/user/language/route_client-reference-manifest.js",
+          "kind": "require-call",
+          "original": "/home/z/my-project/cinezee-check/.open-next/server-functions/default/.next/server/app/api/user/language/route_client-reference-manifest.js"
         },
         {
           "path": ".open-next/server-functions/default/.next/server/app/api/messages/[id]/route_client-reference-manifest.js",
@@ -9397,7 +9397,7 @@
       "format": "cjs"
     },
     ".open-next/server-functions/default/.next/server/chunks/ssr/src_components_donghua_donghua-detail-content_tsx_efd93501._.js": {
-      "bytes": 12240,
+      "bytes": 12664,
       "imports": [],
       "format": "cjs"
     },
@@ -9515,7 +9515,7 @@
       "format": "cjs"
     },
     ".open-next/server-functions/default/.next/server/chunks/ssr/_8a053ec5._.js": {
-      "bytes": 14686,
+      "bytes": 14763,
       "imports": [],
       "format": "cjs"
     },
@@ -17542,7 +17542,7 @@
       "format": "esm"
     },
     ".open-next/server-functions/default/index.mjs": {
-      "bytes": 106375,
+      "bytes": 106377,
       "imports": [
         {
           "path": "node:module",
@@ -19369,10 +19369,10 @@
         ".open-next/server-functions/default/.next/server/app/api/notifications/route_client-reference-manifest.js": {
           "bytesInOutput": 477
         },
-        ".open-next/server-functions/default/.next/server/app/api/user/language/route_client-reference-manifest.js": {
+        ".open-next/server-functions/default/.next/server/app/api/vps/[...path]/route_client-reference-manifest.js": {
           "bytesInOutput": 477
         },
-        ".open-next/server-functions/default/.next/server/app/api/vps/[...path]/route_client-reference-manifest.js": {
+        ".open-next/server-functions/default/.next/server/app/api/user/language/route_client-reference-manifest.js": {
           "bytesInOutput": 477
         },
         ".open-next/server-functions/default/.next/server/app/api/messages/[id]/route_client-reference-manifest.js": {
@@ -19466,7 +19466,7 @@
           "bytesInOutput": 449
         },
         ".open-next/server-functions/default/node_modules/next/dist/server/load-manifest.external.js": {
-          "bytesInOutput": 480279
+          "bytesInOutput": 480282
         },
         ".open-next/cloudflare-templates/shims/throw.js": {
           "bytesInOutput": 215
@@ -20492,7 +20492,7 @@
           "bytesInOutput": 281
         },
         ".open-next/server-functions/default/.next/server/chunks/ssr/src_components_donghua_donghua-detail-content_tsx_efd93501._.js": {
-          "bytesInOutput": 12528
+          "bytesInOutput": 12964
         },
         ".open-next/server-functions/default/.next/server/chunks/ssr/[root-of-the-server]__0b8c0fe1._.js": {
           "bytesInOutput": 1668
@@ -20534,7 +20534,7 @@
           "bytesInOutput": 17792
         },
         ".open-next/server-functions/default/.next/server/chunks/ssr/_8a053ec5._.js": {
-          "bytesInOutput": 14911
+          "bytesInOutput": 14992
         },
         ".open-next/server-functions/default/.next/server/chunks/ssr/_next-internal_server_app_donghua_s1_watch_[id]_[episode]_page_actions_23b487d7.js": {
           "bytesInOutput": 310
@@ -21296,10 +21296,10 @@
           "bytesInOutput": 8347
         },
         ".open-next/server-functions/default/index.mjs": {
-          "bytesInOutput": 77825
+          "bytesInOutput": 77827
         }
       },
-      "bytes": 7755427
+      "bytes": 7755949
     }
   }
 }
