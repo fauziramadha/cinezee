@@ -38,6 +38,19 @@ function decodeHtmlEntities(text: string): string {
   return decoded;
 }
 
+// Transform anichin.moe stream URL to VPS proxy URL to bypass 403/CSP
+// Input:  https://anichin.moe/stream/TOKEN
+// Output: https://api.cinestream.biz.id/anichin-api-internal/stream-proxy/TOKEN
+function toProxyUrl(url: string): string {
+  if (!url) return "";
+  const match = url.match(/anichin\.moe\/stream\/(.+)/);
+  if (match) {
+    const token = match[1];
+    return `https://api.cinestream.biz.id/anichin-api-internal/stream-proxy/${token}`;
+  }
+  return url;
+}
+
 export function DonghuaPlayer({ animeId, episodeId, source }: DonghuaPlayerProps) {
   const router = useRouter();
   const [episode, setEpisode] = useState<any>(null);
@@ -75,7 +88,7 @@ export function DonghuaPlayer({ animeId, episodeId, source }: DonghuaPlayerProps
         const rawStreams = Array.isArray(json.sources) ? json.sources : [];
         const normalizedStreams = rawStreams.map((s: any) => ({
           name: s.name || s.server || "Unknown",
-          url: s.url,
+          url: toProxyUrl(s.url),
         }));
         setStreams(normalizedStreams);
         if (normalizedStreams.length > 0) {
@@ -410,21 +423,19 @@ export function DonghuaPlayer({ animeId, episodeId, source }: DonghuaPlayerProps
                   <Server className="h-4 w-4 text-red-500" />
                   Pilih Server
                 </h3>
-                <div className="flex flex-wrap gap-2">
-                  {streams.map((s, idx) => (
-                    <button
-                      key={idx}
-                      onClick={() => handleStreamChange(idx)}
-                      className={cn(
-                        "rounded-md px-3 py-1.5 text-xs font-semibold transition",
-                        idx === selectedStreamIdx
-                          ? "bg-red-600 text-white"
-                          : "bg-white/10 text-white/70 hover:bg-white/20 hover:text-white"
-                      )}
-                    >
-                      {s.name}
-                    </button>
-                  ))}
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-white/60">Server:</span>
+                  <select
+                    value={selectedStreamIdx}
+                    onChange={(e) => handleStreamChange(parseInt(e.target.value, 10))}
+                    className="h-9 w-48 rounded-md border border-white/20 bg-black/60 px-3 text-xs font-semibold text-white outline-none transition focus:border-red-500"
+                  >
+                    {streams.map((s, idx) => (
+                      <option key={idx} value={idx} className="bg-zinc-900 text-white">
+                        {s.name}
+                      </option>
+                    ))}
+                  </select>
                 </div>
                 <p className="mt-2 text-[11px] text-white/40">
                   💡 Kalau video tidak muncul, coba server lain.
