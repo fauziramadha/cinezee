@@ -54,7 +54,7 @@ async function setCached(key: string, endpoint: string, data: any, ttl: number):
 }
 
 function getCacheTtl(endpoint: string): number {
-  if (endpoint === "/" || endpoint === "") return CACHE_TTL.home;
+  if (endpoint === "/" || endpoint === "" || endpoint === "/home") return CACHE_TTL.home;
   if (endpoint.includes("/ongoing")) return CACHE_TTL.ongoing;
   if (endpoint.includes("/completed")) return CACHE_TTL.completed;
   if (endpoint.includes("/latest")) return CACHE_TTL.latest;
@@ -106,7 +106,7 @@ export async function fetchDonghuaAPI(endpoint: string, options: { forceRefresh?
 // SERVER 1 (🐉 Anichin via VPS FastAPI) — query-param pagination
 // ============================================================
 export const s1 = {
-  getHome: () => fetchDonghuaAPI(`/`),
+  getHome: () => fetchDonghuaAPI(`/home`),
   getOngoing: (page = 1) => fetchDonghuaAPI(`/ongoing?page=${page}`),
   getCompleted: (page = 1) => fetchDonghuaAPI(`/completed?page=${page}`),
   getLatest: (page = 1) => fetchDonghuaAPI(`/latest?page=${page}`),

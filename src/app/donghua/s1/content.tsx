@@ -68,7 +68,7 @@ export function DonghuaS1Content() {
       try {
         // Fetch home (popular + latest + ongoing) and separate ongoing page
         const [homeRes, ongoingRes] = await Promise.all([
-          fetchJSON("/api/donghua/").catch((e) => {
+          fetchJSON("/api/donghua/home").catch((e) => {
             console.error("[Donghua] home error:", e);
             return null;
           }),
