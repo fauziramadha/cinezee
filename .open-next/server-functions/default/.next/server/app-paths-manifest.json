@@ -88,6 +88,8 @@
   "/api/ratings/route": "app/api/ratings/route.js",
   "/api/route": "app/api/route.js",
   "/api/stream/[...path]/route": "app/api/stream/[...path]/route.js",
+  "/api/stream/play/[id]/route": "app/api/stream/play/[id]/route.js",
+  "/api/stream/segment/route": "app/api/stream/segment/route.js",
   "/api/subtitle/manual/route": "app/api/subtitle/manual/route.js",
   "/api/user/[id]/badges/route": "app/api/user/[id]/badges/route.js",
   "/api/user/[id]/equip/route": "app/api/user/[id]/equip/route.js",

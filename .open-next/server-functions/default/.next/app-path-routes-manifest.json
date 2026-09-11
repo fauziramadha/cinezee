@@ -88,6 +88,8 @@
   "/api/ratings/route": "/api/ratings",
   "/api/route": "/api",
   "/api/stream/[...path]/route": "/api/stream/[...path]",
+  "/api/stream/play/[id]/route": "/api/stream/play/[id]",
+  "/api/stream/segment/route": "/api/stream/segment",
   "/api/subtitle/manual/route": "/api/subtitle/manual",
   "/api/user/[id]/badges/route": "/api/user/[id]/badges",
   "/api/user/[id]/equip/route": "/api/user/[id]/equip",

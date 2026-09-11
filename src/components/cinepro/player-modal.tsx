@@ -761,7 +761,7 @@ export function PlayerModal() {
       params.set("server", currentServer);
     }
 
-    return `${VPS_API_BASE}/api/stream/play/${cinemacityData.cinemacity_id}?${params.toString()}`;
+    return `/api/stream/play/${cinemacityData.cinemacity_id}?${params.toString()}`;
   }, [cinemacityData, streamInfo, currentSeason, currentEpisode, currentServer]);
 
   const handleSwitchingChange = useCallback((isSwitching: boolean) => {

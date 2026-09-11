@@ -225,6 +225,14 @@
       "namedRegex": "^/api/messages/(?<nxtPid>[^/]+?)(?:/)?$"
     },
     {
+      "page": "/api/stream/play/[id]",
+      "regex": "^/api/stream/play/([^/]+?)(?:/)?$",
+      "routeKeys": {
+        "nxtPid": "nxtPid"
+      },
+      "namedRegex": "^/api/stream/play/(?<nxtPid>[^/]+?)(?:/)?$"
+    },
+    {
       "page": "/api/stream/[...path]",
       "regex": "^/api/stream/(.+?)(?:/)?$",
       "routeKeys": {
@@ -789,6 +797,12 @@
       "regex": "^/api/ratings(?:/)?$",
       "routeKeys": {},
       "namedRegex": "^/api/ratings(?:/)?$"
+    },
+    {
+      "page": "/api/stream/segment",
+      "regex": "^/api/stream/segment(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/stream/segment(?:/)?$"
     },
     {
       "page": "/api/subtitle/manual",
