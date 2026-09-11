@@ -6,7 +6,7 @@ const nextConfig: NextConfig = {
     ignoreBuildErrors: true,
   },
   reactStrictMode: false,
-  generateBuildId: () => 'cinestream-v16-' + Date.now().toString(),
+  generateBuildId: () => 'cinestream-v18-' + Date.now().toString(),
   images: {
     unoptimized: true,
     remotePatterns: [
