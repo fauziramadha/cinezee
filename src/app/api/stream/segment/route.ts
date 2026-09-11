@@ -1,85 +1,62 @@
 import { NextRequest, NextResponse } from "next/server";
 
-const ALLOWED_DOMAINS = ["s1.cccdn.net", "s2.cccdn.net", "s3.cccdn.net", "cinemacity.cc", "api.cinestream.biz.id"];
-const DEFAULT_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
 const VPS_BASE = "https://api.cinestream.biz.id";
 const INTERNAL_AUTH_SECRET = "cs1-internal-cfworker-bypass-7f3a9b2e8c1d";
+const DEFAULT_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
 
 export async function GET(request: NextRequest) {
   const url = new URL(request.url);
   const encodedParam = url.searchParams.get("p");
   if (!encodedParam) return NextResponse.json({ error: "Missing 'p' parameter" }, { status: 400 });
 
-  // Decode base64 parameter
-  let decodedUrl: string;
-  try { decodedUrl = Buffer.from(encodedParam, "base64").toString("utf-8"); }
-  catch { return NextResponse.json({ error: "Invalid base64 parameter" }, { status: 400 }); }
-
   // The decoded URL is a VPS internal proxy path like:
   // /proxy/hls/manifest.m3u8?hls_url_id=u_BASE64&...&orig_url=https://s1.cccdn.net/...
-  // We need to extract the orig_url and fetch directly from CDN
+  // We need to proxy back to VPS /api/stream/segment which handles CDN auth
 
-  let streamUrl: string;
-
-  // Check if there's an orig_url parameter (the actual CDN URL)
-  try {
-    const urlObj = new URL(decodedUrl.startsWith("/") ? `${VPS_BASE}${decodedUrl}` : decodedUrl);
-    const origUrl = urlObj.searchParams.get("orig_url");
-    if (origUrl) {
-      // Use the orig_url directly (this is the CDN URL)
-      streamUrl = origUrl;
-    } else if (decodedUrl.startsWith("/")) {
-      // Relative URL without orig_url — use VPS proxy
-      streamUrl = `${VPS_BASE}${decodedUrl}`;
-    } else if (decodedUrl.startsWith("http")) {
-      streamUrl = decodedUrl;
-    } else {
-      return NextResponse.json({ error: "Invalid stream URL format" }, { status: 400 });
-    }
-  } catch {
-    if (decodedUrl.startsWith("http")) {
-      streamUrl = decodedUrl;
-    } else {
-      return NextResponse.json({ error: "Invalid stream URL" }, { status: 400 });
-    }
-  }
-
-  // Parse the URL
-  let parsedUrl: URL;
-  try { parsedUrl = new URL(streamUrl); }
-  catch { return NextResponse.json({ error: "Invalid stream URL" }, { status: 400 }); }
-
-  // Check domain whitelist
-  const isAllowed = ALLOWED_DOMAINS.some((d) => parsedUrl.hostname === d || parsedUrl.hostname.endsWith(`.${d}`));
-  if (!isAllowed) return NextResponse.json({ error: `Domain not allowed: ${parsedUrl.hostname}` }, { status: 403 });
+  // Build the VPS segment URL
+  const vpsSegmentUrl = `${VPS_BASE}/api/stream/segment?p=${encodedParam}`;
 
   // Build fetch headers
   const fetchHeaders: Record<string, string> = {
-    "User-Agent": DEFAULT_UA, "Accept": "*/*", "Accept-Language": "en-US,en;q=0.9",
-    "Referer": "https://cinemacity.cc/", "Origin": "https://cinemacity.cc",
+    "User-Agent": DEFAULT_UA,
+    "Accept": "*/*",
+    "Accept-Language": "en-US,en;q=0.9",
+    "X-Internal-Auth": INTERNAL_AUTH_SECRET,
   };
-  // Add auth header for VPS requests
-  if (parsedUrl.hostname === "api.cinestream.biz.id") {
-    fetchHeaders["X-Internal-Auth"] = INTERNAL_AUTH_SECRET;
-  }
 
   const rangeHeader = request.headers.get("range");
   if (rangeHeader) fetchHeaders["Range"] = rangeHeader;
 
-  // Fetch
+  // Fetch from VPS
   let upstreamResponse: Response;
-  try { upstreamResponse = await fetch(streamUrl, { headers: fetchHeaders, redirect: "follow" }); }
-  catch (error) { console.error("[Stream Segment] Fetch error:", error); return NextResponse.json({ error: "Failed to fetch segment" }, { status: 502 }); }
+  try {
+    upstreamResponse = await fetch(vpsSegmentUrl, { headers: fetchHeaders, redirect: "follow" });
+  } catch (error) {
+    console.error("[Stream Segment] Fetch error:", error);
+    return NextResponse.json({ error: "Failed to fetch segment" }, { status: 502 });
+  }
+
+  if (!upstreamResponse.ok) {
+    const errorText = await upstreamResponse.text().catch(() => "");
+    console.error(`[Stream Segment] VPS returned ${upstreamResponse.status}: ${errorText.substring(0, 200)}`);
+    return NextResponse.json(
+      { error: `VPS returned ${upstreamResponse.status}` },
+      { status: upstreamResponse.status }
+    );
+  }
 
   // Build response headers
   const responseHeaders = new Headers();
-  if (streamUrl.includes(".vtt")) responseHeaders.set("Content-Type", "text/vtt; charset=utf-8");
-  else if (streamUrl.includes(".m3u8")) responseHeaders.set("Content-Type", "application/vnd.apple.mpegurl");
-  else if (streamUrl.includes(".mp4") || streamUrl.includes(".ts")) responseHeaders.set("Content-Type", "video/mp2t");
-  else { const ct = upstreamResponse.headers.get("content-type"); responseHeaders.set("Content-Type", ct || "application/octet-stream"); }
+  const ct = upstreamResponse.headers.get("content-type");
+  if (ct) responseHeaders.set("Content-Type", ct);
+  else responseHeaders.set("Content-Type", "application/octet-stream");
 
-  const cl = upstreamResponse.headers.get("content-length"); if (cl) responseHeaders.set("Content-Length", cl);
-  const cr = upstreamResponse.headers.get("content-range"); if (cr) responseHeaders.set("Content-Range", cr);
+  const cl = upstreamResponse.headers.get("content-length");
+  if (cl) responseHeaders.set("Content-Length", cl);
+
+  const cr = upstreamResponse.headers.get("content-range");
+  if (cr) responseHeaders.set("Content-Range", cr);
+
   responseHeaders.set("Accept-Ranges", "bytes");
   responseHeaders.set("Access-Control-Allow-Origin", "*");
   responseHeaders.set("Access-Control-Allow-Methods", "GET, HEAD, OPTIONS");
@@ -87,38 +64,29 @@ export async function GET(request: NextRequest) {
   responseHeaders.set("Access-Control-Expose-Headers", "Content-Range, Content-Length");
   responseHeaders.set("Cache-Control", "public, max-age=86400");
 
-  // For M3U8 responses, read text and rewrite segment URLs
-  if (streamUrl.includes(".m3u8")) {
+  // For M3U8 responses, read text and rewrite URLs
+  const contentType = ct || "";
+  if (contentType.includes("mpegurl") || contentType.includes("m3u8")) {
     const text = await upstreamResponse.text();
-    // The CDN M3U8 may contain relative segment URLs — rewrite them to absolute
-    // CDN returns: index-f4-v1-a1.m3u8 → https://s1.cccdn.net/.../index-f4-v1-a1.m3u8
-    let rewritten = text;
-    // If the M3U8 has relative URLs, prefix with CDN base
-    const baseUrl = streamUrl.substring(0, streamUrl.lastIndexOf("/") + 1);
-    // Rewrite relative .m3u8 and .ts URLs to absolute
-    rewritten = rewritten.replace(/^([^#].*)$/gm, (line) => {
-      if (line.startsWith("http")) return line;
-      if (line.startsWith("/")) return `${parsedUrl.origin}${line}`;
-      return `${baseUrl}${line}`;
-    });
-
-    // Now rewrite absolute CDN URLs to our segment proxy
-    // Encode the absolute URL as base64 and route through /api/stream/segment
-    rewritten = rewritten.replace(/^https?:\/\/[^/]+\/.*$/gm, (line) => {
-      if (line.startsWith("#")) return line;
-      const encoded = Buffer.from(line).toString("base64");
-      return `/api/stream/segment?p=${encoded}`;
-    });
-
+    // Rewrite absolute VPS segment URLs to our Worker segment route
+    let rewritten = text.replace(
+      /https?:\/\/[^/]+\/api\/stream\/segment\?p=([^&\s"\\]+)/g,
+      "/api/stream/segment?p=$1"
+    );
     return new NextResponse(rewritten, { status: 200, headers: responseHeaders });
   }
 
-  return new NextResponse(upstreamResponse.body, { status: upstreamResponse.status, headers: responseHeaders });
+  return new NextResponse(upstreamResponse.body, {
+    status: upstreamResponse.status,
+    headers: responseHeaders,
+  });
 }
 
 export async function OPTIONS() {
   return new NextResponse(null, { status: 204, headers: {
-    "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Methods": "GET, HEAD, OPTIONS",
-    "Access-Control-Allow-Headers": "Range, Content-Type", "Access-Control-Max-Age": "86400",
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "GET, HEAD, OPTIONS",
+    "Access-Control-Allow-Headers": "Range, Content-Type",
+    "Access-Control-Max-Age": "86400",
   }});
 }
