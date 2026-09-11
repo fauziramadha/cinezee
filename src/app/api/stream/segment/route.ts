@@ -15,14 +15,33 @@ export async function GET(request: NextRequest) {
   try { decodedUrl = Buffer.from(encodedParam, "base64").toString("utf-8"); }
   catch { return NextResponse.json({ error: "Invalid base64 parameter" }, { status: 400 }); }
 
-  // If decoded URL is relative (starts with /), prefix with VPS base URL
+  // The decoded URL is a VPS internal proxy path like:
+  // /proxy/hls/manifest.m3u8?hls_url_id=u_BASE64&...&orig_url=https://s1.cccdn.net/...
+  // We need to extract the orig_url and fetch directly from CDN
+
   let streamUrl: string;
-  if (decodedUrl.startsWith("/")) {
-    streamUrl = `${VPS_BASE}${decodedUrl}`;
-  } else if (decodedUrl.startsWith("http")) {
-    streamUrl = decodedUrl;
-  } else {
-    return NextResponse.json({ error: "Invalid stream URL format" }, { status: 400 });
+
+  // Check if there's an orig_url parameter (the actual CDN URL)
+  try {
+    const urlObj = new URL(decodedUrl.startsWith("/") ? `${VPS_BASE}${decodedUrl}` : decodedUrl);
+    const origUrl = urlObj.searchParams.get("orig_url");
+    if (origUrl) {
+      // Use the orig_url directly (this is the CDN URL)
+      streamUrl = origUrl;
+    } else if (decodedUrl.startsWith("/")) {
+      // Relative URL without orig_url — use VPS proxy
+      streamUrl = `${VPS_BASE}${decodedUrl}`;
+    } else if (decodedUrl.startsWith("http")) {
+      streamUrl = decodedUrl;
+    } else {
+      return NextResponse.json({ error: "Invalid stream URL format" }, { status: 400 });
+    }
+  } catch {
+    if (decodedUrl.startsWith("http")) {
+      streamUrl = decodedUrl;
+    } else {
+      return NextResponse.json({ error: "Invalid stream URL" }, { status: 400 });
+    }
   }
 
   // Parse the URL
@@ -68,10 +87,30 @@ export async function GET(request: NextRequest) {
   responseHeaders.set("Access-Control-Expose-Headers", "Content-Range, Content-Length");
   responseHeaders.set("Cache-Control", "public, max-age=86400");
 
-  // For M3U8 responses, read text and pass through
+  // For M3U8 responses, read text and rewrite segment URLs
   if (streamUrl.includes(".m3u8")) {
     const text = await upstreamResponse.text();
-    return new NextResponse(text, { status: 200, headers: responseHeaders });
+    // The CDN M3U8 may contain relative segment URLs — rewrite them to absolute
+    // CDN returns: index-f4-v1-a1.m3u8 → https://s1.cccdn.net/.../index-f4-v1-a1.m3u8
+    let rewritten = text;
+    // If the M3U8 has relative URLs, prefix with CDN base
+    const baseUrl = streamUrl.substring(0, streamUrl.lastIndexOf("/") + 1);
+    // Rewrite relative .m3u8 and .ts URLs to absolute
+    rewritten = rewritten.replace(/^([^#].*)$/gm, (line) => {
+      if (line.startsWith("http")) return line;
+      if (line.startsWith("/")) return `${parsedUrl.origin}${line}`;
+      return `${baseUrl}${line}`;
+    });
+
+    // Now rewrite absolute CDN URLs to our segment proxy
+    // Encode the absolute URL as base64 and route through /api/stream/segment
+    rewritten = rewritten.replace(/^https?:\/\/[^/]+\/.*$/gm, (line) => {
+      if (line.startsWith("#")) return line;
+      const encoded = Buffer.from(line).toString("base64");
+      return `/api/stream/segment?p=${encoded}`;
+    });
+
+    return new NextResponse(rewritten, { status: 200, headers: responseHeaders });
   }
 
   return new NextResponse(upstreamResponse.body, { status: upstreamResponse.status, headers: responseHeaders });

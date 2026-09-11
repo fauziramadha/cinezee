@@ -3594,17 +3594,17 @@
       "imports": [],
       "format": "cjs"
     },
-    ".open-next/server-functions/default/.next/server/app/api/indocast/[...path]/route_client-reference-manifest.js": {
-      "bytes": 325,
-      "imports": [],
-      "format": "cjs"
-    },
     ".open-next/server-functions/default/.next/server/app/api/cron/check-updates/route_client-reference-manifest.js": {
       "bytes": 325,
       "imports": [],
       "format": "cjs"
     },
     ".open-next/server-functions/default/.next/server/app/api/auth/[...nextauth]/route_client-reference-manifest.js": {
+      "bytes": 325,
+      "imports": [],
+      "format": "cjs"
+    },
+    ".open-next/server-functions/default/.next/server/app/api/indocast/[...path]/route_client-reference-manifest.js": {
       "bytes": 325,
       "imports": [],
       "format": "cjs"
@@ -3998,11 +3998,6 @@
           "original": "/home/z/my-project/cinezee-check/.open-next/server-functions/default/.next/server/app/api/admin/messages/[id]/route_client-reference-manifest.js"
         },
         {
-          "path": ".open-next/server-functions/default/.next/server/app/api/indocast/[...path]/route_client-reference-manifest.js",
-          "kind": "require-call",
-          "original": "/home/z/my-project/cinezee-check/.open-next/server-functions/default/.next/server/app/api/indocast/[...path]/route_client-reference-manifest.js"
-        },
-        {
           "path": ".open-next/server-functions/default/.next/server/app/api/cron/check-updates/route_client-reference-manifest.js",
           "kind": "require-call",
           "original": "/home/z/my-project/cinezee-check/.open-next/server-functions/default/.next/server/app/api/cron/check-updates/route_client-reference-manifest.js"
@@ -4011,6 +4006,11 @@
           "path": ".open-next/server-functions/default/.next/server/app/api/auth/[...nextauth]/route_client-reference-manifest.js",
           "kind": "require-call",
           "original": "/home/z/my-project/cinezee-check/.open-next/server-functions/default/.next/server/app/api/auth/[...nextauth]/route_client-reference-manifest.js"
+        },
+        {
+          "path": ".open-next/server-functions/default/.next/server/app/api/indocast/[...path]/route_client-reference-manifest.js",
+          "kind": "require-call",
+          "original": "/home/z/my-project/cinezee-check/.open-next/server-functions/default/.next/server/app/api/indocast/[...path]/route_client-reference-manifest.js"
         },
         {
           "path": ".open-next/server-functions/default/.next/server/app/api/admin/curated/[id]/route_client-reference-manifest.js",
@@ -8905,7 +8905,7 @@
       "format": "cjs"
     },
     ".open-next/server-functions/default/.next/server/chunks/[root-of-the-server]__097eff6c._.js": {
-      "bytes": 9648,
+      "bytes": 10145,
       "imports": [
         {
           "path": ".open-next/server-functions/default/node_modules/next/dist/shared/lib/no-fallback-error.external.js",
@@ -19474,13 +19474,13 @@
         ".open-next/server-functions/default/.next/server/app/api/admin/messages/[id]/route_client-reference-manifest.js": {
           "bytesInOutput": 489
         },
-        ".open-next/server-functions/default/.next/server/app/api/indocast/[...path]/route_client-reference-manifest.js": {
-          "bytesInOutput": 487
-        },
         ".open-next/server-functions/default/.next/server/app/api/cron/check-updates/route_client-reference-manifest.js": {
           "bytesInOutput": 487
         },
         ".open-next/server-functions/default/.next/server/app/api/auth/[...nextauth]/route_client-reference-manifest.js": {
+          "bytesInOutput": 487
+        },
+        ".open-next/server-functions/default/.next/server/app/api/indocast/[...path]/route_client-reference-manifest.js": {
           "bytesInOutput": 487
         },
         ".open-next/server-functions/default/.next/server/app/api/admin/curated/[id]/route_client-reference-manifest.js": {
@@ -20549,7 +20549,7 @@
           "bytesInOutput": 289
         },
         ".open-next/server-functions/default/.next/server/chunks/[root-of-the-server]__097eff6c._.js": {
-          "bytesInOutput": 9799
+          "bytesInOutput": 10301
         },
         ".open-next/server-functions/default/.next/server/chunks/_next-internal_server_app_api_stream_segment_route_actions_6c39138a.js": {
           "bytesInOutput": 287
@@ -21515,7 +21515,7 @@
           "bytesInOutput": 78207
         }
       },
-      "bytes": 7780885
+      "bytes": 7781387
     }
   }
 }
