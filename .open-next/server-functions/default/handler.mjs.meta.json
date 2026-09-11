@@ -3569,6 +3569,11 @@
       "imports": [],
       "format": "cjs"
     },
+    ".open-next/server-functions/default/.next/server/app/api/stream/seg/[...path]/route_client-reference-manifest.js": {
+      "bytes": 327,
+      "imports": [],
+      "format": "cjs"
+    },
     ".open-next/server-functions/default/.next/server/app/api/drakor/detail/[slug]/route_client-reference-manifest.js": {
       "bytes": 327,
       "imports": [],
@@ -3905,7 +3910,7 @@
       "format": "cjs"
     },
     ".open-next/server-functions/default/node_modules/next/dist/server/load-manifest.external.js": {
-      "bytes": 553493,
+      "bytes": 554269,
       "imports": [
         {
           "path": "path",
@@ -3971,6 +3976,11 @@
           "path": ".open-next/server-functions/default/.next/server/app/api/cron/refresh-cookies/route_client-reference-manifest.js",
           "kind": "require-call",
           "original": "/home/z/my-project/cinezee-check/.open-next/server-functions/default/.next/server/app/api/cron/refresh-cookies/route_client-reference-manifest.js"
+        },
+        {
+          "path": ".open-next/server-functions/default/.next/server/app/api/stream/seg/[...path]/route_client-reference-manifest.js",
+          "kind": "require-call",
+          "original": "/home/z/my-project/cinezee-check/.open-next/server-functions/default/.next/server/app/api/stream/seg/[...path]/route_client-reference-manifest.js"
         },
         {
           "path": ".open-next/server-functions/default/.next/server/app/api/drakor/detail/[slug]/route_client-reference-manifest.js",
@@ -8904,6 +8914,47 @@
       "imports": [],
       "format": "cjs"
     },
+    ".open-next/server-functions/default/.next/server/chunks/[root-of-the-server]__f3567771._.js": {
+      "bytes": 8552,
+      "imports": [
+        {
+          "path": ".open-next/server-functions/default/node_modules/next/dist/shared/lib/no-fallback-error.external.js",
+          "kind": "require-call",
+          "original": "next/dist/shared/lib/no-fallback-error.external.js"
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/next/dist/compiled/next-server/app-page-turbo.runtime.prod.js",
+          "kind": "require-call",
+          "original": "next/dist/compiled/next-server/app-page-turbo.runtime.prod.js"
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/next/dist/server/app-render/work-async-storage.external.js",
+          "kind": "require-call",
+          "original": "next/dist/server/app-render/work-async-storage.external.js"
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/next/dist/server/app-render/work-unit-async-storage.external.js",
+          "kind": "require-call",
+          "original": "next/dist/server/app-render/work-unit-async-storage.external.js"
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/next/dist/server/app-render/after-task-async-storage.external.js",
+          "kind": "require-call",
+          "original": "next/dist/server/app-render/after-task-async-storage.external.js"
+        },
+        {
+          "path": ".open-next/server-functions/default/node_modules/next/dist/compiled/@opentelemetry/api/index.js",
+          "kind": "require-call",
+          "original": "next/dist/compiled/@opentelemetry/api"
+        }
+      ],
+      "format": "cjs"
+    },
+    ".open-next/server-functions/default/.next/server/chunks/_next-internal_server_app_api_stream_seg_[___path]_route_actions_eb9de533.js": {
+      "bytes": 142,
+      "imports": [],
+      "format": "cjs"
+    },
     ".open-next/server-functions/default/.next/server/chunks/[root-of-the-server]__097eff6c._.js": {
       "bytes": 9079,
       "imports": [
@@ -10230,7 +10281,7 @@
       "format": "cjs"
     },
     ".open-next/server-functions/default/.next/server/chunks/ssr/[turbopack]_runtime.js": {
-      "bytes": 124465,
+      "bytes": 124963,
       "imports": [
         {
           "path": ".open-next/cloudflare-templates/shims/throw.js",
@@ -11631,6 +11682,16 @@
           "path": ".open-next/server-functions/default/.next/server/chunks/_next-internal_server_app_api_stream_play_[id]_route_actions_892d9495.js",
           "kind": "require-call",
           "original": "/home/z/my-project/cinezee-check/.open-next/server-functions/default/.next/server/chunks/_next-internal_server_app_api_stream_play_[id]_route_actions_892d9495.js"
+        },
+        {
+          "path": ".open-next/server-functions/default/.next/server/chunks/[root-of-the-server]__f3567771._.js",
+          "kind": "require-call",
+          "original": "/home/z/my-project/cinezee-check/.open-next/server-functions/default/.next/server/chunks/[root-of-the-server]__f3567771._.js"
+        },
+        {
+          "path": ".open-next/server-functions/default/.next/server/chunks/_next-internal_server_app_api_stream_seg_[___path]_route_actions_eb9de533.js",
+          "kind": "require-call",
+          "original": "/home/z/my-project/cinezee-check/.open-next/server-functions/default/.next/server/chunks/_next-internal_server_app_api_stream_seg_[___path]_route_actions_eb9de533.js"
         },
         {
           "path": ".open-next/server-functions/default/.next/server/chunks/[root-of-the-server]__097eff6c._.js",
@@ -12346,7 +12407,7 @@
       "format": "cjs"
     },
     ".open-next/server-functions/default/.next/server/chunks/[turbopack]_runtime.js": {
-      "bytes": 124455,
+      "bytes": 124953,
       "imports": [
         {
           "path": ".open-next/cloudflare-templates/shims/throw.js",
@@ -13747,6 +13808,16 @@
           "path": ".open-next/server-functions/default/.next/server/chunks/_next-internal_server_app_api_stream_play_[id]_route_actions_892d9495.js",
           "kind": "require-call",
           "original": "/home/z/my-project/cinezee-check/.open-next/server-functions/default/.next/server/chunks/_next-internal_server_app_api_stream_play_[id]_route_actions_892d9495.js"
+        },
+        {
+          "path": ".open-next/server-functions/default/.next/server/chunks/[root-of-the-server]__f3567771._.js",
+          "kind": "require-call",
+          "original": "/home/z/my-project/cinezee-check/.open-next/server-functions/default/.next/server/chunks/[root-of-the-server]__f3567771._.js"
+        },
+        {
+          "path": ".open-next/server-functions/default/.next/server/chunks/_next-internal_server_app_api_stream_seg_[___path]_route_actions_eb9de533.js",
+          "kind": "require-call",
+          "original": "/home/z/my-project/cinezee-check/.open-next/server-functions/default/.next/server/chunks/_next-internal_server_app_api_stream_seg_[___path]_route_actions_eb9de533.js"
         },
         {
           "path": ".open-next/server-functions/default/.next/server/chunks/[root-of-the-server]__097eff6c._.js",
@@ -14638,6 +14709,17 @@
       "format": "cjs"
     },
     ".open-next/server-functions/default/.next/server/app/api/drakor/detail/[slug]/route.js": {
+      "bytes": 478,
+      "imports": [
+        {
+          "path": ".open-next/server-functions/default/.next/server/chunks/[turbopack]_runtime.js",
+          "kind": "require-call",
+          "original": "../../../../../chunks/[turbopack]_runtime.js"
+        }
+      ],
+      "format": "cjs"
+    },
+    ".open-next/server-functions/default/.next/server/app/api/stream/seg/[...path]/route.js": {
       "bytes": 478,
       "imports": [
         {
@@ -15881,7 +15963,7 @@
       "format": "cjs"
     },
     ".open-next/server-functions/default/node_modules/next/dist/server/require.js": {
-      "bytes": 33520,
+      "bytes": 33763,
       "imports": [
         {
           "path": "path",
@@ -16012,6 +16094,11 @@
           "path": ".open-next/server-functions/default/.next/server/app/api/drakor/detail/[slug]/route.js",
           "kind": "require-call",
           "original": "/home/z/my-project/cinezee-check/.open-next/server-functions/default/.next/server/app/api/drakor/detail/[slug]/route.js"
+        },
+        {
+          "path": ".open-next/server-functions/default/.next/server/app/api/stream/seg/[...path]/route.js",
+          "kind": "require-call",
+          "original": "/home/z/my-project/cinezee-check/.open-next/server-functions/default/.next/server/app/api/stream/seg/[...path]/route.js"
         },
         {
           "path": ".open-next/server-functions/default/.next/server/app/api/admin/messages/[id]/route.js",
@@ -17731,7 +17818,7 @@
       "format": "esm"
     },
     ".open-next/server-functions/default/index.mjs": {
-      "bytes": 106802,
+      "bytes": 107048,
       "imports": [
         {
           "path": "node:module",
@@ -19459,6 +19546,9 @@
         ".open-next/server-functions/default/.next/server/app/api/cron/refresh-cookies/route_client-reference-manifest.js": {
           "bytesInOutput": 490
         },
+        ".open-next/server-functions/default/.next/server/app/api/stream/seg/[...path]/route_client-reference-manifest.js": {
+          "bytesInOutput": 491
+        },
         ".open-next/server-functions/default/.next/server/app/api/drakor/detail/[slug]/route_client-reference-manifest.js": {
           "bytesInOutput": 491
         },
@@ -19661,7 +19751,7 @@
           "bytesInOutput": 449
         },
         ".open-next/server-functions/default/node_modules/next/dist/server/load-manifest.external.js": {
-          "bytesInOutput": 481354
+          "bytesInOutput": 481906
         },
         ".open-next/cloudflare-templates/shims/throw.js": {
           "bytesInOutput": 215
@@ -20548,6 +20638,12 @@
         ".open-next/server-functions/default/.next/server/chunks/_next-internal_server_app_api_stream_play_[id]_route_actions_892d9495.js": {
           "bytesInOutput": 289
         },
+        ".open-next/server-functions/default/.next/server/chunks/[root-of-the-server]__f3567771._.js": {
+          "bytesInOutput": 8673
+        },
+        ".open-next/server-functions/default/.next/server/chunks/_next-internal_server_app_api_stream_seg_[___path]_route_actions_eb9de533.js": {
+          "bytesInOutput": 294
+        },
         ".open-next/server-functions/default/.next/server/chunks/[root-of-the-server]__097eff6c._.js": {
           "bytesInOutput": 9210
         },
@@ -20972,10 +21068,10 @@
           "bytesInOutput": 271
         },
         ".open-next/server-functions/default/.next/server/chunks/ssr/[turbopack]_runtime.js": {
-          "bytesInOutput": 64226
+          "bytesInOutput": 64509
         },
         ".open-next/server-functions/default/.next/server/chunks/[turbopack]_runtime.js": {
-          "bytesInOutput": 64213
+          "bytesInOutput": 64496
         },
         ".open-next/server-functions/default/.next/server/app/api/admin/cinemacity-cookies/[id]/route.js": {
           "bytesInOutput": 618
@@ -21026,6 +21122,9 @@
           "bytesInOutput": 604
         },
         ".open-next/server-functions/default/.next/server/app/api/drakor/detail/[slug]/route.js": {
+          "bytesInOutput": 604
+        },
+        ".open-next/server-functions/default/.next/server/app/api/stream/seg/[...path]/route.js": {
           "bytesInOutput": 604
         },
         ".open-next/server-functions/default/.next/server/app/api/admin/messages/[id]/route.js": {
@@ -21365,7 +21464,7 @@
           "bytesInOutput": 1050
         },
         ".open-next/server-functions/default/node_modules/next/dist/server/require.js": {
-          "bytesInOutput": 15516
+          "bytesInOutput": 15623
         },
         ".open-next/server-functions/default/node_modules/next/dist/lib/wait.js": {
           "bytesInOutput": 341
@@ -21512,10 +21611,10 @@
           "bytesInOutput": 8347
         },
         ".open-next/server-functions/default/index.mjs": {
-          "bytesInOutput": 78207
+          "bytesInOutput": 78428
         }
       },
-      "bytes": 7780296
+      "bytes": 7791804
     }
   }
 }

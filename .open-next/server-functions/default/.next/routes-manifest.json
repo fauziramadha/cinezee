@@ -233,6 +233,14 @@
       "namedRegex": "^/api/stream/play/(?<nxtPid>[^/]+?)(?:/)?$"
     },
     {
+      "page": "/api/stream/seg/[...path]",
+      "regex": "^/api/stream/seg/(.+?)(?:/)?$",
+      "routeKeys": {
+        "nxtPpath": "nxtPpath"
+      },
+      "namedRegex": "^/api/stream/seg/(?<nxtPpath>.+?)(?:/)?$"
+    },
+    {
       "page": "/api/stream/[...path]",
       "regex": "^/api/stream/(.+?)(?:/)?$",
       "routeKeys": {
